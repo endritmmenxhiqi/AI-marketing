@@ -17,9 +17,11 @@ The system uses AI to generate:
 🔊 Voiceovers (Text-to-Speech)
 🎬 Promotional videos
 ⚙️ Tech Stack
+
 Frontend
 Next.js (React)
 Tailwind CSS
+
 Backend
 Node.js (Express)
 AI Services
@@ -27,5 +29,6 @@ OpenAI (text & image generation)
 ElevenLabs (text-to-speech)
 Video Processing
 FFmpeg
+
 Database & Storage
 Supabase
