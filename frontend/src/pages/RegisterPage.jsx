@@ -43,7 +43,8 @@ const RegisterPage = () => {
     try {
       const { data } = await registerUser(email, password);
       login(data.user, data.token);
-      navigate('/dashboard');
+      // Redirect based on role
+      navigate(data.user?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
