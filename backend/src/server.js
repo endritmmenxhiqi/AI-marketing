@@ -7,8 +7,12 @@ const MONGODB_URI = process.env.MONGODB_URI;
 
 const startServer = async () => {
   try {
-    await mongoose.connect(MONGODB_URI);
-    console.log('✅ MongoDB connected');
+    // Shtojmë opsionin dbName për t'u siguruar që të dhënat shkojnë te ai_marketing_db
+    await mongoose.connect(MONGODB_URI, {
+      dbName: 'ai_marketing_db'
+    });
+    
+    console.log('✅ MongoDB connected to: ai_marketing_db');
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);

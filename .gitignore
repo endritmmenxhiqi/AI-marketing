@@ -33,3 +33,7 @@ Thumbs.db
 antigravity/
 brain/
 tmp/
+
+# Project env files
+backend/.env
+frontend/.env

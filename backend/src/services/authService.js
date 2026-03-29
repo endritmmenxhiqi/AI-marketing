@@ -38,7 +38,7 @@ const registerUser = async (email, password) => {
   const user = await User.create({ email, password: hashedPassword });
 
   const token = signToken(user._id);
-  return { token, user: { id: user._id, email: user.email, createdAt: user.createdAt } };
+  return { token, user: { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt } };
 };
 
 /**
@@ -62,7 +62,7 @@ const loginUser = async (email, password) => {
   }
 
   const token = signToken(user._id);
-  return { token, user: { id: user._id, email: user.email, createdAt: user.createdAt } };
+  return { token, user: { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt } };
 };
 
 /**
@@ -75,7 +75,7 @@ const getUserById = async (userId) => {
     err.statusCode = 404;
     throw err;
   }
-  return { id: user._id, email: user.email, createdAt: user.createdAt };
+  return { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt };
 };
 
 /**
@@ -129,7 +129,7 @@ const resetPassword = async (token, newPassword) => {
   await user.save();
 
   const jwtToken = signToken(user._id);
-  return { token: jwtToken, user: { id: user._id, email: user.email, createdAt: user.createdAt } };
+  return { token: jwtToken, user: { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt } };
 };
 
 module.exports = { registerUser, loginUser, getUserById, generateResetToken, resetPassword };

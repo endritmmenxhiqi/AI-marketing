@@ -30,7 +30,8 @@ const LoginPage = () => {
     try {
       const { data } = await loginUser(email, password);
       login(data.user, data.token);
-      navigate('/dashboard');
+      // Redirect based on role
+      navigate(data.user?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
