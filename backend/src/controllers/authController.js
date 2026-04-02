@@ -1,4 +1,5 @@
 const { registerUser, loginUser, getUserById, generateResetToken, resetPassword: resetPasswordService } = require('../services/authService');
+const { sendResetEmail } = require('../services/emailService');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,16 +74,17 @@ const forgotPassword = async (req, res, next) => {
 
     const resetToken = await generateResetToken(email);
 
-    // In a production app, you would send this token via email.
-    // For this MVP, we return it in the response so the frontend can display it locally.
-    const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+    const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const base = frontendBase.replace(/\/$/, '');
+    const resetUrl = `${base}/reset-password/${resetToken}`;
 
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Token generated successfully.',
-      resetUrl,
-      resetToken 
-    });
+    // Attempt to send email; if it fails, still return resetUrl for local testing
+    try {
+      const { previewUrl } = await sendResetEmail(email, resetUrl);
+      return res.status(200).json({ success: true, message: 'Reset email sent', resetUrl, previewUrl });
+    } catch (sendErr) {
+      return res.status(200).json({ success: true, message: 'Token generated (email send failed)', resetUrl, error: sendErr.message });
+    }
   } catch (err) {
     next(err);
   }
