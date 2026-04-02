@@ -8,14 +8,12 @@ const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [resetUrl, setResetUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
-    setResetUrl('');
 
     if (!email) {
       setError(t('errorRequired'));
@@ -30,9 +28,6 @@ const ForgotPasswordPage = () => {
     try {
       const { data } = await forgotPassword(email);
       setMessage(data.message);
-      if (data.resetUrl) {
-        setResetUrl(data.resetUrl); // MVP: display the link locally
-      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send reset email.');
     } finally {
@@ -73,12 +68,7 @@ const ForgotPasswordPage = () => {
 
         {message && (
           <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
-            <p style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>{message}</p>
-            {resetUrl && (
-              <p style={{ fontSize: '0.8125rem' }}>
-                <strong>Local Test Link:</strong> <a href={resetUrl} style={{ color: '#60a5fa', textDecoration: 'underline', wordBreak: 'break-all' }}>{resetUrl}</a>
-              </p>
-            )}
+            <p style={{ fontSize: '0.875rem' }}>{message}</p>
           </div>
         )}
 
