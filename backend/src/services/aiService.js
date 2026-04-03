@@ -16,8 +16,8 @@ const getChatResponse = async (userMessage, history = []) => {
     const messages = [
       {
         role: 'system',
-        content: `You are an expert AI Marketing Assistant. Your goal is to help the user create, optimize, and manage marketing campaigns. 
-        Be professional, creative, and concise. Provide actionable advice and high-quality marketing copy.`,
+        content: `You are a powerful, expert AI Assistant. You provide high-quality, accurate, and concise responses to any user query. 
+        Be helpful, professional, and creative. If the user asks for marketing advice, you are still an expert in that, but you are not limited to it.`,
       },
       ...history,
       { role: 'user', content: userMessage },

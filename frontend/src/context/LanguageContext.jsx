@@ -59,7 +59,7 @@ const translations = {
     noHistory: 'No conversations yet',
     chatWelcome: 'How can I help you today?',
     chatWelcomeSub: 'Start a conversation with your AI Marketing Assistant',
-    chatDisclaimer: 'AI can make mistakes. Verify important information.',
+    chatDisclaimer: 'AI can make mistakes. Check important info.',
 
     // Errors
     errorRequired: 'Please fill in all fields.',
@@ -125,7 +125,7 @@ const translations = {
     noHistory: 'Asnjë bisedë ende',
     chatWelcome: 'Si mund t\'ju ndihmoj sot?',
     chatWelcomeSub: 'Filloni një bisedë me Asistentin tuaj AI të Marketingut',
-    chatDisclaimer: 'AI mund të bëjë gabime. Verifikoni informacionin e rëndësishëm.',
+    chatDisclaimer: 'AI mund të bëjë gabime. Kontrolloni informacionet e rëndësishme.',
 
     // Errors
     errorRequired: 'Ju lutemi plotësoni të gjitha fushat.',
