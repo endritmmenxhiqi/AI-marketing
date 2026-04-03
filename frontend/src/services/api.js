@@ -36,4 +36,10 @@ export const resetPassword = (token, password) =>
 /** Fetch the currently authenticated user */
 export const fetchMe = () => api.get('/auth/me');
 
+// ─── AI API Calls ─────────────────────────────────────────────────────────────
+
+/** Send a message to the AI assistant */
+export const aiChat = (message, history) =>
+  api.post('/ai/chat', { message, history });
+
 export default api;

@@ -10,6 +10,9 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
+import ChatPage from './pages/ChatPage';
+
+import MainLayout from './components/layout/MainLayout';
 
 function App() {
   return (
@@ -25,24 +28,12 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <DashboardPage />
-              </PrivateRoute>
-            }
-          />
-
-          <Route
-            path="/admin"
-            element={
-              <PrivateRoute roles={["admin"]}>
-                <AdminPage />
-              </PrivateRoute>
-            }
-          />
+              {/* Protected routes wrapped in MainLayout */}
+              <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
+                <Route path="/dashboard" element={<Navigate to="/chat" replace />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/admin" element={<AdminPage roles={['admin']} />} />
+              </Route>
 
               {/* Default redirect */}
               <Route path="*" element={<Navigate to="/login" replace />} />

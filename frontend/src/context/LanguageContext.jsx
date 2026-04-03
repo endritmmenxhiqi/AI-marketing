@@ -45,12 +45,28 @@ const translations = {
     generations: 'Generations',
     signOut: 'Sign Out',
     dashboardHint: '🚀 Your AI Marketing workspace is ready. Start creating!',
-    
+    aiAssistant: 'AI Assistant',
+    chatDescription: 'Chat with our AI to generate ideas and content.',
+    startChat: 'Start Chat',
+
+    // Chat
+    chatTitle: 'AI Assistant',
+    chatPlaceholder: 'Message AI Assistant…',
+    send: 'Send',
+    clearChat: 'Clear',
+    aiThinking: 'AI is thinking...',
+    newChat: 'New Chat',
+    noHistory: 'No conversations yet',
+    chatWelcome: 'How can I help you today?',
+    chatWelcomeSub: 'Start a conversation with your AI Marketing Assistant',
+    chatDisclaimer: 'AI can make mistakes. Verify important information.',
+
     // Errors
     errorRequired: 'Please fill in all fields.',
     errorEmail: 'Please enter a valid email address.',
     errorPassLength: 'Password must be at least 6 characters.',
     errorPassMatch: 'Passwords do not match.',
+    errorChat: 'Something went wrong. Please try again.',
   },
   sq: {
     // Auth Shared
@@ -95,12 +111,28 @@ const translations = {
     generations: 'Gjenerime',
     signOut: 'Dil',
     dashboardHint: '🚀 Hapësira juaj e Marketing AI është gati. Fillo të krijosh!',
-    
+    aiAssistant: 'Asistenti AI',
+    chatDescription: 'Bisedoni me AI tonë për të gjeneruar ide dhe përmbajtje.',
+    startChat: 'Fillo Bisedën',
+
+    // Chat
+    chatTitle: 'Asistenti AI',
+    chatPlaceholder: 'Shkruaj një mesazh…',
+    send: 'Dërgo',
+    clearChat: 'Pastro',
+    aiThinking: 'AI po mendon...',
+    newChat: 'Bisedë e Re',
+    noHistory: 'Asnjë bisedë ende',
+    chatWelcome: 'Si mund t\'ju ndihmoj sot?',
+    chatWelcomeSub: 'Filloni një bisedë me Asistentin tuaj AI të Marketingut',
+    chatDisclaimer: 'AI mund të bëjë gabime. Verifikoni informacionin e rëndësishëm.',
+
     // Errors
     errorRequired: 'Ju lutemi plotësoni të gjitha fushat.',
     errorEmail: 'Ju lutemi jepni një email të vlefshëm.',
     errorPassLength: 'Fjalëkalimi duhet të jetë të paktën 6 karaktere.',
     errorPassMatch: 'Fjalëkalimet nuk përputhen.',
+    errorChat: 'Diçka shkoi keq. Ju lutemi provoni sërish.',
   }
 };
 
