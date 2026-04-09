@@ -816,6 +816,53 @@ body {
   text-align: center;
 }
 
+/* ─── TTS Listen Button ────────────────────────────────────────────────────── */
+.tts-listen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 20px;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition);
+  width: fit-content;
+}
+
+.tts-listen-btn:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+}
+
+.tts-listen-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tts-listen-btn.playing {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: var(--error);
+}
+
+.tts-listen-btn.playing:hover {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: var(--error);
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.2);
+}
+
+.animate-spin {
+  animation: spin 0.7s linear infinite;
+}
+
 /* Custom Scrollbar Globally */
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

@@ -42,4 +42,22 @@ export const fetchMe = () => api.get('/auth/me');
 export const aiChat = (message, history) =>
   api.post('/ai/chat', { message, history });
 
+/** Generate TTS audio from text using Deepgram */
+export const aiTTS = async (text, model = 'aura-asteria-en') => {
+  const token = localStorage.getItem('token');
+  const response = await fetch('http://localhost:5000/api/ai/tts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ text, model }),
+  });
+
+  if (!response.ok) throw new Error('TTS request failed');
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
 export default api;

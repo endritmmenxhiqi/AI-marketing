@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { useChat } from '../context/ChatContext';
 import {
   Send,
   User,
   Bot,
-  Loader2
+  Loader2,
+  Volume2,
+  Square,
 } from 'lucide-react';
 
 const ChatPage = () => {
@@ -13,6 +15,11 @@ const ChatPage = () => {
   const { messages, sendMessage, loading } = useChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
+
+  // TTS state
+  const [ttsLoadingIdx, setTtsLoadingIdx] = useState(null);
+  const [playingIdx, setPlayingIdx] = useState(null);
+  const audioRef = useRef(null);
 
   // Auto-scroll
   useEffect(() => {
@@ -32,6 +39,62 @@ const ChatPage = () => {
       handleSend(e);
     }
   };
+
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    setPlayingIdx(null);
+  }, []);
+
+  const handleListen = useCallback(async (text, idx) => {
+    if (playingIdx === idx) { stopAudio(); return; }
+    stopAudio();
+
+    try {
+      setTtsLoadingIdx(idx);
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:5000/api/ai/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text, model: 'aura-asteria-en' }),
+      });
+
+      if (!res.ok) throw new Error('TTS failed with status: ' + res.status);
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      const cleanup = () => {
+        setPlayingIdx(null);
+        setTimeout(() => URL.revokeObjectURL(url), 5000); // give the browser plenty of time
+      };
+
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+
+      // play() returns a promise in modern browsers
+      audio.play().catch(err => {
+        console.error('Audio playback error:', err);
+        cleanup();
+      });
+
+      setPlayingIdx(idx);
+    } catch (err) {
+      console.error('TTS Error:', err);
+    } finally {
+      setTtsLoadingIdx(null);
+    }
+  }, [playingIdx, stopAudio]);
+
+  useEffect(() => () => stopAudio(), [stopAudio]);
 
   const isNew = messages.length === 0;
 
@@ -61,6 +124,30 @@ const ChatPage = () => {
                   <div className="chat-text">
                     {msg.content}
                   </div>
+
+                  {/* ── TTS Button (only for assistant messages) ── */}
+                  {msg.role === 'assistant' && (
+                    <button
+                      className={`tts-listen-btn ${playingIdx === idx ? 'playing' : ''}`}
+                      onClick={() => handleListen(msg.content, idx)}
+                      disabled={ttsLoadingIdx === idx}
+                      title={playingIdx === idx ? 'Ndalo audio' : 'Dëgjo reklamën'}
+                    >
+                      {ttsLoadingIdx === idx ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : playingIdx === idx ? (
+                        <>
+                          <Square size={13} />
+                          <span>Ndalo</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 size={14} />
+                          <span>Dëgjo 🔊</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

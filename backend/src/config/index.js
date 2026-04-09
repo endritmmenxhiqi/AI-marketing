@@ -13,6 +13,7 @@ const config = {
   openaiApiKey: process.env.OPENAI_API_KEY,
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  deepgramApiKey: process.env.DEEPGRAM_API_KEY,
   email: {
     host: process.env.SMTP_HOST,
     port: process.env.SMTP_PORT || 587,
