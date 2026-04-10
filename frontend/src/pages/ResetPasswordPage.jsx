@@ -3,16 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Sparkles, RefreshCcw, ArrowRight } from 'lucide-react';
 import { resetPassword } from '../lib/api';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 
 const ResetPasswordPage = () => {
-  const [isDark, setIsDark] = useState(() => {
-    return document.documentElement.getAttribute('data-theme') === 'dark';
-  });
-  const toggleTheme = () => {
-    const next = isDark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    setIsDark(!isDark);
-  };
+  const { theme, toggleTheme } = useTheme();
   const { token } = useParams();
   const navigate = useNavigate();
   const { lang, toggleLanguage, t } = useLanguage();
@@ -81,7 +75,7 @@ const ResetPasswordPage = () => {
           onClick={toggleTheme}
           aria-label="Toggle theme"
         >
-          {isDark ? '☀️' : '🌙'}
+          {theme === 'dark' ? '☀️' : '🌙'}
         </button>
       </div>
 

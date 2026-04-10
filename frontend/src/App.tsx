@@ -25,6 +25,7 @@ import {
 import { createJob, fetchJobs, loginUser, registerUser, forgotPassword, trimJob, VideoJob } from './lib/api';
 import { useJobEvents } from './hooks/useJobEvents';
 import { useLanguage } from './context/LanguageContext';
+import { useTheme } from './context/ThemeContext';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 
 const styles = [
@@ -80,17 +81,8 @@ function AuthScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [focused, setFocused] = useState('');
-  const [isDark, setIsDark] = useState(() => {
-    return document.documentElement.getAttribute('data-theme') === 'dark';
-  });
-
   const { lang, toggleLanguage, t } = useLanguage();
-
-  const toggleTheme = () => {
-    const next = isDark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    setIsDark(!isDark);
-  };
+  const { theme, toggleTheme } = useTheme();
 
   // Password strength
   const calcStrength = (p: string) => {
@@ -178,7 +170,7 @@ function AuthScreen({
           onClick={toggleTheme}
           aria-label="Toggle theme"
         >
-          {isDark ? '☀️' : '🌙'}
+          {theme === 'dark' ? '☀️' : '🌙'}
         </button>
       </div>
 
@@ -199,7 +191,7 @@ function AuthScreen({
               </p>
             </div>
           </div>
-          
+
           {mode !== 'forgot-password' && (
             <p className="auth-subheading" style={{ marginBottom: '1.5rem', opacity: 0.8 }}>
               {mode === 'login' ? t('loginTitle') : t('registerTitle')}
@@ -361,7 +353,7 @@ function AuthScreen({
                 <span>{error}</span>
               </div>
             )}
-            
+
             {successMessage && (
               <div className="auth-success-bar" style={{
                 background: 'rgba(52, 211, 153, 0.1)',
@@ -623,7 +615,7 @@ function App() {
                       </p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-3">
-                      {[ 
+                      {[
                         '3-5 scene composition',
                         'Live generation progress',
                         'Trim and export workflow',
@@ -793,8 +785,8 @@ function App() {
                           type="button"
                           onClick={() => setStyle(item.value)}
                           className={`rounded-3xl border px-4 py-4 text-left transition ${style === item.value
-                              ? 'border-flare bg-flare/10'
-                              : 'border-white/10 bg-white/[0.03] hover:border-white/25'
+                            ? 'border-flare bg-flare/10'
+                            : 'border-white/10 bg-white/[0.03] hover:border-white/25'
                             }`}
                         >
                           <div className="text-base font-medium">{item.label}</div>
@@ -1086,8 +1078,8 @@ function App() {
                                 type="button"
                                 onClick={() => setSelectedJobId(job._id)}
                                 className={`w-full rounded-3xl border px-4 py-4 text-left transition ${selectedJobId === job._id
-                                    ? 'border-flare bg-flare/10'
-                                    : 'border-white/10 bg-white/[0.03] hover:border-white/20'
+                                  ? 'border-flare bg-flare/10'
+                                  : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                                   }`}
                               >
                                 <div className="flex items-start justify-between gap-3">
