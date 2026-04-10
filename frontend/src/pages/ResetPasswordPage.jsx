@@ -1,16 +1,21 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
-import { resetPassword } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { Eye, EyeOff, Lock, Sparkles, RefreshCcw, ArrowRight } from 'lucide-react';
+import { resetPassword } from '../lib/api';
 import { useLanguage } from '../context/LanguageContext';
-import ThemeLangToggle from '../components/ThemeLangToggle';
 
 const ResetPasswordPage = () => {
+  const [isDark, setIsDark] = useState(() => {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
+  });
+  const toggleTheme = () => {
+    const next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    setIsDark(!isDark);
+  };
   const { token } = useParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
-  const { t } = useLanguage();
+  const { lang, toggleLanguage, t } = useLanguage();
 
   const [formData, setFormData] = useState({ password: '', confirmPassword: '' });
   const [error, setError] = useState('');
@@ -43,107 +48,142 @@ const ResetPasswordPage = () => {
     setLoading(true);
     try {
       const { data } = await resetPassword(token, password);
-      // Auto-login after successful password reset
-      login(data.user, data.token);
-      navigate('/dashboard');
+      // Success - show message or redirect
+      // Since App.tsx handles auth state, we should probably just redirect to login
+      navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reset password.');
+      setError(err.message || 'Failed to reset password.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-wrapper">
-      <ThemeLangToggle />
-      <div className="auth-card">
-        <div className="auth-brand">
-          <div className="auth-logo">✦</div>
-          <h1 className="auth-title">{t('resetTitle')}</h1>
-          <p className="auth-subtitle">{t('resetSubtitle')}</p>
+    <div className="auth-scene">
+      {/* Animated background orbs */}
+      <div className="auth-orb auth-orb--1" />
+      <div className="auth-orb auth-orb--2" />
+      <div className="auth-orb auth-orb--3" />
+
+      {/* Top-right controls: Language + Theme */}
+      <div className="auth-controls-row">
+        <button
+          className="auth-theme-toggle"
+          onClick={toggleLanguage}
+          aria-label="Toggle language"
+        >
+          <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.02em' }}>
+            {lang === 'sq' ? 'EN' : 'AL'}
+          </span>
+        </button>
+        <button
+          className="auth-theme-toggle"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+        >
+          {isDark ? '☀️' : '🌙'}
+        </button>
+      </div>
+
+      {/* Glass card */}
+      <div className="auth-glass-card">
+        <div className="auth-card-accent" />
+        <div className="auth-card-body">
+
+          {/* Brand */}
+          <div className="auth-brand-row">
+            <div className="auth-icon-badge">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h1 className="auth-heading">{t('appName')}</h1>
+              <p className="auth-subheading">{t('resetTitle')}</p>
+            </div>
+          </div>
+
+          <p className="auth-subheading" style={{ marginBottom: '1.5rem', opacity: 0.9 }}>
+            {t('resetSubtitle')}
+          </p>
+
+          <form onSubmit={handleSubmit} noValidate className="auth-form">
+            <div className={`auth-field ${error && !formData.password ? 'auth-field--error' : ''}`}>
+              <label htmlFor="password" className="auth-field-label">{t('newPasswordLabel')}</label>
+              <div className="auth-field-inner">
+                <Lock size={16} className="auth-field-icon" />
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder={t('passwordMinFormat')}
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="auth-field-input"
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-eye-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className={`auth-field ${error && formData.password !== formData.confirmPassword ? 'auth-field--error' : ''}`}>
+              <label htmlFor="confirmPassword" className="auth-field-label">{t('confirmPasswordLabel')}</label>
+              <div className="auth-field-inner">
+                <Lock size={16} className="auth-field-icon" />
+                <input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  placeholder={t('passwordPlaceholder')}
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="auth-field-input"
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-eye-btn"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="auth-error-bar">
+                <span>{error}</span>
+              </div>
+            )}
+
+            <button type="submit" className="auth-submit-btn" disabled={loading}>
+              {loading ? (
+                <span className="auth-spinner" />
+              ) : (
+                <>
+                  <span>{t('resetButton')}</span>
+                  <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="auth-switch-text" style={{ marginTop: '1.5rem' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="auth-switch-link"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', gap: '0.4rem' }}
+            >
+              <RefreshCcw size={14} />
+              {t('backToLogin')}
+            </button>
+          </div>
         </div>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="password">{t('newPasswordLabel')}</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder={t('passwordMinFormat')}
-                value={formData.password}
-                onChange={handleChange}
-                required
-                style={{ paddingRight: '2.5rem' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="confirmPassword">{t('confirmPasswordLabel')}</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirmPassword"
-                placeholder="••••••••"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-                style={{ paddingRight: '2.5rem' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          {error && <p className="form-error">{error}</p>}
-
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? <span className="spinner" /> : t('resetButton')}
-          </button>
-        </form>
-
-        <p className="auth-footer">
-          <Link to="/login">← {t('backToLogin')}</Link>
-        </p>
       </div>
     </div>
   );

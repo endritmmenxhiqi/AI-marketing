@@ -14,17 +14,23 @@ const translations = {
 
     // Login
     loginTitle: 'Sign in to your account',
+    loginGreeting: 'Welcome back 👋',
     loginButton: 'Sign In',
+    loginTab: 'Login',
+    signInAction: 'Sign in',
     noAccount: "Don't have an account?",
     createOne: 'Create one',
     forgotPasswordLink: 'Forgot password?',
 
     // Register
     registerTitle: 'Create your free account',
+    registerGreeting: 'Create your account ✨',
     registerButton: 'Create Account',
+    registerTab: 'Register',
+    createAccountAction: 'Create account',
     confirmPasswordLabel: 'Confirm Password',
     hasAccount: 'Already have an account?',
-    signInInstead: 'Sign in',
+    signInInstead: 'Sign in instead',
 
     // Forgot Password
     forgotTitle: 'Reset your password',
@@ -80,17 +86,23 @@ const translations = {
 
     // Login
     loginTitle: 'Hyni në llogarinë tuaj',
+    loginGreeting: 'Mirë se u kthyet 👋',
     loginButton: 'Hyr',
+    loginTab: 'Hyr',
+    signInAction: 'Kyçu',
     noAccount: 'Nuk keni llogari?',
     createOne: 'Krijo një',
     forgotPasswordLink: 'Keni harruar fjalëkalimin?',
 
     // Register
     registerTitle: 'Krijoni llogarinë tuaj falas',
+    registerGreeting: 'Krijo llogarinë tënde ✨',
     registerButton: 'Krijo Llogari',
+    registerTab: 'Regjistrohu',
+    createAccountAction: 'Krijo Llogari',
     confirmPasswordLabel: 'Konfirmo Fjalëkalimin',
     hasAccount: 'Keni tashmë një llogari?',
-    signInInstead: 'Hyr',
+    signInInstead: 'Kyçu në vend',
 
     // Forgot Password
     forgotTitle: 'Rivendos fjalëkalimin',

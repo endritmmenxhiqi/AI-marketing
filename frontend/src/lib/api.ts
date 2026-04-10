@@ -99,6 +99,40 @@ export const registerUser = async (email: string, password: string) => {
   return payload as { token: string; user: AuthUser };
 };
 
+export const forgotPassword = async (email: string) => {
+  const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  const payload = await response.json().catch(() => ({ message: 'Failed to send reset email.' }));
+  if (!response.ok) {
+    throw new Error(payload.message || 'Failed to send reset email.');
+  }
+
+  return payload as { message: string };
+};
+
+export const resetPassword = async (token: string, password: string) => {
+  const response = await fetch(`${API_BASE}/auth/reset-password/${token}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ password }),
+  });
+
+  const payload = await response.json().catch(() => ({ message: 'Failed to reset password.' }));
+  if (!response.ok) {
+    throw new Error(payload.message || 'Failed to reset password.');
+  }
+
+  return payload as { message: string; user?: any; token?: string };
+};
+
 export const createJob = async (payload: {
   image?: File | null;
   description: string;
