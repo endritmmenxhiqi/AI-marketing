@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Sparkles, ArrowRight } from 'lucide-react';
 import { loginUser } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import ThemeLangToggle from '../components/ThemeLangToggle';
+import { useTheme } from '../context/ThemeContext';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { t } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
 
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [focused, setFocused] = useState('');
 
   const handleChange = (e) =>
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -33,7 +35,6 @@ const LoginPage = () => {
     try {
       const { data } = await loginUser(email, password);
       login(data.user, data.token);
-      // Redirect based on role
       navigate(data.user?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
@@ -43,82 +44,132 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="auth-wrapper">
-      <ThemeLangToggle />
-      <div className="auth-card">
-        <div className="auth-brand">
-          <div className="auth-logo">✦</div>
-          <h1 className="auth-title">{t('appName')}</h1>
-          <p className="auth-subtitle">{t('loginTitle')}</p>
+    <div className="auth-scene">
+      {/* Animated background orbs */}
+      <div className="auth-orb auth-orb--1" />
+      <div className="auth-orb auth-orb--2" />
+      <div className="auth-orb auth-orb--3" />
+
+      {/* Theme toggle */}
+      <button
+        className="auth-theme-toggle"
+        onClick={toggleTheme}
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
+
+      {/* Card */}
+      <div className="auth-glass-card">
+        {/* Left accent strip */}
+        <div className="auth-card-accent" />
+
+        {/* Content */}
+        <div className="auth-card-body">
+          {/* Brand */}
+          <div className="auth-brand-row">
+            <div className="auth-icon-badge">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h1 className="auth-heading">{t('appName')}</h1>
+              <p className="auth-subheading">Welcome back 👋</p>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="auth-divider" />
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} noValidate className="auth-form">
+            {/* Email */}
+            <div className={`auth-field ${focused === 'email' ? 'auth-field--focused' : ''}`}>
+              <label htmlFor="login-email" className="auth-field-label">Email</label>
+              <div className="auth-field-inner">
+                <Mail size={16} className="auth-field-icon" />
+                <input
+                  id="login-email"
+                  type="email"
+                  name="email"
+                  placeholder={t('emailPlaceholder')}
+                  value={formData.email}
+                  onChange={handleChange}
+                  onFocus={() => setFocused('email')}
+                  onBlur={() => setFocused('')}
+                  autoComplete="email"
+                  required
+                  className="auth-field-input"
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className={`auth-field ${focused === 'password' ? 'auth-field--focused' : ''}`}>
+              <div className="auth-field-label-row">
+                <label htmlFor="login-password" className="auth-field-label">Password</label>
+                <Link to="/forgot-password" className="auth-forgot-link">
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="auth-field-inner">
+                <Lock size={16} className="auth-field-icon" />
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  placeholder={t('passwordPlaceholder')}
+                  value={formData.password}
+                  onChange={handleChange}
+                  onFocus={() => setFocused('password')}
+                  onBlur={() => setFocused('')}
+                  autoComplete="current-password"
+                  required
+                  className="auth-field-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="auth-eye-btn"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="auth-error-bar">
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              className="auth-submit-btn"
+              disabled={loading}
+              id="login-submit"
+            >
+              {loading ? (
+                <span className="auth-spinner" />
+              ) : (
+                <>
+                  <span>{t('loginButton')}</span>
+                  <ArrowRight size={18} className="auth-btn-arrow" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Footer */}
+          <p className="auth-switch-text">
+            {t('noAccount')}{' '}
+            <Link to="/register" className="auth-switch-link">
+              {t('createOne')}
+            </Link>
+          </p>
         </div>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="email">{t('emailLabel')}</label>
-            <input
-              id="email"
-              type="email"
-              name="email"
-              placeholder={t('emailPlaceholder')}
-              value={formData.email}
-              onChange={handleChange}
-              autoComplete="email"
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-              <label htmlFor="password" style={{ marginBottom: 0 }}>{t('passwordLabel')}</label>
-              <Link to="/forgot-password" style={{ fontSize: '0.8125rem', color: 'var(--accent)', textDecoration: 'none' }}>
-                {t('forgotPasswordLink')}
-              </Link>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder={t('passwordPlaceholder')}
-                value={formData.password}
-                onChange={handleChange}
-                autoComplete="current-password"
-                required
-                style={{ paddingRight: '2.5rem' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          {error && <p className="form-error">{error}</p>}
-
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? <span className="spinner" /> : t('loginButton')}
-          </button>
-        </form>
-
-        <p className="auth-footer">
-          {t('noAccount')}{' '}
-          <Link to="/register">{t('createOne')}</Link>
-        </p>
       </div>
     </div>
   );
