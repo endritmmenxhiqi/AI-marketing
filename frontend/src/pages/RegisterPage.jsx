@@ -1,8 +1,21 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { registerUser } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import ThemeLangToggle from '../components/ThemeLangToggle';
+
+const calculateStrength = (password) => {
+  let score = 0;
+  if (!password) return score;
+  if (password.length > 5) score += 1;
+  if (password.length > 8) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+  return Math.min(score, 4); // Max score 4
+};
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -12,6 +25,10 @@ const RegisterPage = () => {
   const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const passwordStrength = useMemo(() => calculateStrength(formData.password), [formData.password]);
 
   const handleChange = (e) =>
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -52,8 +69,12 @@ const RegisterPage = () => {
     }
   };
 
+  const strengthColors = ['#ef4444', '#f59e0b', '#10b981', '#10b981'];
+  const strengthColor = passwordStrength > 0 ? strengthColors[passwordStrength - 1] : 'transparent';
+
   return (
     <div className="auth-wrapper">
+      <ThemeLangToggle />
       <div className="auth-card">
         <div className="auth-brand">
           <div className="auth-logo">✦</div>
@@ -78,30 +99,90 @@ const RegisterPage = () => {
 
           <div className="form-group">
             <label htmlFor="password">{t('passwordLabel')}</label>
-            <input
-              id="password"
-              type="password"
-              name="password"
-              placeholder={t('passwordMinFormat')}
-              value={formData.password}
-              onChange={handleChange}
-              autoComplete="new-password"
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder={t('passwordMinFormat')}
+                value={formData.password}
+                onChange={handleChange}
+                autoComplete="new-password"
+                required
+                style={{ paddingRight: '2.5rem' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            {/* Password strength indicator */}
+            {formData.password && (
+              <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem', height: '4px' }}>
+                {[1, 2, 3, 4].map((level) => (
+                  <div
+                    key={level}
+                    style={{
+                      flex: 1,
+                      backgroundColor: level <= passwordStrength ? strengthColor : 'var(--bg-hover)',
+                      borderRadius: '2px',
+                      transition: 'background-color 0.3s'
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="form-group">
             <label htmlFor="confirmPassword">{t('confirmPasswordLabel')}</label>
-            <input
-              id="confirmPassword"
-              type="password"
-              name="confirmPassword"
-              placeholder={t('passwordPlaceholder')}
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              autoComplete="new-password"
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                name="confirmPassword"
+                placeholder={t('passwordPlaceholder')}
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                autoComplete="new-password"
+                required
+                style={{ paddingRight: '2.5rem' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           {error && <p className="form-error">{error}</p>}

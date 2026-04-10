@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { forgotPassword } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import ThemeLangToggle from '../components/ThemeLangToggle';
 
 const ForgotPasswordPage = () => {
   const { t } = useLanguage();
@@ -37,6 +38,7 @@ const ForgotPasswordPage = () => {
 
   return (
     <div className="auth-wrapper">
+      <ThemeLangToggle />
       <div className="auth-card">
         <div className="auth-brand">
           <div className="auth-logo">✦</div>
@@ -68,7 +70,7 @@ const ForgotPasswordPage = () => {
 
         {message && (
           <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', borderRadius: '8px', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
-            <p style={{ fontSize: '0.875rem' }}>{message}</p>
+            <p style={{ fontSize: '0.875rem', margin: 0 }}>{message}</p>
           </div>
         )}
 

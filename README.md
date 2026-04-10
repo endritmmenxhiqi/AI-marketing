@@ -1,41 +1,133 @@
-# AI Marketing - MVP
+# AI Marketing Studio MVP
 
-AI-powered marketing tool for creating catchy text and professional videos for TikTok, Instagram Reels, and YouTube Shorts.
+AI Marketing Studio turns a product image and short product description into a 15-30 second vertical marketing video built for TikTok, Reels, and Shorts. The backend writes a scene-based script, finds Pexels media, generates Deepgram voiceover with timing metadata, renders animated captioned scenes through FFmpeg, and returns a downloadable MP4.
 
-## Core Features
-1. **User Input Form**: Collects product details, keywords, and desired style.
-2. **AI Generation**: Produces catchy captions and relevant hashtags using an LLM.
-3. **Video Generation**: Assembles short videos using stock media and FFmpeg with text overlays.
-4. **AI Voiceover**: Converts generated captions into high-quality speech.
-5. **Export & Preview**: Renders final MP4 videos with a preview option.
+## Stack
 
-## Tech Stack
-- **Backend**: Node.js, Express
-- **Frontend**: React (Vite), Vanilla CSS
-- **Database**: MongoDB (Atlas)
-- **AI Services**: OpenAI (GPT-4), ElevenLabs/Google TTS
-- **Video Processing**: FFmpeg
-- **Media**: Pexels/Pixabay APIs
+- Backend: Node.js + Express + TypeScript
+- Frontend: React + Vite + TailwindCSS + Framer Motion
+- Database: MongoDB
+- Queue: BullMQ + Redis
+- AI: OpenAI
+- Voice: Deepgram
+- Media: Pexels with Replicate/Stability fallback
+- Rendering: FFmpeg + fluent-ffmpeg
+- Storage: Local by default, with S3 and Supabase adapters included
 
-## Directory Structure
-- `backend/`: Node.js Express server.
-- `frontend/`: React Vite application.
+## Features
 
-## Prerequisites
-- Node.js installed.
-- MongoDB Atlas account.
-- FFmpeg installed on your system.
-- API keys for OpenAI and Pexels.
+- Drag-and-drop landing page for product image upload and product brief entry
+- Real-time generation progress over Server-Sent Events
+- 3-5 scene script structure with hook, body, CTA, and scene search keywords
+- Pexels-first video search with image fallback and optional AI style-transfer fallback
+- Deepgram voiceover caching with alignment metadata and phrase-based captions
+- FFmpeg scene rendering with text overlays, transitions, music ducking, and final MP4 export
+- Trim/export workflow for the rendered video
 
-## Getting Started
+## Project Structure
 
-### Backend
-1. Navigate to `backend/`.
-2. Copy `.env.example` to `.env` and fill in your keys.
-3. Run `npm install`.
-4. Run `npm start`.
+- `backend/` API server, worker, queue, media/voice/render services
+- `frontend/` React generator studio
+- `docker-compose.yml` MongoDB, Redis, backend, worker, frontend
+- `setup.sh` one-click local bootstrap script for Ubuntu/Debian/macOS
 
-### Frontend
-1. Navigate to `frontend/`.
-2. Run `npm install`.
-3. Run `npm run dev`.
+## Environment Setup
+
+1. Copy `backend/.env.example` to `backend/.env`
+2. Copy `frontend/.env.example` to `frontend/.env`
+3. Fill in these keys:
+   - `OPENAI_API_KEY`
+   - `PEXELS_API_KEY`
+   - Optional experimental image fallbacks: `REPLICATE_API_TOKEN`, `STABILITY_API_KEY`
+   - Optional storage provider keys for S3 or Supabase
+
+## Local Development
+
+### One-click setup
+
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### Manual setup
+
+```bash
+npm install
+npm install --workspace backend
+npm install --workspace frontend
+```
+
+Start infrastructure:
+
+```bash
+docker compose up -d mongodb redis
+```
+
+Start the backend API:
+
+```bash
+npm run dev --workspace backend
+```
+
+Start the BullMQ worker:
+
+```bash
+npm run worker:dev --workspace backend
+```
+
+Start the frontend:
+
+```bash
+npm run dev --workspace frontend
+```
+
+## FFmpeg Notes
+
+- `FFMPEG_PATH` and `FFPROBE_PATH` can point to system binaries
+- `FFMPEG_FONT_PATH` should point to a bold font file used by `drawtext`
+- The render pipeline assumes portrait output at `1080x1920`, `30fps`, `libx264`, `crf 23`
+
+## Storage Modes
+
+- `STORAGE_PROVIDER=local` stores final exports under `backend/storage/exports`
+- `STORAGE_PROVIDER=s3` uploads to S3-compatible storage
+- `STORAGE_PROVIDER=supabase` uploads to Supabase Storage
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:5000/api`
+- MongoDB: `mongodb://localhost:27017`
+- Redis: `redis://localhost:6379`
+
+## Test With Sample Product
+
+Use this brief in the UI:
+
+Product description:
+
+`A collagen peptide powder for busy women 30+ who want healthier hair and skin without adding another complicated routine. Strawberry flavor, 20 servings, subscribe-and-save available today. The goal is to get first-time buyers to start a subscription.`
+
+Recommended style: `luxury`
+
+Expected quality checks:
+
+- Hook immediately frames the transformation or pain point
+- Pexels media feels relevant to wellness/beauty lifestyle rather than random stock
+- Voiceover sounds persuasive instead of generic
+- Stock clip duration fits the voice better instead of obviously looping
+- Captions track the spoken phrases closely
+- Final output contains clear CTA and polished end frame
+
+## Notes
+
+- For background music, set `LOCAL_MUSIC_PATH` to a royalty-free MP3 on disk. The renderer ducks the track under voiceover automatically.
+- Replicate and Stability fallbacks are experimental and should usually stay off unless stock media is unavailable.
+- Generated scripts and voice metadata are cached for 24 hours by default.

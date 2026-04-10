@@ -17,6 +17,18 @@ dist/
 build/
 .next/
 out/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
 
 # IDE
 .vscode/
@@ -37,3 +49,9 @@ tmp/
 # Project env files
 backend/.env
 frontend/.env
+
+# Data and Logs
+backend/logs/
+backend/storage/
+frontend/logs/
+backend/public/

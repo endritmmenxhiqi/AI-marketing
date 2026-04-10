@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  LayoutDashboard,
   MessageSquare,
   LogOut,
   Menu,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import ThemeLangToggle from '../ThemeLangToggle';
 
 const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -19,6 +21,7 @@ const MainLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const menuItems = [
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Studio', path: '/dashboard' },
     { id: 'chat', icon: MessageSquare, label: t('chatTitle'), path: '/chat' },
   ];
 
@@ -88,6 +91,7 @@ const MainLayout = () => {
 
       {/* ── Main Content ───────────────────────────────────── */}
       <main className="main-content">
+        <ThemeLangToggle />
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
