@@ -59,10 +59,16 @@ export const ChatProvider = ({ children }) => {
     );
   };
 
-  const sendMessage = async (content) => {
-    if (!content.trim() || loading) return;
+  const sendMessage = async (content, file = null) => {
+    if (!content.trim() && !file) return;
+    if (loading) return;
 
-    const userMsg = { role: 'user', content: content.trim() };
+    const userMsg = { 
+      role: 'user', 
+      content: content.trim(),
+      image: file ? URL.createObjectURL(file) : null // Local preview URL
+    };
+    
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setLoading(true);
@@ -72,7 +78,7 @@ export const ChatProvider = ({ children }) => {
       currentId = generateId();
       const newConv = {
         id: currentId,
-        title: getTitle(content.trim()),
+        title: getTitle(content.trim() || 'Imazh i ngarkuar'),
         messages: nextMessages,
         timestamp: new Date().toISOString(),
       };
@@ -82,18 +88,42 @@ export const ChatProvider = ({ children }) => {
 
     try {
       const history = nextMessages.map((m) => ({ role: m.role, content: m.content }));
-      const response = await aiChat(content, history.slice(0, -1));
+      
+      let payload;
+      if (file) {
+        payload = new FormData();
+        payload.append('message', content);
+        payload.append('history', JSON.stringify(history.slice(0, -1)));
+        payload.append('image', file);
+      } else {
+        payload = { message: content, history: history.slice(0, -1) };
+      }
+
+      const response = await aiChat(payload);
 
       if (response.data.success) {
-        const aiMsg = { role: 'assistant', content: response.data.data };
+        // Update User Message to use the stable server URL instead of the fragile Blob URL
+        if (response.data.imagePath) {
+          const serverUrl = `http://localhost:5000${response.data.imagePath}`;
+          setMessages((prev) => prev.map((msg, i) => 
+            i === nextMessages.length - 1 ? { ...msg, image: serverUrl } : msg
+          ));
+        }
+
+        const aiMsg = { 
+          role: 'assistant', 
+          content: response.data.data,
+          analysisImage: response.data.imagePath ? `http://localhost:5000${response.data.imagePath}` : null
+        };
         setMessages((prev) => [...prev, aiMsg]);
       } else {
         throw new Error('API Error');
       }
     } catch (error) {
+      console.error('Send Error:', error);
       setMessages((prev) => [
         ...prev,
-        { role: 'system', content: 'Something went wrong. Please try again.' },
+        { role: 'system', content: 'Diçka shkoi keq. Ju lutem provoni sërish.' },
       ]);
     } finally {
       setLoading(false);
@@ -112,6 +142,7 @@ export const ChatProvider = ({ children }) => {
         deleteConversation,
         renameConversation,
         sendMessage,
+        setMessages,
       }}
     >
       {children}

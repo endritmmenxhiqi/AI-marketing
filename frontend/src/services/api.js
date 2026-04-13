@@ -38,9 +38,15 @@ export const fetchMe = () => api.get('/auth/me');
 
 // ─── AI API Calls ─────────────────────────────────────────────────────────────
 
-/** Send a message to the AI assistant */
-export const aiChat = (message, history) =>
-  api.post('/ai/chat', { message, history });
+/** Send a message to the AI assistant (Supports FormData for images) */
+export const aiChat = (data) => {
+  const isFormData = data instanceof FormData;
+  return api.post('/ai/chat', data, {
+    headers: {
+      'Content-Type': isFormData ? 'multipart/form-data' : 'application/json',
+    },
+  });
+};
 
 /** Generate TTS audio from text using Deepgram */
 export const aiTTS = async (text, model = 'aura-asteria-en') => {
@@ -59,5 +65,9 @@ export const aiTTS = async (text, model = 'aura-asteria-en') => {
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 };
+
+/** Request an automatic image fix (crop + text overlay + dynamic background) */
+export const aiAutoFix = (imagePath, title, background) =>
+  api.post('/ai/auto-fix', { imagePath, title, background });
 
 export default api;
