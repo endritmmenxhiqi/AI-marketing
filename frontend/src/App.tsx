@@ -3,24 +3,31 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowRight,
+  Activity,
   CheckCircle2,
+  ChevronRight,
   Clapperboard,
+  Copy,
   Download,
   Eye,
   EyeOff,
   FileImage,
   ImagePlus,
+  Layout,
   LoaderCircle,
   Lock,
   LogOut,
   Mail,
+  Moon,
+  Palette,
+  PenTool,
   RefreshCcw,
-  ShieldCheck,
   Scissors,
   Sparkles,
+  Sun,
+  Target,
   Trash2,
-  UploadCloud,
-  Wand2,
+  Zap,
 } from 'lucide-react';
 import { createJob, fetchJobs, loginUser, registerUser, forgotPassword, trimJob, VideoJob } from './lib/api';
 import { useJobEvents } from './hooks/useJobEvents';
@@ -40,10 +47,46 @@ const categories = [
   { value: 'food-dessert', label: 'Food & Dessert' },
   { value: 'fashion-accessories', label: 'Fashion & Accessories' },
   { value: 'fitness-wellness', label: 'Fitness & Wellness' },
+  { value: 'sports-football', label: 'Sports / Football' },
   { value: 'tech-gadgets', label: 'Tech & Gadgets' },
   { value: 'home-lifestyle', label: 'Home & Lifestyle' },
   { value: 'jewelry-luxury', label: 'Jewelry & Luxury' },
   { value: 'pet-products', label: 'Pet Products' },
+];
+
+const quickBriefs = [
+  {
+    id: 'beauty',
+    label: 'Beauty launch',
+    category: 'beauty-skincare',
+    style: 'luxury',
+    description:
+      'A brightening serum for women 28+ who want smoother, more even skin without a long routine. Show texture, glow, before-and-after feeling, and end with a subscribe-and-save CTA.',
+  },
+  {
+    id: 'dessert',
+    label: 'Food craving',
+    category: 'food-dessert',
+    style: 'energetic',
+    description:
+      'A pistachio dessert box for people who want cafe-quality treats at home. Focus on texture, close-up indulgence, giftability, and a limited weekly drop.',
+  },
+  {
+    id: 'tech',
+    label: 'Tech utility',
+    category: 'tech-gadgets',
+    style: 'minimal',
+    description:
+      'A pocket-size wireless charger for remote workers who need clean desk setups and reliable battery backup while traveling. Emphasize convenience, portability, and daily use.',
+  },
+  {
+    id: 'football',
+    label: 'Match hype',
+    category: 'sports-football',
+    style: 'cinematic',
+    description:
+      'A cinematic, high-intensity short-form video for a major soccer match. Show stadium lights, fans chanting, kickoff, fast dribbles, tackles, goal celebrations, and a bold final CTA to watch the highlights.',
+  },
 ];
 
 const stageLabels: Record<string, string> = {
@@ -170,7 +213,7 @@ function AuthScreen({
           onClick={toggleTheme}
           aria-label="Toggle theme"
         >
-          {theme === 'dark' ? '☀️' : '🌙'}
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
 
@@ -425,6 +468,8 @@ function AuthScreen({
 }
 
 function App() {
+  const { theme, toggleTheme } = useTheme();
+  const { lang, toggleLanguage } = useLanguage();
   const [auth, setAuth] = useState(() => ({
     token: localStorage.getItem('token') || '',
     email: localStorage.getItem('user_email') || '',
@@ -443,7 +488,10 @@ function App() {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [trimLoading, setTrimLoading] = useState(false);
+  const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'overview' | 'preview' | 'history'>('overview');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (!auth.token) return;
@@ -461,12 +509,48 @@ function App() {
     () => jobs.find((job) => job._id === selectedJobId) || null,
     [jobs, selectedJobId]
   );
+  const firstName = auth.email.split('@')[0] || 'creator';
+  const categoryLabel =
+    categories.find((item) => item.value === productCategory)?.label || 'General product';
+  const jobsReady = jobs.filter((job) => job.status === 'completed').length;
+  const previewReady = Boolean(selectedJob?.output?.preview?.url);
+  const workspaceTabs = [
+    { id: 'overview' as const, label: 'Campaign' },
+    { id: 'preview' as const, label: 'Preview' },
+    { id: 'history' as const, label: `History${jobs.length > 0 ? ` (${jobs.length})` : ''}` },
+  ];
+  const jobsProcessing = jobs.filter((job) => job.status === 'processing').length;
+  const dashboardStats = [
+    {
+      label: 'Jobs created',
+      value: jobs.length,
+    },
+    {
+      label: 'Ready exports',
+      value: jobsReady,
+    },
+    {
+      label: jobsProcessing > 0 ? 'In production' : 'Current style',
+      value: jobsProcessing > 0 ? jobsProcessing : (styles.find((item) => item.value === style)?.label || style),
+    },
+  ];
 
   useEffect(() => {
-    if (!selectedJob?.metadata?.durationSeconds) return;
-    setTrimStart(selectedJob.output?.trim?.startSeconds || 0);
-    setTrimEnd(selectedJob.output?.trim?.endSeconds || selectedJob.metadata.durationSeconds);
-  }, [selectedJob]);
+    if (!selectedJob) return;
+    setTrimStart(Number(selectedJob.output?.trim?.startSeconds ?? 0) || 0);
+    const persistedEnd = Number(selectedJob.output?.trim?.endSeconds ?? 0) || 0;
+    const duration = Number(selectedJob.metadata?.durationSeconds ?? 0) || 0;
+    setTrimEnd(persistedEnd > 0 ? persistedEnd : duration);
+  }, [selectedJobId, selectedJob?.metadata?.durationSeconds]);
+
+  useEffect(() => {
+    if (!previewDurationSeconds) return;
+    setTrimEnd((current) => (current > 0 ? current : previewDurationSeconds));
+  }, [previewDurationSeconds]);
+
+  useEffect(() => {
+    setPreviewDurationSeconds(0);
+  }, [selectedJobId]);
 
   useEffect(() => {
     return () => {
@@ -538,6 +622,7 @@ function App() {
 
       setJobs((current) => [job, ...current]);
       setSelectedJobId(job._id);
+      setActiveWorkspaceTab('overview');
       setDescription('');
       clearSelectedFile();
     } catch (nextError: any) {
@@ -548,11 +633,25 @@ function App() {
   };
 
   const handleTrim = async () => {
-    if (!selectedJobId || !selectedJob?.metadata?.durationSeconds) return;
+    if (!selectedJobId) return;
 
     try {
       setTrimLoading(true);
-      const result = await trimJob(selectedJobId, trimStart, trimEnd);
+      setError('');
+      const maxSeconds = Number(selectedJob?.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
+      if (!maxSeconds || !Number.isFinite(maxSeconds) || maxSeconds <= 0) {
+        throw new Error('Video duration not loaded yet. Start playback once, then try trimming again.');
+      }
+
+      const safeStart = Math.max(0, Math.min(Number(trimStart) || 0, maxSeconds));
+      const safeEnd = Math.max(0, Math.min(Number(trimEnd) || maxSeconds, maxSeconds));
+      if (safeEnd <= safeStart + 0.05) {
+        throw new Error('Out-point must be after in-point.');
+      }
+
+      setTrimStart(safeStart);
+      setTrimEnd(safeEnd);
+      const result = await trimJob(selectedJobId, safeStart, safeEnd);
       setJobs((current) =>
         current.map((job) =>
           job._id === selectedJobId
@@ -581,6 +680,39 @@ function App() {
     setSelectedJobId(null);
   };
 
+  const applyQuickBrief = (preset: (typeof quickBriefs)[number]) => {
+    setDescription(preset.description);
+    setProductCategory(preset.category);
+    setStyle(preset.style);
+    setError('');
+  };
+
+  const handleRegenerate = (job: typeof jobs[number]) => {
+    setDescription(job.description || '');
+    setProductCategory(job.productCategory || 'food-dessert');
+    setStyle(job.style || 'energetic');
+    setActiveWorkspaceTab('overview');
+    setError('');
+    // Scroll to top of creation section
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const shellCard =
+    'rounded-[28px] border border-slate-200/80 bg-white/85 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-slate-950/55 dark:shadow-glow';
+  const shellMutedCard =
+    'rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-white/10 dark:bg-white/[0.04]';
+  const getStatusBadgeClass = (status?: string) => {
+    if (status === 'completed') {
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200';
+    }
+
+    if (status === 'failed') {
+      return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200';
+    }
+
+    return 'border-slate-200 bg-slate-100 text-slate-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200';
+  };
+
   return (
     <Routes>
       <Route
@@ -589,515 +721,615 @@ function App() {
           !auth.token ? (
             <AuthScreen onAuthenticated={setAuth} />
           ) : (
-            <div className="min-h-screen bg-mesh text-white">
-              <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-10 px-4 py-8 lg:px-8">
-                <header className="grid gap-8 rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-glow backdrop-blur xl:grid-cols-[1.2fr,0.8fr]">
-                  <div className="space-y-6">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm text-mist">
-                      <Sparkles size={16} className="text-flare" />
-                      AI Marketing Studio MVP
-                    </div>
-                    <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-slate-200">
-                      <span>{auth.email}</span>
-                      <button type="button" onClick={handleLogout} className="inline-flex items-center gap-2 text-slate-300 hover:text-white">
-                        <LogOut size={14} />
-                        Logout
-                      </button>
-                    </div>
-                    <div className="space-y-4">
-                      <h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-6xl">
-                        Turn one product shot into a polished short-form ad.
-                      </h1>
-                      <p className="max-w-2xl text-base text-slate-200 md:text-lg">
-                        Start with a product image or just a detailed brief, then generate a vertical video with
-                        scene-based scriptwriting, Pexels b-roll, Deepgram voiceover, animated captions,
-                        ducked music, and MP4 export.
-                      </p>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {[
-                        '3-5 scene composition',
-                        'Live generation progress',
-                        'Trim and export workflow',
-                      ].map((item) => (
-                        <div key={item} className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-200">
-                          {item}
+            <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_85%_15%,rgba(236,72,153,0.10),transparent_24%),linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fbff_100%)] text-slate-900 transition-colors dark:bg-mesh dark:text-white">
+              <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-8 px-4 py-6 lg:px-8">
+                <header className="grid gap-6 xl:grid-cols-[1fr,400px]">
+                  <div className={`${shellCard} relative overflow-hidden bg-gradient-to-br from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/90`}>
+                    <div className="relative space-y-6">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                         <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-flare/10 dark:text-flare">
+                              <Sparkles size={22} />
+                            </div>
+                            <div>
+                              <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
+                                AI Marketing Studio
+                              </h1>
+                              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                                Create high-conversion short-form ads in seconds.
+                              </p>
+                            </div>
+                         </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="auth-theme-toggle"
+                            onClick={toggleLanguage}
+                            aria-label="Toggle language"
+                          >
+                            <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.02em' }}>
+                              {lang === 'sq' ? 'EN' : 'AL'}
+                            </span>
+                          </button>
+                          <button
+                            className="auth-theme-toggle"
+                            onClick={toggleTheme}
+                            aria-label="Toggle theme"
+                          >
+                            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                          </button>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-white/10 bg-slate-950/60 p-6">
-                    <div className="space-y-5">
-                      <div>
-                        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-emerald-200">
-                          <ShieldCheck size={14} />
-                          Product-Safe Workflow
-                        </div>
-                        <h2 className="mt-4 text-2xl font-semibold">Build ads that stay loyal to the product.</h2>
-                        <p className="mt-2 text-sm text-slate-300">
-                          The latest pipeline prioritizes category-specific copy, tighter stock search intent,
-                          Deepgram voiceover, and safer product-first fallbacks when stock clips are weak.
-                        </p>
                       </div>
 
-                      <div className="grid gap-3">
-                        {[
-                          'Upload one clean hero image instead of a collage or screenshot.',
-                          'No image is fine too. The studio can generate from a strong product brief alone.',
-                          'Describe the buyer, craving/problem, product texture, and the exact CTA.',
-                          'For niche foods, accurate stills now beat wrong stock video.'
-                        ].map((item) => (
-                          <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                            <CheckCircle2 size={18} className="mt-0.5 text-flare" />
-                            <p className="text-sm text-slate-200">{item}</p>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {dashboardStats.map((item) => (
+                          <div key={item.label} className={`${shellMutedCard} group transition-all hover:bg-white/95 dark:hover:bg-white/10`}>
+                            <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500">
+                              {item.label}
+                            </div>
+                            <div className="mt-2 text-3xl font-bold tracking-tight">{item.value}</div>
                           </div>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className={`${shellCard} flex flex-col justify-between overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 text-white dark:from-indigo-600/20 dark:to-purple-600/20 dark:text-white`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">Account info</div>
+                        <h2 className="mt-1 text-2xl font-black capitalize tracking-tight text-white">{firstName}</h2>
+                        <p className="text-sm font-medium opacity-60 text-slate-300 dark:text-slate-400">{auth.email}</p>
+                      </div>
+                      <button type="button" onClick={handleLogout} className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-500 transition-all hover:bg-red-500 hover:text-white dark:bg-rose-500/15 dark:text-rose-400">
+                        <LogOut size={18} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                       <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/10 dark:bg-white/5 border border-white/10 dark:border-white/5">
+                          <span className="text-[10px] uppercase font-bold opacity-50 text-slate-400">Active style</span>
+                          <span className="text-sm font-semibold text-white">{styles.find(s => s.value === style)?.label || style}</span>
+                       </div>
+                       <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/10 dark:bg-white/5 border border-white/10 dark:border-white/5">
+                          <span className="text-[10px] uppercase font-bold opacity-50 text-slate-400">Active category</span>
+                          <span className="text-sm font-semibold truncate text-white">{categories.find(c => c.value === productCategory)?.label || productCategory}</span>
+                       </div>
                     </div>
                   </div>
                 </header>
 
-                <main className="grid gap-8 xl:grid-cols-[0.9fr,1.1fr]">
-                  <section className="space-y-6 rounded-[28px] border border-white/10 bg-slate-950/50 p-6 backdrop-blur">
-                    <div className="space-y-2">
-                      <h2 className="text-2xl font-semibold">Create a video job</h2>
-                      <p className="text-sm text-slate-300">
-                        This workflow is for marketing creatives only. Pick the product category so the AI writes ad copy and searches media with the right intent. A product image is optional.
-                      </p>
-                    </div>
-
-                    <div
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={onDrop}
-                      className="rounded-[28px] border border-dashed border-white/15 bg-white/[0.03] p-5"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium text-slate-100">Product image</div>
-                          <p className="max-w-md text-sm text-slate-300">
-                            Optional. Add one clean JPG or PNG, or skip it and let the studio generate from the brief only.
-                          </p>
-                        </div>
-
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={onSelectFile}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={openFilePicker}
-                          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-900"
-                        >
-                          <UploadCloud size={16} />
-                          {file ? 'Replace image' : 'Choose image'}
-                        </button>
+                <main className="grid gap-8 xl:grid-cols-[1fr,1.15fr]">
+                  {/* LEFT COLUMN: Creation Section */}
+                  <section className={`${shellCard} flex flex-col gap-8`}>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">New Campaign</h2>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select a template or start from scratch</p>
                       </div>
+                      <div className="flex -space-x-2">
+                         {[1,2,3].map(i => (
+                           <div key={i} className="h-6 w-6 rounded-full border-2 border-white bg-slate-100 dark:border-slate-900 dark:bg-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-400">
+                             {i}
+                           </div>
+                         ))}
+                      </div>
+                    </div>
 
-                      {file ? (
-                        <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-4">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="rounded-2xl bg-white/10 p-3">
-                              <FileImage size={20} className="text-flare" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-medium text-white">{file.name}</div>
-                              <div className="mt-1 text-xs text-slate-400">{formatFileSize(file.size)}</div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            {previewUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setIsPreviewOpen(true)}
-                                className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-white"
-                              >
-                                <Eye size={14} />
-                                Preview
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={openFilePicker}
-                              className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-white"
-                            >
-                              <RefreshCcw size={14} />
-                              Replace
-                            </button>
-                            <button
-                              type="button"
-                              onClick={clearSelectedFile}
-                              className="inline-flex items-center gap-2 rounded-full border border-coral/30 bg-coral/10 px-4 py-2 text-sm text-red-100"
-                            >
-                              <Trash2 size={14} />
-                              Remove
-                            </button>
-                          </div>
+                    {/* Error Banner */}
+                    {error && (
+                      <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
+                        <span className="mt-0.5 shrink-0 text-rose-500">⚠</span>
+                        <div className="flex-1">
+                          <div className="font-bold">Campaign Error</div>
+                          <div className="opacity-80">{error}</div>
                         </div>
-                      ) : (
-                        <div className="mt-5 flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-slate-950/60 px-5 text-center">
-                          <div className="rounded-full bg-white/10 p-4">
-                            <ImagePlus size={28} className="text-flare" />
-                          </div>
-                          <p className="mt-3 text-sm font-medium text-white">Drop the product image here, choose one, or skip it</p>
-                          <p className="mt-2 max-w-sm text-xs text-slate-400">
-                            Cleaner product shots lead to better overlays, but a strong product description alone can still generate a marketing video.
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                        <button onClick={() => setError('')} className="shrink-0 opacity-50 hover:opacity-100 text-lg leading-none">×</button>
+                      </div>
+                    )}
 
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-slate-200">Product category</label>
-                      <select
-                        value={productCategory}
-                        onChange={(event) => setProductCategory(event.target.value)}
-                        className="w-full rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm text-white outline-none"
-                      >
-                        {categories.map((item) => (
-                          <option key={item.value} value={item.value} className="bg-slate-900">
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-slate-200">Product description</label>
-                      <textarea
-                        value={description}
-                        onChange={(event) => setDescription(event.target.value)}
-                        rows={7}
-                        className="w-full rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm text-white outline-none ring-0 placeholder:text-slate-500"
-                        placeholder="Describe the product, buyer, pain point, core promise, offer, and CTA. Example: A collagen peptide powder for busy women 30+ who want healthier hair and skin without another complicated routine. Strawberry flavor, 20 servings, subscribe-and-save offer."
-                      />
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {styles.map((item) => (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {quickBriefs.map((preset) => (
                         <button
-                          key={item.value}
+                          key={preset.id}
                           type="button"
-                          onClick={() => setStyle(item.value)}
-                          className={`rounded-3xl border px-4 py-4 text-left transition ${style === item.value
-                            ? 'border-flare bg-flare/10'
-                            : 'border-white/10 bg-white/[0.03] hover:border-white/25'
-                            }`}
+                          onClick={() => applyQuickBrief(preset)}
+                          className="group relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border border-slate-200 bg-white/40 text-left transition-all hover:border-indigo-500/50 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-flare/40"
                         >
-                          <div className="text-base font-medium">{item.label}</div>
-                          <div className="mt-1 text-sm text-slate-300">{item.tone}</div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-white">{preset.label}</div>
+                          <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{preset.category.split('-').join(' ')}</div>
+                          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <Zap size={10} className="text-indigo-500 dark:text-flare" />
+                          </div>
                         </button>
                       ))}
                     </div>
 
-                    <label className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          <Wand2 size={16} className="text-coral" />
-                          Experimental AI image fallback
+                    <div className="space-y-8">
+                      <div className="group relative">
+                        <div
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={onDrop}
+                          className="flex flex-col items-center justify-center gap-4 p-10 rounded-[32px] border-2 border-dashed border-slate-200 bg-slate-50/50 backdrop-blur-sm transition-all hover:border-indigo-500/40 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-flare/30 dark:hover:bg-white/[0.03]"
+                        >
+                          {file ? (
+                            <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
+                              <div className="flex items-center gap-4">
+                                <div className="p-4 rounded-2xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 dark:bg-flare dark:text-slate-900 dark:shadow-flare/10">
+                                  <FileImage size={24} />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{file.name}</div>
+                                  <div className="text-[10px] font-black opacity-40 uppercase tracking-tighter">{formatFileSize(file.size)}</div>
+                                </div>
+                              </div>
+                              <button type="button" onClick={clearSelectedFile} className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="p-5 rounded-3xl bg-white text-slate-300 shadow-sm dark:bg-white/5 dark:text-slate-600">
+                                <ImagePlus size={36} />
+                              </div>
+                              <div className="text-center space-y-1">
+                                <div className="text-base font-bold text-slate-900 dark:text-white">Product Asset</div>
+                                <p className="text-xs font-medium text-slate-400">Drag & drop or Click to upload</p>
+                              </div>
+                              <button type="button" onClick={openFilePicker} className="mt-2 px-6 py-2.5 rounded-full bg-slate-900 text-white text-xs font-black uppercase tracking-widest transition-all hover:bg-slate-700 hover:scale-105 active:scale-95 dark:bg-white dark:text-slate-900">
+                                Select File
+                              </button>
+                            </>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-300">
-                          Recommended off for most product ads. Keep it disabled if literal product accuracy matters.
-                        </p>
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onSelectFile} />
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={enableStyleTransfer}
-                        onChange={(event) => setEnableStyleTransfer(event.target.checked)}
-                        className="h-5 w-5 rounded border-white/20 bg-transparent"
-                      />
-                    </label>
 
-                    {error ? (
-                      <div className="rounded-2xl border border-coral/40 bg-coral/10 px-4 py-3 text-sm text-red-100">
-                        {error}
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-3">
+                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
+                             <Target size={12} />
+                             Product Category
+                          </label>
+                          <select
+                            value={productCategory}
+                            onChange={(event) => setProductCategory(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-200 bg-white/50 px-5 py-4 text-sm font-bold text-slate-900 outline-none transition-all focus:border-indigo-500/50 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-flare/40"
+                          >
+                            {categories.map((item) => (
+                              <option
+                                key={item.value}
+                                value={item.value}
+                                className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
+                              >
+                                {item.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-3">
+                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
+                             <Palette size={12} />
+                             Visual Style
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {styles.slice(0, 2).map((item) => (
+                              <button
+                                key={item.value}
+                                type="button"
+                                onClick={() => setStyle(item.value)}
+                                className={`rounded-xl border p-3 text-center transition-all ${
+                                  style === item.value
+                                    ? 'border-indigo-500 bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 dark:border-flare dark:bg-flare dark:text-slate-900 dark:shadow-flare/10'
+                                    : 'border-slate-200 bg-white/50 text-slate-600 font-bold dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-400'
+                                }`}
+                              >
+                                <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    ) : null}
 
-                    <button
-                      type="button"
-                      onClick={handleSubmit}
-                      disabled={submitting}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-flare disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {submitting ? <LoaderCircle className="animate-spin" size={16} /> : <Clapperboard size={16} />}
-                      {submitting ? 'Generating job...' : 'Generate video'}
-                    </button>
+                      <div className="space-y-3">
+                        <label className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
+                           <div className="flex items-center gap-2">
+                              <PenTool size={12} />
+                              Proprietary Brief
+                           </div>
+                           <span className={`${description.length > 700 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/800</span>
+                        </label>
+                        <textarea
+                          value={description}
+                          onChange={(event) => setDescription(event.target.value)}
+                          rows={6}
+                          maxLength={800}
+                          className="w-full rounded-[28px] border border-slate-200 bg-white/50 px-6 py-5 text-sm font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500/50 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-flare/40 dark:placeholder:text-slate-600"
+                          placeholder="Describe the product, target audience, and the problem you solve..."
+                        />
+                      </div>
+
+                      <div className="pt-2">
+                        <button type="button" onClick={handleSubmit} disabled={submitting} className="group relative w-full overflow-hidden rounded-[24px] bg-slate-900 py-6 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+                           <div className="relative z-10 flex items-center justify-center gap-3">
+                              {submitting ? <LoaderCircle className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                              <span>{submitting ? 'Creating Studio Magic...' : 'Generate Campaign'}</span>
+                           </div>
+                           <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-flare dark:to-coral" />
+                        </button>
+                      </div>
+                    </div>
                   </section>
 
-                  <section className="grid gap-8">
-                    <div className="rounded-[28px] border border-white/10 bg-slate-950/50 p-6 backdrop-blur">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-2xl font-semibold">Live progress</h2>
-                          <p className="mt-1 text-sm text-slate-300">
-                            Real-time queue updates for script, media, voice, render, and export.
-                          </p>
-                        </div>
-                        {selectedJob ? (
-                          <div className="rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-slate-300">
-                            {stageLabels[selectedJob.stage] || selectedJob.stage}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {selectedJob ? (
-                        <div className="mt-6 space-y-5">
-                          <div className="h-3 overflow-hidden rounded-full bg-white/5">
-                            <motion.div
-                              className="h-full rounded-full bg-gradient-to-r from-flare via-coral to-white"
-                              animate={{ width: `${selectedJob.progress || 0}%` }}
-                            />
-                          </div>
-                          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-200">
-                            <span>{selectedJob.message}</span>
-                            <span>{selectedJob.progress || 0}%</span>
-                          </div>
-                          {selectedJob.error ? (
-                            <div className="rounded-2xl border border-coral/40 bg-coral/10 px-4 py-3 text-sm text-red-100">
-                              {selectedJob.error}
-                            </div>
-                          ) : null}
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Hook</div>
-                              <div className="mt-2 text-sm text-white">
-                                {selectedJob.script?.hook || 'Waiting for script generation...'}
-                              </div>
-                            </div>
-                            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">CTA</div>
-                              <div className="mt-2 text-sm text-white">
-                                {selectedJob.script?.cta || 'Call to action will appear here.'}
-                              </div>
-                            </div>
-                          </div>
-                          {selectedJob.script?.scenes?.length ? (
-                            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Scene plan</div>
-                              <div className="mt-4 space-y-3">
-                                {selectedJob.script.scenes.map((scene) => (
-                                  <div key={scene.sceneNumber} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <div className="text-sm font-medium text-white">
-                                        Scene {scene.sceneNumber}: {scene.headline}
-                                      </div>
-                                      {scene.voiceDuration ? (
-                                        <div className="text-xs text-slate-300">{formatSeconds(scene.voiceDuration)}</div>
-                                      ) : null}
-                                    </div>
-                                    <div className="mt-2 text-xs text-slate-300">
-                                      {(scene.media?.source || 'pending')} {scene.media?.kind ? `| ${scene.media.kind}` : ''}
-                                    </div>
-                                    {scene.media?.query ? (
-                                      <div className="mt-1 text-xs text-slate-400">Query: {scene.media.query}</div>
-                                    ) : null}
-                                    {scene.media?.selectionReason ? (
-                                      <div className="mt-2 text-xs text-slate-300">{scene.media.selectionReason}</div>
-                                    ) : null}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="mt-6 rounded-3xl border border-dashed border-white/10 p-8 text-sm text-slate-300">
-                          Your newest job will appear here once you generate a video.
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid gap-8 xl:grid-cols-[1fr,0.8fr]">
-                      <div className="rounded-[28px] border border-white/10 bg-slate-950/50 p-6 backdrop-blur">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-2xl font-semibold">Preview studio</h2>
-                            <p className="mt-1 text-sm text-slate-300">
-                              Review the current render, trim the opening/ending, and export the final cut.
-                            </p>
-                          </div>
-                        </div>
-
-                        <AnimatePresence mode="wait">
-                          {selectedJob?.output?.preview?.url ? (
-                            <motion.div
-                              key={selectedJob.output.preview.url}
-                              initial={{ opacity: 0, y: 18 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -18 }}
-                              className="mt-6 space-y-6"
-                            >
-                              <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-[32px] border border-white/10 bg-black shadow-glow">
-                                <video
-                                  controls
-                                  playsInline
-                                  src={selectedJob.output.preview.url}
-                                  className="aspect-[9/16] w-full bg-black object-contain"
-                                />
-                              </div>
-
-                              {selectedJob.output?.sceneFiles?.length ? (
-                                <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                                  <div className="mb-4 flex items-center justify-between gap-3">
-                                    <div>
-                                      <div className="text-sm font-medium text-slate-100">Scene previews</div>
-                                      <p className="mt-1 text-xs text-slate-400">
-                                        Review each rendered scene separately before judging the full cut.
-                                      </p>
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                      {selectedJob.output.sceneFiles.length} scenes
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-4 sm:grid-cols-2">
-                                    {selectedJob.output.sceneFiles.map((sceneFile, index) =>
-                                      sceneFile?.url ? (
-                                        <div
-                                          key={sceneFile.url}
-                                          className="overflow-hidden rounded-3xl border border-white/10 bg-black/40"
-                                        >
-                                          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-xs text-slate-300">
-                                            <span>Scene {index + 1}</span>
-                                            <span>{selectedJob.script?.scenes?.[index]?.headline || 'Rendered scene'}</span>
-                                          </div>
-                                          <video
-                                            controls
-                                            playsInline
-                                            preload="metadata"
-                                            src={sceneFile.url}
-                                            className="aspect-[9/16] w-full bg-black object-contain"
-                                          />
-                                        </div>
-                                      ) : null
-                                    )}
-                                  </div>
+                  {/* RIGHT COLUMN: Studio Workspace */}
+                  <section className={`${shellCard} flex flex-col gap-8 bg-white/60 dark:bg-slate-950/40 backdrop-blur-2xl border-l border-slate-200 dark:border-white/5`}>
+                    <div className="flex flex-col gap-6">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-6 dark:border-white/5">
+                        <div className="space-y-1.5">
+                           <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                             Studio Workspace
+                           </h2>
+                           <div className="flex items-center gap-2">
+                              {selectedJob ? (
+                                <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadgeClass(selectedJob.status)}`}>
+                                  {selectedJob.status}
                                 </div>
                               ) : null}
-
-                              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                                <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-100">
-                                  <Scissors size={16} className="text-flare" />
-                                  Trim slider
-                                </div>
-                                <div className="grid gap-4">
-                                  <label className="text-sm text-slate-300">
-                                    Start: {formatSeconds(trimStart)}
-                                    <input
-                                      type="range"
-                                      min={0}
-                                      max={selectedJob.metadata?.durationSeconds || 0}
-                                      step={0.1}
-                                      value={trimStart}
-                                      onChange={(event) => setTrimStart(Number(event.target.value))}
-                                      className="mt-2 w-full"
-                                    />
-                                  </label>
-                                  <label className="text-sm text-slate-300">
-                                    End: {formatSeconds(trimEnd)}
-                                    <input
-                                      type="range"
-                                      min={0}
-                                      max={selectedJob.metadata?.durationSeconds || 0}
-                                      step={0.1}
-                                      value={trimEnd}
-                                      onChange={(event) => setTrimEnd(Number(event.target.value))}
-                                      className="mt-2 w-full"
-                                    />
-                                  </label>
-                                </div>
-                                <div className="mt-4 flex flex-wrap gap-3">
-                                  <button
-                                    type="button"
-                                    onClick={handleTrim}
-                                    disabled={trimLoading || trimEnd <= trimStart}
-                                    className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50"
-                                  >
-                                    {trimLoading ? 'Trimming...' : 'Create trimmed export'}
-                                  </button>
-                                  {selectedJob.output?.trim?.asset?.url ? (
-                                    <a
-                                      href={selectedJob.output.trim.asset.url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-white"
-                                    >
-                                      <Download size={14} />
-                                      Download trimmed cut
-                                    </a>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap gap-3">
-                                <a
-                                  href={selectedJob.output.video?.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-full bg-flare px-4 py-2 text-sm font-medium text-slate-900"
-                                >
-                                  <Download size={14} />
-                                  Download final MP4
-                                </a>
-                                {selectedJob.output.voiceover?.url ? (
-                                  <a
-                                    href={selectedJob.output.voiceover.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="rounded-full border border-white/10 px-4 py-2 text-sm text-white"
-                                  >
-                                    Download voiceover
-                                  </a>
-                                ) : null}
-                              </div>
-                            </motion.div>
-                          ) : (
-                            <div className="mt-6 rounded-3xl border border-dashed border-white/10 p-8 text-sm text-slate-300">
-                              Rendered video preview will appear here once the worker finishes.
-                            </div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-
-                      <div className="rounded-[28px] border border-white/10 bg-slate-950/50 p-6 backdrop-blur">
-                        <h2 className="text-2xl font-semibold">Recent jobs</h2>
-                        <div className="mt-6 space-y-3">
-                          {jobs.length === 0 ? (
-                            <div className="rounded-3xl border border-dashed border-white/10 p-6 text-sm text-slate-300">
-                              No jobs yet.
-                            </div>
-                          ) : (
-                            jobs.map((job) => (
-                              <button
-                                key={job._id}
-                                type="button"
-                                onClick={() => setSelectedJobId(job._id)}
-                                className={`w-full rounded-3xl border px-4 py-4 text-left transition ${selectedJobId === job._id
-                                  ? 'border-flare bg-flare/10'
-                                  : 'border-white/10 bg-white/[0.03] hover:border-white/20'
-                                  }`}
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <div className="text-sm font-medium">{job.script?.title || job.style}</div>
-                                    <div className="mt-1 text-xs text-slate-300">
-                                      {job.productCategory || 'general-product'} | {job.description.slice(0, 80)}
-                                    </div>
-                                  </div>
-                                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                                    {job.progress || 0}%
-                                  </div>
-                                </div>
-                              </button>
-                            ))
-                          )}
+                              <span className="text-xs font-bold text-slate-400 truncate max-w-[200px]">
+                                {selectedJob?.script?.title || 'No active workspace'}
+                              </span>
+                           </div>
+                        </div>
+                        <div className="h-10 w-10 rounded-full bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400">
+                           <Layout size={20} />
                         </div>
                       </div>
+
+                      <div className="flex gap-1.5 p-1.5 rounded-2xl bg-slate-100/50 dark:bg-white/5">
+                        {workspaceTabs.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveWorkspaceTab(tab.id)}
+                            className={`flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                              activeWorkspaceTab === tab.id
+                                ? 'bg-white shadow-xl shadow-slate-200/50 text-slate-900 dark:bg-white/10 dark:shadow-none dark:text-white'
+                                : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar">
+                      <AnimatePresence mode="wait">
+                        {activeWorkspaceTab === 'overview' && (
+                          <motion.div
+                            key="overview"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-8 pb-4"
+                          >
+                            {selectedJob ? (
+                              <>
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                  <div className="p-6 rounded-[32px] bg-indigo-500/[0.03] border border-indigo-500/10 dark:bg-flare/[0.03] dark:border-flare/10">
+                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-indigo-500 dark:text-flare opacity-60">
+                                      <Activity size={14} />
+                                      Production Stage
+                                    </div>
+                                    <div className="mt-4 text-2xl font-black text-slate-900 dark:text-white leading-none">
+                                      {stageLabels[selectedJob.stage] || selectedJob.stage}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="p-6 rounded-[32px] bg-emerald-500/[0.03] border border-emerald-500/10 dark:bg-emerald-500/[0.06]">
+                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-emerald-500 opacity-60">
+                                      <Zap size={14} />
+                                      Live Progress
+                                    </div>
+                                    <div className="mt-2 flex items-end gap-2">
+                                      <div className="text-3xl font-black text-slate-900 dark:text-white leading-none">{selectedJob.progress}%</div>
+                                    </div>
+                                    <div className="mt-4 h-1.5 rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden">
+                                      <motion.div 
+                                        className="h-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]" 
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${selectedJob.progress}%` }}
+                                        transition={{ duration: 1, ease: "easeOut" }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="p-8 rounded-[40px] bg-white border border-slate-200 shadow-sm dark:bg-white/[0.02] dark:border-white/5 space-y-6">
+                                  <div className="flex items-center justify-between border-b border-slate-50 pb-5 dark:border-white/5">
+                                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content Blueprint</div>
+                                     <div className="h-2 w-2 rounded-full bg-indigo-500 dark:bg-flare animate-pulse" />
+                                  </div>
+                                  
+                                  <div className="space-y-6">
+                                    <div>
+                                      <span className="inline-block px-3 py-1 rounded-lg bg-slate-50 dark:bg-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
+                                        Campaign Title
+                                      </span>
+                                      <h3 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                                        {selectedJob.script?.title || 'Drafting...'}
+                                      </h3>
+                                    </div>
+
+                                    <div className="grid gap-6">
+                                      <div className="space-y-2">
+                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
+                                         <p className="text-base font-bold leading-relaxed italic text-slate-700 dark:text-slate-300">
+                                            "{selectedJob.script?.hook}"
+                                         </p>
+                                      </div>
+                                      <div className="h-px bg-slate-50 dark:bg-white/5" />
+                                      <div className="space-y-2">
+                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
+                                         <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
+                                            {selectedJob.script?.cta}
+                                         </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-24 text-center">
+                                <div className="relative mb-8">
+                                  <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full animate-pulse dark:bg-flare/10" />
+                                  <div className="relative p-8 rounded-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-200 dark:text-white/5">
+                                    <Sparkles size={48} />
+                                  </div>
+                                </div>
+                                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">System Ready</h3>
+                                <p className="mt-3 text-sm font-bold text-slate-400 max-w-[280px] leading-relaxed">
+                                  Launch your first campaign briefly to activate the high-fidelity studio dashboard.
+                                </p>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+
+                        {activeWorkspaceTab === 'preview' && (
+                          <motion.div
+                            key="preview"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-8 pb-4"
+                          >
+                            {selectedJob?.output?.preview?.url ? (
+                              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
+                                 <div className="relative group mx-auto w-full max-w-[360px]">
+                                    <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
+                                    <div className="relative overflow-hidden rounded-[48px] border-[12px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
+                                      <video
+                                        ref={previewVideoRef}
+                                        controls
+                                        playsInline
+                                        src={selectedJob.output.preview.url}
+                                        onLoadedMetadata={(event) => {
+                                          const duration = Number(event.currentTarget.duration || 0) || 0;
+                                          if (duration > 0 && Number.isFinite(duration)) {
+                                            setPreviewDurationSeconds(duration);
+                                          }
+                                        }}
+                                        className="aspect-[9/16] w-full bg-black object-contain shadow-inner"
+                                      />
+                                    </div>
+                                 </div>
+
+                                 <div className="p-8 rounded-[40px] bg-slate-950 text-white shadow-2xl dark:bg-white/5 dark:border dark:border-white/5">
+                                   <div className="flex items-center justify-between mb-8">
+                                      <div className="flex items-center gap-3">
+                                         <div className="p-2 rounded-xl bg-white/10">
+                                            <Scissors size={20} className="text-indigo-400 dark:text-flare" />
+                                         </div>
+                                         <span className="text-base font-black tracking-tight uppercase">Segment Studio</span>
+                                      </div>
+                                      <div className="px-4 py-1.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest dark:bg-flare/10 dark:text-flare">
+                                         {formatSeconds(Math.max(0, trimEnd - trimStart))} Segment
+                                      </div>
+                                   </div>
+                                   
+                                   <div className="space-y-10">
+                                      <div className="space-y-4">
+                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-40">
+                                            <span>In-point</span>
+                                            <span className="text-white opacity-100">{formatSeconds(trimStart)}</span>
+                                         </div>
+                                         <div className="flex items-center justify-end gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentTime = previewVideoRef.current?.currentTime;
+                                                if (currentTime == null) return;
+                                                const nextStart = Number(currentTime) || 0;
+                                                setTrimStart(nextStart);
+                                                setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
+                                              }}
+                                              className="px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
+                                            >
+                                              Set from playhead
+                                            </button>
+                                         </div>
+                                         <input
+                                            type="range"
+                                            min={0}
+                                            max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
+                                            step={0.1}
+                                            value={trimStart}
+                                            onChange={(event) => {
+                                              const nextStart = Number(event.target.value) || 0;
+                                              setTrimStart(nextStart);
+                                              setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
+                                            }}
+                                            className="w-full accent-indigo-500 dark:accent-flare"
+                                         />
+                                      </div>
+                                      <div className="space-y-4">
+                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-40">
+                                            <span>Out-point</span>
+                                            <span className="text-white opacity-100">{formatSeconds(trimEnd)}</span>
+                                         </div>
+                                         <div className="flex items-center justify-end gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentTime = previewVideoRef.current?.currentTime;
+                                                if (currentTime == null) return;
+                                                const maxSeconds = Number(selectedJob.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
+                                                const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
+                                                setTrimEnd(nextEnd);
+                                              }}
+                                              className="px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
+                                            >
+                                              Set from playhead
+                                            </button>
+                                         </div>
+                                         <input
+                                            type="range"
+                                            min={0}
+                                            max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
+                                            step={0.1}
+                                            value={trimEnd}
+                                            onChange={(event) => {
+                                              const nextEnd = Number(event.target.value) || 0;
+                                              setTrimEnd(nextEnd);
+                                              setTrimStart((current) => (nextEnd > current + 0.05 ? current : Math.max(0, nextEnd - 0.5)));
+                                            }}
+                                            className="w-full accent-indigo-500 dark:accent-flare"
+                                         />
+                                      </div>
+                                   </div>
+
+                                   <div className="grid grid-cols-2 gap-4 mt-10">
+                                      <button disabled={trimLoading} onClick={handleTrim} className="py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-indigo-500 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-flare dark:text-slate-900 shadow-lg shadow-indigo-600/20">
+                                         {trimLoading ? 'Processing...' : 'Export Clip'}
+                                      </button>
+                                      <a href={selectedJob.output.video?.url} target="_blank" className="flex items-center justify-center gap-2 py-5 rounded-2xl bg-white/10 border border-white/20 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-white/20">
+                                         <Download size={16} />
+                                         Full Master
+                                      </a>
+                                   </div>
+
+                                   {selectedJob.output?.trim?.asset?.url ? (
+                                     <div className="mt-8 space-y-4 rounded-[28px] border border-white/10 bg-white/5 p-5">
+                                       <div className="flex items-center justify-between gap-3">
+                                         <div className="text-[10px] font-black uppercase tracking-widest opacity-60">
+                                           Latest exported clip
+                                         </div>
+                                         <a
+                                           href={selectedJob.output.trim.asset.url}
+                                           target="_blank"
+                                           download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
+                                           className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
+                                         >
+                                           <Download size={14} />
+                                           Download clip
+                                         </a>
+                                       </div>
+                                       <video
+                                         controls
+                                         playsInline
+                                         src={selectedJob.output.trim.asset.url}
+                                         className="aspect-[9/16] w-full rounded-[22px] bg-black object-contain"
+                                       />
+                                     </div>
+                                   ) : null}
+                                 </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
+                                 <motion.div 
+                                   animate={{ rotate: 360 }}
+                                   transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                                   className="p-8 rounded-full bg-slate-50 dark:bg-white/5 mb-6"
+                                 >
+                                    <Clapperboard size={48} className="opacity-20" />
+                                 </motion.div>
+                                 <h4 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-tight">Finalizing Assets</h4>
+                                 <p className="mt-2 text-sm font-medium opacity-50">Visual data is being processed in the background.</p>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+
+                        {activeWorkspaceTab === 'history' && (
+                          <motion.div
+                            key="history"
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -10 }}
+                            className="space-y-4 pb-4"
+                          >
+                            <div className="grid gap-3">
+                              {jobs.length === 0 ? (
+                                <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">Zero Records found.</div>
+                              ) : (
+                                jobs.map((job) => (
+                                  <button
+                                    key={job._id}
+                                    onClick={() => setSelectedJobId(job._id)}
+                                    className={`group relative flex items-center justify-between p-5 rounded-[28px] border transition-all duration-300 ${
+                                      selectedJobId === job._id
+                                        ? 'border-indigo-500 bg-indigo-500/5 shadow-lg shadow-indigo-500/5 dark:border-flare/40 dark:bg-flare/5'
+                                        : 'border-slate-100 bg-white/40 hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-white/10'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-5 flex-1 min-w-0">
+                                       <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${
+                                         job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
+                                         job.status === 'failed' ? 'bg-rose-500 shadow-rose-500/40 animate-pulse' :
+                                         'bg-amber-400 shadow-amber-400/40 animate-pulse'
+                                       }`} />
+                                       <div className="text-left min-w-0">
+                                          <div className="text-sm font-black text-slate-900 dark:text-white truncate max-w-[180px] tracking-tight">
+                                             {job.script?.title || job.style}
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-[9px] font-black uppercase opacity-30 tracking-widest truncate">
+                                              {job.productCategory}
+                                            </span>
+                                            <div className="shrink-0 h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
+                                            <span className={`text-[9px] font-black ${
+                                              job.status === 'completed' ? 'text-emerald-500' :
+                                              job.status === 'failed' ? 'text-rose-500' :
+                                              'text-indigo-500 dark:text-flare'
+                                            }`}>
+                                              {job.status === 'completed' ? '✓ Ready' : job.status === 'failed' ? '✕ Failed' : `${job.progress}% Sync`}
+                                            </span>
+                                          </div>
+                                       </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {job.status === 'failed' && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleRegenerate(job); }}
+                                          className="px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-600 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all dark:bg-flare/10 dark:text-flare dark:hover:bg-flare dark:hover:text-slate-900"
+                                        >
+                                          Retry
+                                        </button>
+                                      )}
+                                      <div className="h-10 w-10 rounded-2xl bg-slate-50 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center dark:bg-white/5 translate-x-2 group-hover:translate-x-0">
+                                         <ChevronRight size={18} className="text-slate-400" />
+                                      </div>
+                                    </div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </section>
                 </main>

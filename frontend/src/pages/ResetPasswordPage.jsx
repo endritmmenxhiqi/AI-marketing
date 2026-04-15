@@ -41,10 +41,19 @@ const ResetPasswordPage = () => {
 
     setLoading(true);
     try {
-      const { data } = await resetPassword(token, password);
-      // Success - show message or redirect
-      // Since App.tsx handles auth state, we should probably just redirect to login
-      navigate('/');
+      const payload = await resetPassword(token, password);
+      
+      // If the backend returns a token and user after reset, we can log them in
+      if (payload.token && payload.user) {
+        localStorage.setItem('token', payload.token);
+        localStorage.setItem('user_email', payload.user.email);
+        
+        // Use window.location.href to force a full reload and update App state
+        window.location.href = '/';
+      } else {
+        // Fallback: just go to login
+        navigate('/');
+      }
     } catch (err) {
       setError(err.message || 'Failed to reset password.');
     } finally {

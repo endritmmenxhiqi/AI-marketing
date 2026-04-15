@@ -4,9 +4,9 @@
 
 /* ─── Variables & Theming ─────────────────────────────────────────────────── */
 :root {
-  /* LIGHT Theme (Default for un-toggled, though we default to dark below) */
+  /* LIGHT Theme */
   --bg-main: #f8fafc;
-  --bg-card: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.85); /* Slightly more transparent */
   --bg-input: #f1f5f9;
   --bg-hover: #e2e8f0;
   
@@ -14,36 +14,40 @@
   --text-muted: #64748b;
   --text-inverse: #ffffff;
 
-  --border-subtle: #e2e8f0;
+  --border-subtle: rgba(226, 232, 240, 0.8);
   --border-focus: #94a3b8;
 
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-glow: rgba(59, 130, 246, 0.4);
+  --accent: #6366f1; /* Indigo from Auth */
+  --accent-hover: #4f46e5;
+  --accent-glow: rgba(99, 102, 241, 0.4);
 
   --error: #ef4444;
   --error-bg: #fef2f2;
+  
+  /* Shared tokens */
+  --radius-lg: 24px;
+  --radius-xl: 32px;
 }
 
 [data-theme="dark"] {
-  --bg-main: #07101d; /* Deep ink from original */
-  --bg-card: rgba(255, 255, 255, 0.03); /* Glassy */
-  --bg-input: rgba(255, 255, 255, 0.05);
-  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-main: #0a0f1d; /* Slightly deeper navy */
+  --bg-card: rgba(15, 23, 42, 0.65); /* More depth with slate-900 base */
+  --bg-input: rgba(30, 41, 59, 0.6);
+  --bg-hover: rgba(51, 65, 85, 0.5);
 
-  --text-main: #f8fbff;
+  --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-inverse: #0f172a;
 
-  --border-subtle: rgba(255, 255, 255, 0.1);
-  --border-focus: rgba(255, 255, 255, 0.25);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(99, 102, 241, 0.5);
 
-  --accent: #ffd166; /* Flare from original */
+  --accent: #ffd166; /* Flare */
   --accent-hover: #ffdf8f;
   --accent-glow: rgba(255, 209, 102, 0.3);
 
-  --error: #ffccbc;
-  --error-bg: rgba(255, 107, 107, 0.2);
+  --error: #fb7185;
+  --error-bg: rgba(251, 113, 133, 0.1);
 }
 
 /* ─── Resets & Base ──────────────────────────────────────────────────────── */
