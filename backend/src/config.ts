@@ -21,7 +21,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || '',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   openAiApiKey: process.env.OPENAI_API_KEY || '',
-  openAiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  openAiModel: process.env.OPENAI_MODEL || 'gpt-4o',
   deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
   deepgramTtsModel: process.env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
   elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',

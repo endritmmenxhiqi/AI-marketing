@@ -32,6 +32,7 @@ const genericQueryTokens = new Set([
 ]);
 const foodMismatchTokens = new Set(['cake', 'cream', 'cupcake', 'frosting', 'icing', 'whipped']);
 const fitnessMismatchTokens = new Set(['conversation', 'desk', 'interview', 'meeting', 'office', 'podcast', 'talking']);
+const footballMismatchTokens = new Set(['nfl', 'touchdown', 'quarterback', 'superbowl', 'helmet', 'american']);
 type MediaStrategy = {
   anchors: string[];
   avoidTokens: string[];
@@ -68,7 +69,7 @@ const createUploadFallback = (
 const buildMediaStrategy = (description: string, productCategory: string): MediaStrategy => {
   const descriptionTokens = Array.from(new Set(tokenize(description)));
 
-  if (productCategory === 'food-dessert' && descriptionTokens.includes('baklava')) {
+  if (productCategory === 'food-dessert' && (descriptionTokens.includes('baklava') || descriptionTokens.includes('bakllava'))) {
     return {
       anchors: ['baklava', 'pistachio', 'pastry', 'turkish'],
       avoidTokens: Array.from(foodMismatchTokens),
@@ -84,7 +85,7 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
   if (productCategory === 'food-dessert') {
     return {
       anchors: descriptionTokens.filter((token) =>
-        ['dessert', 'sweet', 'pistachio', 'pastry', 'chocolate', 'cookie', 'baklava'].includes(token)
+        ['dessert', 'sweet', 'pistachio', 'pastry', 'chocolate', 'cookie', 'baklava', 'bakllava'].includes(token)
       ),
       avoidTokens: Array.from(foodMismatchTokens),
       preferStillImages: false,
@@ -106,6 +107,46 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       requireAnchorMatch: false,
       minimumVideoDurationRatio: 0.82,
       minimumVideoSeconds: 5,
+      useHeroUploadForFirstScene: false,
+      useHeroUploadForLastScene: false
+    };
+  }
+
+  if (productCategory === 'sports-football') {
+    const anchors = Array.from(
+      new Set([
+        ...descriptionTokens.filter((token) =>
+          [
+            'soccer',
+            'football',
+            'match',
+            'stadium',
+            'fans',
+            'crowd',
+            'goal',
+            'celebration',
+            'highlights',
+            'kickoff',
+            'dribble',
+            'tackle',
+            'referee',
+            'rivalry'
+          ].includes(token)
+        ),
+        'soccer',
+        'stadium',
+        'goal',
+        'fans'
+      ])
+    );
+
+    return {
+      anchors,
+      avoidTokens: Array.from(footballMismatchTokens),
+      preferStillImages: false,
+      requireAnchorMatch: false,
+      minimumVideoDurationRatio: 0.82,
+      minimumVideoSeconds: 4,
       useHeroUploadForFirstScene: false,
       useHeroUploadForLastScene: false
     };
@@ -548,6 +589,10 @@ export const processVideoJob = async (jobId: string) => {
     rendered.outputPath,
     `${videoJob._id}/final/${path.basename(rendered.outputPath)}`
   );
+  const videoAssetWithLocalPath = {
+    ...videoAsset,
+    localPath: videoAsset.localPath || rendered.outputPath
+  };
   const voiceAsset = await uploadAsset(
     rendered.voicePath,
     `${videoJob._id}/audio/${path.basename(rendered.voicePath)}`
@@ -560,8 +605,8 @@ export const processVideoJob = async (jobId: string) => {
   );
 
   videoJob.output = {
-    video: videoAsset,
-    preview: videoAsset,
+    video: videoAssetWithLocalPath,
+    preview: videoAssetWithLocalPath,
     voiceover: voiceAsset,
     sceneFiles: sceneAssets,
     trim: videoJob.output?.trim

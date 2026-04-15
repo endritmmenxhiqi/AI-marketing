@@ -146,6 +146,33 @@ const buildFitnessSignals = (description: string) => {
   };
 };
 
+const footballAvoidTerms = new Set([
+  'nfl',
+  'touchdown',
+  'quarterback',
+  'superbowl',
+  'helmet',
+  'american'
+]);
+
+const buildFootballSignals = (description: string) => {
+  const normalized = description.toLowerCase();
+  const anchors = unique([
+    'soccer match',
+    'football stadium',
+    'soccer fans',
+    'goal celebration',
+    'soccer highlights',
+    normalized.includes('stadium') ? 'soccer stadium crowd' : '',
+    normalized.includes('fans') ? 'soccer fans cheering' : ''
+  ]);
+
+  return {
+    anchors,
+    avoidTerms: Array.from(footballAvoidTerms)
+  };
+};
+
 const buildSearchQueries = ({
   scene,
   productCategory,
@@ -159,6 +186,8 @@ const buildSearchQueries = ({
   const foodSignals = productCategory === 'food-dessert' ? buildFoodSignals(description) : null;
   const fitnessSignals =
     productCategory === 'fitness-wellness' ? buildFitnessSignals(description) : null;
+  const footballSignals =
+    productCategory === 'sports-football' ? buildFootballSignals(description) : null;
   const productTokens = tokenize(description).slice(0, 10);
   const productPhrase = productTokens.slice(0, 4).join(' ');
   const actionHint =
@@ -166,6 +195,8 @@ const buildSearchQueries = ({
       ? 'person workout movement training'
       : productCategory === 'food-dessert'
         ? 'close up serving texture'
+        : productCategory === 'sports-football'
+          ? 'soccer match stadium crowd goal celebration'
         : '';
 
   const baseQueries = [
@@ -182,6 +213,14 @@ const buildSearchQueries = ({
       `${anchor} vertical`,
       `${anchor} person`,
       `${anchor} action`,
+      `${anchor} ${scene.visualBrief}`,
+      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+    ]),
+    ...(footballSignals?.anchors || []).flatMap((anchor) => [
+      anchor,
+      `${anchor} vertical`,
+      `${anchor} action`,
+      `${anchor} crowd`,
       `${anchor} ${scene.visualBrief}`,
       ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
     ]),
@@ -203,15 +242,13 @@ const buildSearchQueries = ({
       .filter((query) => {
         const queryTokens = tokenize(query);
 
-        if (foodSignals?.avoidTerms.length) {
-          return !queryTokens.some((token) => foodSignals.avoidTerms.includes(token));
-        }
+        const avoidTerms = [
+          ...(foodSignals?.avoidTerms || []),
+          ...(fitnessSignals?.avoidTerms || []),
+          ...(footballSignals?.avoidTerms || [])
+        ];
 
-        if (fitnessSignals?.avoidTerms.length) {
-          return !queryTokens.some((token) => fitnessSignals.avoidTerms.includes(token));
-        }
-
-        return true;
+        return avoidTerms.length ? !queryTokens.some((token) => avoidTerms.includes(token)) : true;
       })
   );
 };

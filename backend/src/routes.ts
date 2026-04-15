@@ -1,5 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import express from 'express';
 import multer from 'multer';
 import IORedis from 'ioredis';
@@ -7,7 +10,7 @@ import mime from 'mime-types';
 import { VideoJob } from './models/VideoJob';
 import { config } from './config';
 import { videoQueue } from './queue';
-import { ensureDir, relativeFrom, uniqueFile } from './utils/files';
+import { ensureDir, fileExists, relativeFrom, uniqueFile } from './utils/files';
 import { getJobChannel } from './services/jobProgressService';
 import { trimVideo } from './services/renderService';
 import { uploadAsset } from './services/storageService';
@@ -198,23 +201,55 @@ router.post('/jobs/:jobId/trim', async (req, res, next) => {
     const endSeconds = Number(req.body.endSeconds || 0);
     const job = await VideoJob.findById(req.params.jobId);
 
-    if (!job || !job.output?.video?.localPath) {
+    if (!job || (!job.output?.video?.localPath && !job.output?.video?.url)) {
       res.status(404).json({ message: 'Rendered video not found for this job.' });
       return;
     }
 
-    const trimOutputPath = path.join(config.workingDir, String(job._id), 'trimmed.mp4');
-    await trimVideo({
-      sourcePath: job.output.video.localPath,
-      startSeconds,
-      endSeconds,
+    const jobDir = path.join(config.workingDir, String(job._id));
+    await ensureDir(jobDir);
+
+    let sourcePath = job.output?.video?.localPath || '';
+    if (!sourcePath || !(await fileExists(sourcePath))) {
+      const sourceUrl = job.output?.video?.url || '';
+      if (!sourceUrl) {
+        res.status(404).json({ message: 'Rendered video not found for this job.' });
+        return;
+      }
+
+      const downloadPath = path.join(jobDir, 'source-for-trim.mp4');
+      const response = await fetch(sourceUrl);
+      if (!response.ok || !response.body) {
+        res
+          .status(502)
+          .json({ message: `Unable to download source video for trimming (${response.status}).` });
+        return;
+      }
+
+      await pipeline(Readable.fromWeb(response.body as any), createWriteStream(downloadPath));
+      job.output.video = {
+        ...(job.output.video || {}),
+        localPath: downloadPath
+      };
+      await job.save();
+      sourcePath = downloadPath;
+    }
+
+    const safeStart = Math.max(0, Number.isFinite(startSeconds) ? startSeconds : 0);
+    const safeEnd = Math.max(0, Number.isFinite(endSeconds) ? endSeconds : 0);
+    const fileName = `trim-${Math.round(safeStart * 100)}-${Math.round(safeEnd * 100)}-${Date.now()}.mp4`;
+    const trimOutputPath = path.join(jobDir, fileName);
+    const trimmed = await trimVideo({
+      sourcePath,
+      startSeconds: safeStart,
+      endSeconds: safeEnd,
       outputPath: trimOutputPath
     });
 
-    const trimAsset = await uploadAsset(trimOutputPath, `${job._id}/final/trimmed.mp4`);
+    const trimAsset = await uploadAsset(trimmed.outputPath, `${job._id}/final/${fileName}`);
     job.output.trim = {
-      startSeconds,
-      endSeconds,
+      startSeconds: trimmed.startSeconds,
+      endSeconds: trimmed.endSeconds,
       asset: trimAsset
     };
     await job.save();
@@ -222,7 +257,7 @@ router.post('/jobs/:jobId/trim', async (req, res, next) => {
     res.json({
       data: {
         trim: job.output.trim,
-        relativePath: relativeFrom(config.rootDir, trimOutputPath)
+        relativePath: relativeFrom(config.rootDir, trimmed.outputPath)
       }
     });
   } catch (error) {

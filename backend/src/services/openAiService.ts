@@ -24,7 +24,7 @@ const blockedKeywordTokens = new Set([
   'viral'
 ]);
 
-const SCRIPT_PROMPT_VERSION = 'v3';
+const SCRIPT_PROMPT_VERSION = 'v4';
 
 const scriptSchema = {
   name: 'marketing_video_script',
@@ -45,8 +45,8 @@ const scriptSchema = {
       musicMood: { type: 'string' },
       scenes: {
         type: 'array',
-        minItems: 3,
-        maxItems: 5,
+        minItems: 4,
+        maxItems: 6,
         items: {
           type: 'object',
           additionalProperties: false,
@@ -109,7 +109,7 @@ const normalizeKeyword = (value: string) =>
 
 const normalizeScriptPackage = (payload: ScriptPackage) => {
   const scenes = (payload.scenes || [])
-    .slice(0, 5)
+    .slice(0, 6)
     .map((scene, index) => ({
       sceneNumber: Number(scene.sceneNumber || index + 1),
       headline: normalizeLine(scene.headline),
@@ -145,8 +145,8 @@ const normalizeScriptPackage = (payload: ScriptPackage) => {
             ).slice(0, 3)
     }));
 
-  if (scenes.length < 3) {
-    throw new Error('OpenAI script response did not contain enough usable scenes.');
+  if (scenes.length < 4) {
+    throw new Error('OpenAI script response did not contain enough usable scenes (minimum 4 required).');
   }
 
   return {
@@ -193,6 +193,12 @@ export const generateScriptPackage = async (
             'Avoid passive talking-head scenes, generic socializing, meetings, interviews, or equipment-only footage unless the brief explicitly asks for it.',
             'If the offer is a program or membership, the visuals should still show the transformation journey, not abstract community filler.'
           ].join(' ')
+        : productCategory === 'sports-football'
+          ? [
+              'For football/soccer hype videos, prioritize match energy: stadium lights, crowd chants, kickoff, dribbling, tackles, saves, goal celebrations, and fast momentum shifts.',
+              'Use Pexels keywords that clearly indicate soccer (e.g., "soccer match", "football stadium", "soccer fans", "goal celebration") to avoid American football footage.',
+              'Avoid logos, identifiable players, or team-specific trademarks in visuals; keep it generic match atmosphere and action.'
+            ].join(' ')
         : '';
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -229,21 +235,22 @@ export const generateScriptPackage = async (
             `Product description: ${description}`,
             `Creative style: ${style}`,
             `Product category: ${productCategory}`,
-            'Return a script package for a 15-30 second 9:16 marketing video.',
-            'Default to a tight 16-22 second total runtime unless the brief clearly needs longer.',
+            'Return a script package for a 30-45 second 9:16 marketing video with exactly 4-6 scenes.',
+            'Target a total runtime of 30-45 seconds. Do NOT produce videos shorter than 28 seconds.',
             'This tool is for marketing creatives only. Treat the input as a product advertisement brief.',
-            'Use 4 scenes whenever possible, otherwise 3-5 scenes.',
+            'Always use exactly 4 scenes minimum, preferring 5 scenes for richer storytelling.',
             'Infer the likely buyer, core problem, desired outcome, offer, and CTA from the brief when needed.',
-            'Scene 1 should be a hard hook or pattern interrupt.',
-            'Middle scenes should show product use, transformation, benefits, or proof.',
-            'Final scene should land on a clear CTA or offer.',
+            'Scene 1 should be a hard hook or pattern interrupt — make it impossible to scroll past.',
+            'Scene 2 should introduce the product and the core problem it solves.',
+            'Scene 3 should show transformation, benefits, or social proof.',
+            'Scene 4+ should build desire and land on a clear CTA or offer.',
             'Voiceover must sound natural, persuasive, specific, and purchase-intent driven, not generic.',
-            'Keep each scene voiceover tight, usually 8-16 words, so the cut stays punchy and scene lengths do not drag.',
+            'Each scene voiceover should be 18-28 words — long enough to tell the story but punchy enough to convert. Do not write fewer than 15 words per scene.',
             'On-screen text should highlight claims, benefits, urgency, or offer language that fits a real ad.',
             'Pexels keywords must describe visible subjects, actions, locations, or product-adjacent moments someone could actually search for.',
             'Prefer product-adjacent lifestyle, hands using product, routines, closeups, textures, packaging moments, and outcome visuals.',
             'Avoid abstract stock terms and avoid unrelated objects, animals, scenery, or random tech footage.',
-            'Avoid scene ideas that would force one stock clip to carry 8-10 seconds by itself.',
+            'Spread the story across all scenes — do not cram everything into scene 1 and phone in the rest.',
             'Treat wrong-product visuals as a failure. If the product is baklava, do not suggest cake, frosting, whipped cream, cupcakes, or unrelated dessert prep.',
             'For food products, prioritize closeups, serving, slicing, plating, ingredients, and authentic product textures before secondary lifestyle context.',
             'For fitness products, favor workout, home training, stretching, sweating, coaching, progress checks, and strong post-workout confidence over talking or standing around.',

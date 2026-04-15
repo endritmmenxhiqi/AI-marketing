@@ -122,7 +122,7 @@ const createSceneClip = async ({
   isLast: boolean;
 }) => {
   const outputPath = path.join(jobDir, `scene-${plan.index + 1}.mp4`);
-  const sceneDuration = plan.voice.duration;
+  const sceneDuration = plan.voice.duration + 0.45; // breathing room after voiceover ends
   const command = ffmpeg();
   const hasProductImage = Boolean(productImagePath) && (await fileExists(productImagePath));
   const headlineFile = await writeFilterTextFile({
@@ -188,14 +188,12 @@ const createSceneClip = async ({
   })();
 
   const filters = [sourcePrep];
-  if (hasProductImage) {
-    filters.push(
-      `[1:v]scale=420:-1,format=rgba,colorchannelmixer=aa=0.96[product]`,
-      `[bg0][product]overlay=x=${productPosition.x}:y=${productPosition.y}[stage0]`
-    );
-  } else {
-    filters.push(`[bg0]drawbox=x=40:y=80:w=1000:h=420:color=black@0.16:t=fill[stage0]`);
-  }
+  // Note: We removed the hardcoded floating overlay because it looked
+  // bad with non-transparent JPEGs. The app now relies entirely on 
+  // useHeroUploadForFirstScene/LastScene to display product images respectfully
+  // as the full background with cinematic zoom effects.
+  
+  filters.push(`[bg0]drawbox=x=40:y=80:w=1000:h=420:color=black@0.16:t=fill[stage0]`);
 
   filters.push(
     `[stage0]drawbox=x=56:y=88:w=468:h=114:color=black@0.20:t=fill[stage1]`,
@@ -232,7 +230,7 @@ const createSceneClip = async ({
       '-movflags',
       '+faststart',
       '-preset',
-      'medium',
+      'veryfast',
       '-crf',
       '23'
     ])
@@ -311,7 +309,7 @@ const assembleFinalVideo = async ({
       '-movflags',
       '+faststart',
       '-preset',
-      'medium',
+      'veryfast',
       '-crf',
       '23',
       '-pix_fmt',
@@ -337,15 +335,29 @@ export const trimVideo = async ({
   outputPath: string;
 }) => {
   await ensureDir(path.dirname(outputPath));
+
+  const durationSeconds = await probeDuration(sourcePath).catch(() => 0);
+  const safeStart = Math.max(0, Number(startSeconds) || 0);
+  const rawEnd = Number(endSeconds) || 0;
+  const safeEnd = rawEnd > 0 ? rawEnd : durationSeconds;
+  const boundedEnd =
+    durationSeconds > 0 && Number.isFinite(durationSeconds)
+      ? Math.min(safeEnd, durationSeconds)
+      : safeEnd;
+
+  if (!boundedEnd || !Number.isFinite(boundedEnd) || boundedEnd <= safeStart) {
+    throw new Error('Invalid trim range.');
+  }
+
   const command = ffmpeg(sourcePath).outputOptions([
     '-ss',
-    startSeconds.toFixed(2),
+    safeStart.toFixed(2),
     '-to',
-    endSeconds.toFixed(2),
+    boundedEnd.toFixed(2),
     '-c:v',
     'libx264',
     '-preset',
-    'medium',
+    'veryfast',
     '-crf',
     '23',
     '-c:a',
@@ -354,7 +366,8 @@ export const trimVideo = async ({
     '+faststart'
   ]);
 
-  return runCommand(command, outputPath);
+  await runCommand(command, outputPath);
+  return { outputPath, startSeconds: safeStart, endSeconds: boundedEnd };
 };
 
 export const renderMarketingVideo = async ({
