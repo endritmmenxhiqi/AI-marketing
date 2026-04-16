@@ -1,7 +1,16 @@
 {
-  "dependencies": {
-    "framer-motion": "^12.38.0",
-    "lucide-react": "^1.7.0",
-    "openai": "^6.33.0"
+  "name": "ai-marketing-studio-mvp",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "start": "npm run start --workspace backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }
