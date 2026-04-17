@@ -10,6 +10,7 @@ ffmpeg.setFfprobePath(config.ffprobePath);
 
 const CAPTION_TEXT_Y = 1418;
 const TARGET_ASPECT_RATIO = 9 / 16;
+const SCENE_TAIL_SECONDS = 0.45;
 
 const probeDuration = (filePath: string) =>
   new Promise<number>((resolve, reject) => {
@@ -22,6 +23,8 @@ const probeDuration = (filePath: string) =>
       resolve(data.format.duration || 0);
     });
   });
+
+const getSceneDuration = (plan: SceneRenderPlan) => plan.voice.duration + SCENE_TAIL_SECONDS;
 
 const runCommand = (command: FfmpegCommand, outputPath: string) =>
   new Promise<string>((resolve, reject) => {
@@ -109,7 +112,7 @@ const createSceneClip = async ({
   isLast: boolean;
 }) => {
   const outputPath = path.join(jobDir, `scene-${plan.index + 1}.mp4`);
-  const sceneDuration = plan.voice.duration + 0.45; // breathing room after voiceover ends
+  const sceneDuration = getSceneDuration(plan); // breathing room after voiceover ends
   const command = ffmpeg();
   const mediaDuration =
     plan.media.kind === 'video'
@@ -367,7 +370,7 @@ export const renderMarketingVideo = async ({
     jobDir
   );
 
-  const durationSeconds = plans.reduce((sum, plan) => sum + plan.voice.duration, 0);
+  const durationSeconds = plans.reduce((sum, plan) => sum + getSceneDuration(plan), 0);
   const outputPath = path.join(jobDir, 'final-video.mp4');
 
   await assembleFinalVideo({
@@ -378,10 +381,12 @@ export const renderMarketingVideo = async ({
     outputPath
   });
 
+  const finalDurationSeconds = await probeDuration(outputPath).catch(() => durationSeconds);
+
   return {
     voicePath,
     outputPath,
     scenePaths,
-    durationSeconds
+    durationSeconds: finalDurationSeconds
   };
 };
