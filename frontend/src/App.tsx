@@ -34,6 +34,7 @@ import { useJobEvents } from './hooks/useJobEvents';
 import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import BrandLogo from './components/common/BrandLogo';
 
 const styles = [
   { value: 'energetic', label: 'Energetic', tone: 'Fast hook, bold cadence, punchy CTA' },
@@ -728,9 +729,7 @@ function App() {
                     <div className="relative space-y-6">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-flare/10 dark:text-flare">
-                              <Sparkles size={22} />
-                            </div>
+                            <BrandLogo />
                             <div>
                               <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
                                 AI Marketing Studio
