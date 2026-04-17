@@ -22,6 +22,32 @@ const fitnessAvoidTerms = new Set([
   'seminar',
   'talking'
 ]);
+const esportsAvoidTerms = new Set([
+  'business',
+  'coding',
+  'conference',
+  'console',
+  'controller',
+  'office',
+  'phone',
+  'programming',
+  'smartphone',
+  'vr'
+]);
+const esportsBriefTokens = [
+  'counter strike',
+  'counter-strike',
+  'cs2',
+  'esports',
+  'e sports',
+  'gaming tournament',
+  'major finals'
+];
+
+const isEsportsBrief = (description: string, productCategory: string) => {
+  const normalized = `${productCategory} ${description}`.toLowerCase();
+  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
+};
 
 const normalizeQuery = (value: string) =>
   value
@@ -173,6 +199,27 @@ const buildFootballSignals = (description: string) => {
   };
 };
 
+const buildEsportsSignals = (description: string) => {
+  const normalized = description.toLowerCase();
+  const anchors = unique([
+    'esports tournament',
+    'gaming tournament stage',
+    'pro gamer pc',
+    'gaming arena crowd',
+    'esports trophy celebration',
+    'keyboard mouse close up',
+    normalized.includes('crowd') ? 'esports crowd cheering' : '',
+    normalized.includes('arena') ? 'gaming arena lights' : '',
+    normalized.includes('player') ? 'esports player pc' : '',
+    normalized.includes('trophy') ? 'championship trophy celebration' : ''
+  ]);
+
+  return {
+    anchors,
+    avoidTerms: Array.from(esportsAvoidTerms)
+  };
+};
+
 const buildSearchQueries = ({
   scene,
   productCategory,
@@ -188,6 +235,9 @@ const buildSearchQueries = ({
     productCategory === 'fitness-wellness' ? buildFitnessSignals(description) : null;
   const footballSignals =
     productCategory === 'sports-football' ? buildFootballSignals(description) : null;
+  const esportsSignals = isEsportsBrief(description, productCategory)
+    ? buildEsportsSignals(description)
+    : null;
   const productTokens = tokenize(description).slice(0, 10);
   const productPhrase = productTokens.slice(0, 4).join(' ');
   const actionHint =
@@ -197,6 +247,8 @@ const buildSearchQueries = ({
         ? 'close up serving texture'
         : productCategory === 'sports-football'
           ? 'soccer match stadium crowd goal celebration'
+          : esportsSignals
+            ? 'esports arena crowd player pc headset keyboard mouse trophy'
         : '';
 
   const baseQueries = [
@@ -224,6 +276,15 @@ const buildSearchQueries = ({
       `${anchor} ${scene.visualBrief}`,
       ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
     ]),
+    ...(esportsSignals?.anchors || []).flatMap((anchor) => [
+      anchor,
+      `${anchor} vertical`,
+      `${anchor} player`,
+      `${anchor} stage lights`,
+      `${anchor} crowd`,
+      `${anchor} ${scene.visualBrief}`,
+      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+    ]),
     ...scene.pexelsKeywords.map((item) => `${categoryText} ${item}`),
     ...scene.pexelsKeywords.map((item) => (actionHint ? `${item} ${actionHint}` : item)),
     ...scene.pexelsKeywords,
@@ -245,7 +306,8 @@ const buildSearchQueries = ({
         const avoidTerms = [
           ...(foodSignals?.avoidTerms || []),
           ...(fitnessSignals?.avoidTerms || []),
-          ...(footballSignals?.avoidTerms || [])
+          ...(footballSignals?.avoidTerms || []),
+          ...(esportsSignals?.avoidTerms || [])
         ];
 
         return avoidTerms.length ? !queryTokens.some((token) => avoidTerms.includes(token)) : true;

@@ -33,6 +33,27 @@ const genericQueryTokens = new Set([
 const foodMismatchTokens = new Set(['cake', 'cream', 'cupcake', 'frosting', 'icing', 'whipped']);
 const fitnessMismatchTokens = new Set(['conversation', 'desk', 'interview', 'meeting', 'office', 'podcast', 'talking']);
 const footballMismatchTokens = new Set(['nfl', 'touchdown', 'quarterback', 'superbowl', 'helmet', 'american']);
+const esportsMismatchTokens = new Set([
+  'business',
+  'coding',
+  'conference',
+  'console',
+  'controller',
+  'office',
+  'phone',
+  'programming',
+  'smartphone',
+  'vr'
+]);
+const esportsBriefTokens = [
+  'counter strike',
+  'counter-strike',
+  'cs2',
+  'esports',
+  'e sports',
+  'gaming tournament',
+  'major finals'
+];
 type MediaStrategy = {
   anchors: string[];
   avoidTokens: string[];
@@ -42,6 +63,11 @@ type MediaStrategy = {
   minimumVideoSeconds: number;
   useHeroUploadForFirstScene: boolean;
   useHeroUploadForLastScene: boolean;
+};
+
+const isEsportsBrief = (description: string, productCategory: string) => {
+  const normalized = `${productCategory} ${description}`.toLowerCase();
+  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
 };
 
 const tokenize = (value: string) =>
@@ -146,6 +172,34 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       preferStillImages: false,
       requireAnchorMatch: false,
       minimumVideoDurationRatio: 0.82,
+      minimumVideoSeconds: 4,
+      useHeroUploadForFirstScene: false,
+      useHeroUploadForLastScene: false
+    };
+  }
+
+  if (isEsportsBrief(description, productCategory)) {
+    return {
+      anchors: descriptionTokens.filter((token) =>
+        [
+          'arena',
+          'crowd',
+          'esports',
+          'gaming',
+          'headset',
+          'keyboard',
+          'major',
+          'mouse',
+          'player',
+          'stage',
+          'tournament',
+          'trophy'
+        ].includes(token)
+      ),
+      avoidTokens: Array.from(esportsMismatchTokens),
+      preferStillImages: false,
+      requireAnchorMatch: false,
+      minimumVideoDurationRatio: 0.8,
       minimumVideoSeconds: 4,
       useHeroUploadForFirstScene: false,
       useHeroUploadForLastScene: false

@@ -47,6 +47,7 @@ const categories = [
   { value: 'food-dessert', label: 'Food & Dessert' },
   { value: 'fashion-accessories', label: 'Fashion & Accessories' },
   { value: 'fitness-wellness', label: 'Fitness & Wellness' },
+  { value: 'gaming-esports', label: 'Gaming & Esports' },
   { value: 'sports-football', label: 'Sports / Football' },
   { value: 'tech-gadgets', label: 'Tech & Gadgets' },
   { value: 'home-lifestyle', label: 'Home & Lifestyle' },
@@ -78,6 +79,14 @@ const quickBriefs = [
     style: 'minimal',
     description:
       'A pocket-size wireless charger for remote workers who need clean desk setups and reliable battery backup while traveling. Emphasize convenience, portability, and daily use.',
+  },
+  {
+    id: 'esports',
+    label: 'Esports hype',
+    category: 'gaming-esports',
+    style: 'cinematic',
+    description:
+      'A cinematic esports tournament promo inspired by Counter-Strike 2. Show arena lights, focused players at PCs, keyboard and mouse closeups, headset comms, roaring crowds, trophy moments, and a high-stakes final match atmosphere.',
   },
   {
     id: 'football',

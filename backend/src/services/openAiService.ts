@@ -25,6 +25,20 @@ const blockedKeywordTokens = new Set([
 ]);
 
 const SCRIPT_PROMPT_VERSION = 'v4';
+const esportsBriefTokens = [
+  'counter strike',
+  'counter-strike',
+  'cs2',
+  'esports',
+  'e sports',
+  'gaming tournament',
+  'major finals'
+];
+
+const isEsportsBrief = (description: string, productCategory: string) => {
+  const normalized = `${productCategory} ${description}`.toLowerCase();
+  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
+};
 
 const scriptSchema = {
   name: 'marketing_video_script',
@@ -178,6 +192,7 @@ export const generateScriptPackage = async (
     throw new Error('OPENAI_API_KEY is missing.');
   }
 
+  const esportsBrief = isEsportsBrief(description, productCategory);
   const categoryGuidance =
     productCategory === 'food-dessert'
       ? [
@@ -198,6 +213,13 @@ export const generateScriptPackage = async (
               'For football/soccer hype videos, prioritize match energy: stadium lights, crowd chants, kickoff, dribbling, tackles, saves, goal celebrations, and fast momentum shifts.',
               'Use Pexels keywords that clearly indicate soccer (e.g., "soccer match", "football stadium", "soccer fans", "goal celebration") to avoid American football footage.',
               'Avoid logos, identifiable players, or team-specific trademarks in visuals; keep it generic match atmosphere and action.'
+            ].join(' ')
+        : esportsBrief
+          ? [
+              'For esports and Counter-Strike style promos, prioritize arena-tournament energy: player walkouts, focused gamers at PCs, headset comms, keyboard and mouse closeups, crowd eruptions, stage lights, trophy moments, and big-screen match atmosphere.',
+              'Use Pexels keywords that clearly describe visible esports footage such as "esports tournament", "gaming tournament stage", "pro gamer pc", "gaming arena crowd", "keyboard mouse close up", and "trophy celebration".',
+              'Avoid drifting into generic tech product shots, coding desks, office work, server rooms, mobile gaming, console controllers, or abstract RGB gadget footage unless the brief explicitly asks for them.',
+              'Do not promise official Counter-Strike majors footage, team logos, or branded tournament assets. Keep the visuals generic, premium, and clearly esports-driven.'
             ].join(' ')
         : '';
 
