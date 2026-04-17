@@ -1,6 +1,6 @@
 # AI Marketing Studio MVP
 
-AI Marketing Studio turns a product image and short product description into a 15-30 second vertical marketing video built for TikTok, Reels, and Shorts. The backend writes a scene-based script, finds Pexels media, generates Deepgram voiceover with timing metadata, renders animated captioned scenes through FFmpeg, and returns a downloadable MP4.
+AI Marketing Studio turns a product image and short product description into a 30-45 second vertical marketing video built for TikTok, Reels, and Shorts. The backend writes a scene-based script, finds Pexels media, generates Deepgram voiceover with timing metadata, renders animated captioned scenes through FFmpeg, and returns a downloadable MP4.
 
 ## Stack
 
@@ -18,7 +18,7 @@ AI Marketing Studio turns a product image and short product description into a 1
 
 - Drag-and-drop landing page for product image upload and product brief entry
 - Real-time generation progress over Server-Sent Events
-- 3-5 scene script structure with hook, body, CTA, and scene search keywords
+- 4-6 scene script structure with hook, body, CTA, and scene search keywords
 - Pexels-first video search with image fallback and optional AI style-transfer fallback
 - Deepgram voiceover caching with alignment metadata and phrase-based captions
 - FFmpeg scene rendering with text overlays, transitions, music ducking, and final MP4 export
@@ -115,6 +115,8 @@ Product description:
 
 `A collagen peptide powder for busy women 30+ who want healthier hair and skin without adding another complicated routine. Strawberry flavor, 20 servings, subscribe-and-save available today. The goal is to get first-time buyers to start a subscription.`
 
+Recommended category: `beauty-skincare`
+
 Recommended style: `luxury`
 
 Expected quality checks:
@@ -125,6 +127,12 @@ Expected quality checks:
 - Stock clip duration fits the voice better instead of obviously looping
 - Captions track the spoken phrases closely
 - Final output contains clear CTA and polished end frame
+
+Expected runtime:
+
+- Scripts are generated for 4-6 scenes
+- The generator targets a total runtime of 30-45 seconds
+- Script prompting asks the model not to produce videos shorter than 28 seconds, though final runtime still depends on generated voiceover timing
 
 ## Notes
 

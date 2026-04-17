@@ -3,20 +3,13 @@ import path from 'node:path';
 import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
 import { config } from '../config';
 import { CaptionCue, SceneRenderPlan } from '../types';
-import { ensureDir, fileExists } from '../utils/files';
+import { ensureDir } from '../utils/files';
 
 ffmpeg.setFfmpegPath(config.ffmpegPath);
 ffmpeg.setFfprobePath(config.ffprobePath);
 
-const CAPTION_BOX_Y = 1360;
-const CAPTION_BOX_HEIGHT = 260;
+const CAPTION_TEXT_Y = 1418;
 const TARGET_ASPECT_RATIO = 9 / 16;
-const PRODUCT_POSITIONS = [
-  { x: 624, y: 120 },
-  { x: 600, y: 152 },
-  { x: 642, y: 168 },
-  { x: 586, y: 136 }
-];
 
 const probeDuration = (filePath: string) =>
   new Promise<number>((resolve, reject) => {
@@ -70,10 +63,12 @@ const writeFilterTextFile = async ({
 
 const buildCaptionFilters = async ({
   captions,
+  inputLabel,
   jobDir,
   sceneIndex
 }: {
   captions: CaptionCue[];
+  inputLabel: string;
   jobDir: string;
   sceneIndex: number;
 }) => {
@@ -83,10 +78,8 @@ const buildCaptionFilters = async ({
     const start = caption.start.toFixed(2);
     const end = caption.end.toFixed(2);
     const enableExpression = `between(t\\,${start}\\,${end})`;
-    const shadowLabel = `capshadow${index}`;
-    const boxLabel = `capbox${index}`;
     const textLabel = `captext${index}`;
-    const inputLabel = index === 0 ? 'topline' : `captext${index - 1}`;
+    const previousLabel = index === 0 ? inputLabel : `captext${index - 1}`;
     const captionFile = await writeFilterTextFile({
       jobDir,
       sceneIndex,
@@ -95,15 +88,9 @@ const buildCaptionFilters = async ({
     });
 
     filters.push(
-      `[${inputLabel}]drawbox=x=74:y=${CAPTION_BOX_Y + 12}:w=932:h=${CAPTION_BOX_HEIGHT}:color=black@0.20:t=fill:enable='${enableExpression}'[${shadowLabel}]`
-    );
-    filters.push(
-      `[${shadowLabel}]drawbox=x=60:y=${CAPTION_BOX_Y}:w=960:h=${CAPTION_BOX_HEIGHT}:color=white@0.12:t=fill:enable='${enableExpression}'[${boxLabel}]`
-    );
-    filters.push(
-      `[${boxLabel}]drawtext=fontfile='${escapeFilterPath(
+      `[${previousLabel}]drawtext=fontfile='${escapeFilterPath(
         config.ffmpegFontPath
-      )}':textfile='${captionFile}':reload=0:fontsize=54:fontcolor=white:line_spacing=12:shadowcolor=black@0.65:shadowx=0:shadowy=12:x=(w-text_w)/2:y=${CAPTION_BOX_Y + 58}:enable='${enableExpression}'[${textLabel}]`
+      )}':textfile='${captionFile}':reload=0:fontsize=54:fontcolor=white:line_spacing=12:shadowcolor=black@0.78:shadowx=0:shadowy=10:x=(w-text_w)/2:y=${CAPTION_TEXT_Y}:enable='${enableExpression}'[${textLabel}]`
     );
   }
 
@@ -124,26 +111,15 @@ const createSceneClip = async ({
   const outputPath = path.join(jobDir, `scene-${plan.index + 1}.mp4`);
   const sceneDuration = plan.voice.duration + 0.45; // breathing room after voiceover ends
   const command = ffmpeg();
-  const hasProductImage = Boolean(productImagePath) && (await fileExists(productImagePath));
-  const headlineFile = await writeFilterTextFile({
-    jobDir,
-    sceneIndex: plan.index,
-    label: 'headline',
-    text: plan.scene.headline
-  });
   const mediaDuration =
     plan.media.kind === 'video'
       ? plan.media.duration || (await probeDuration(plan.media.localPath!))
       : 0;
-  const productPosition = PRODUCT_POSITIONS[plan.index % PRODUCT_POSITIONS.length];
 
   if (plan.media.kind === 'video') {
     command.input(plan.media.localPath!);
   } else {
     command.input(plan.media.localPath!).inputOptions(['-loop 1']);
-  }
-  if (hasProductImage) {
-    command.input(productImagePath);
   }
 
   const sourcePrep = (() => {
@@ -188,26 +164,17 @@ const createSceneClip = async ({
   })();
 
   const filters = [sourcePrep];
-  // Note: We removed the hardcoded floating overlay because it looked
-  // bad with non-transparent JPEGs. The app now relies entirely on 
-  // useHeroUploadForFirstScene/LastScene to display product images respectfully
-  // as the full background with cinematic zoom effects.
-  
-  filters.push(`[bg0]drawbox=x=40:y=80:w=1000:h=420:color=black@0.16:t=fill[stage0]`);
-
+  // Keep the scene visuals clean by rendering only the timed bottom captions.
   filters.push(
-    `[stage0]drawbox=x=56:y=88:w=468:h=114:color=black@0.20:t=fill[stage1]`,
-    `[stage1]drawtext=fontfile='${escapeFilterPath(
-      config.ffmpegFontPath
-    )}':textfile='${headlineFile}':reload=0:fontsize=34:fontcolor=white:shadowcolor=black@0.7:shadowx=0:shadowy=10:x=84:y=120[topline]`,
     ...(await buildCaptionFilters({
       captions: plan.voice.captions,
+      inputLabel: 'bg0',
       jobDir,
       sceneIndex: plan.index
     }))
   );
 
-  const contentLabel = plan.voice.captions.length ? `captext${plan.voice.captions.length - 1}` : 'topline';
+  const contentLabel = plan.voice.captions.length ? `captext${plan.voice.captions.length - 1}` : 'bg0';
   const finalLabel = `sceneout${plan.index}`;
   const fadeOutStart = Math.max(sceneDuration - 0.3, 0).toFixed(2);
 

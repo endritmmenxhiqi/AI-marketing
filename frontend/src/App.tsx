@@ -914,7 +914,7 @@ function App() {
                              Visual Style
                           </label>
                           <div className="grid grid-cols-2 gap-2">
-                            {styles.slice(0, 2).map((item) => (
+                            {styles.map((item) => (
                               <button
                                 key={item.value}
                                 type="button"
