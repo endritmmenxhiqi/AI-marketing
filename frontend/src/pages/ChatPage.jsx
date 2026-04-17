@@ -70,9 +70,9 @@ const ChatPage = () => {
       setFixingIdx(idx);
       const res = await aiAutoFix(imagePath, title, background);
       if (res.data.success) {
-        // Update the specific message with the fixed image
+        // Update the specific message with the fixed image in the correct slot
         setMessages(prev => prev.map((msg, i) => 
-          i === idx ? { ...msg, analysisImage: `http://localhost:5000${res.data.data.url}` } : msg
+          i === idx ? { ...msg, fixedImage: `http://localhost:5000${res.data.data.url}` } : msg
         ));
       }
     } catch (error) {
@@ -299,7 +299,12 @@ const ChatPage = () => {
                             {msg.analysisImage && !msg.fixedImage && (
                               <button 
                                 className="auto-fix-trigger-btn"
-                                onClick={() => handleAutoFix(idx, msg.analysisImage.replace('http://localhost:5000', ''), caption)}
+                                onClick={() => {
+                                  const content = typeof msg.content === 'string' ? msg.content : '';
+                                  const matchPrompt = content.match(/(?:Reconstruction Prompt|Prompt):\s*(.*)/i);
+                                  const prompt = (matchPrompt ? matchPrompt[1] : "Professional studio product photo, 9:16").replace(/[*#]/g, '').trim();
+                                  handleAutoFix(idx, msg.analysisImage.replace('http://localhost:5000', ''), caption, prompt);
+                                }}
                                 disabled={fixingIdx === idx}
                               >
                                 {fixingIdx === idx ? (

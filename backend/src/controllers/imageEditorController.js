@@ -1,11 +1,6 @@
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
-
-/**
- * Automatically resize, crop to 9:16 and add a marketing title overlay.
- * POST /api/ai/auto-fix
- */
 const axios = require('axios');
 
 /**
@@ -43,8 +38,8 @@ const autoFixImage = async (req, res, next) => {
       for (let i = 0; i <= retries; i++) {
         try {
           const resp = await axios.get(url, { responseType: 'arraybuffer' });
-          if (resp.headers['content-type'].includes('text')) throw new Error('API returned text error');
-          return await sharp(Buffer.from(resp.data, 'binary')).resize(width, height).toBuffer();
+          if (resp.headers['content-type']?.includes('text')) throw new Error('API returned text error');
+          return await sharp(Buffer.from(resp.data)).resize(width, height).toBuffer();
         } catch (err) {
           if (i === retries) throw err;
           console.log(`Retry ${i + 1} for BG generation...`);
@@ -84,18 +79,34 @@ const autoFixImage = async (req, res, next) => {
 
     // 2c. The Elite Border (Frosted White Glow)
     const borderOverlay = `
-      <svg width="${width}" height="${height}">
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="15" />
+            <feOffset dx="0" dy="10" result="offsetblur" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.5" />
+            </feComponentTransfer>
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
         <circle cx="${width / 2}" cy="${height / 2}" r="${circleSize / 2 + 10}" fill="none" stroke="white" stroke-width="8" stroke-opacity="0.8" />
         <circle cx="${width / 2}" cy="${height / 2}" r="${circleSize / 2 + 20}" fill="none" stroke="white" stroke-width="2" stroke-opacity="0.3" />
         
         <!-- Premium Typography -->
-        <text x="50%" y="${height / 2 + circleSize / 2 + 180}" text-anchor="middle" fill="white" font-size="90" font-weight="900" font-family="serif" letter-spacing="8" style="text-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-          ${title.toUpperCase()}
-        </text>
-        
-        <text x="50%" y="${height / 2 + circleSize / 2 + 260}" text-anchor="middle" fill="white" font-size="30" font-weight="300" font-family="sans-serif" letter-spacing="15" fill-opacity="0.6">
-          PREMIUM SELECTION
-        </text>
+        <g filter="url(#shadow)">
+          <text x="50%" y="${height / 2 + circleSize / 2 + 180}" text-anchor="middle" fill="white" font-size="90" font-weight="900" font-family="serif" letter-spacing="8">
+            ${title.toUpperCase()}
+          </text>
+          
+          <text x="50%" y="${height / 2 + circleSize / 2 + 260}" text-anchor="middle" fill="white" font-size="30" font-weight="300" font-family="sans-serif" letter-spacing="15" fill-opacity="0.6">
+            PREMIUM SELECTION
+          </text>
+        </g>
       </svg>
     `;
 
