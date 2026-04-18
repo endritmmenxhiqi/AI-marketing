@@ -525,7 +525,7 @@ function App() {
     categories.find((item) => item.value === productCategory)?.label || 'General product';
   const currentJobs = engineMode === 'video' ? jobs : photoJobs;
   const jobsReady = currentJobs.filter((job) => job.status === 'completed').length;
-  const previewReady = Boolean(selectedJob?.output?.preview?.url) || Boolean((selectedJob as any)?.output?.variants?.length > 0);
+  const previewReady = Boolean((selectedJob as any)?.output?.preview?.url) || Boolean((selectedJob as any)?.output?.variants?.length > 0);
   const workspaceTabs = [
     { id: 'overview' as const, label: 'Campaign' },
     { id: 'preview' as const, label: engineMode === 'video' ? 'Preview' : 'Gallery' },
@@ -548,12 +548,13 @@ function App() {
   ];
 
   useEffect(() => {
-    if (!selectedJob) return;
-    setTrimStart(Number(selectedJob.output?.trim?.startSeconds ?? 0) || 0);
-    const persistedEnd = Number(selectedJob.output?.trim?.endSeconds ?? 0) || 0;
-    const duration = Number(selectedJob.metadata?.durationSeconds ?? 0) || 0;
+    if (!selectedJob || engineMode !== 'video') return;
+    const vJob = selectedJob as VideoJob;
+    setTrimStart(Number(vJob.output?.trim?.startSeconds ?? 0) || 0);
+    const persistedEnd = Number(vJob.output?.trim?.endSeconds ?? 0) || 0;
+    const duration = Number(vJob.metadata?.durationSeconds ?? 0) || 0;
     setTrimEnd(persistedEnd > 0 ? persistedEnd : duration);
-  }, [selectedJobId, selectedJob?.metadata?.durationSeconds]);
+  }, [selectedJobId, (selectedJob as any)?.metadata?.durationSeconds]);
 
   useEffect(() => {
     if (!previewDurationSeconds) return;
@@ -665,7 +666,7 @@ function App() {
     try {
       setTrimLoading(true);
       setError('');
-      const maxSeconds = Number(selectedJob?.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
+      const maxSeconds = Number((selectedJob as any)?.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
       if (!maxSeconds || !Number.isFinite(maxSeconds) || maxSeconds <= 0) {
         throw new Error('Video duration not loaded yet. Start playback once, then try trimming again.');
       }
@@ -1028,7 +1029,7 @@ function App() {
                                 </div>
                               ) : null}
                               <span className="text-xs font-bold text-slate-400 truncate max-w-[200px]">
-                                {selectedJob?.script?.title || 'No active workspace'}
+                                 {(selectedJob as any)?.script?.title || 'No active workspace'}
                               </span>
                            </div>
                         </div>
@@ -1104,30 +1105,30 @@ function App() {
                                   </div>
                                   
                                   <div className="space-y-6">
-                                    <div>
-                                      <span className="inline-block px-3 py-1 rounded-lg bg-slate-50 dark:bg-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
-                                        Campaign Title
-                                      </span>
-                                      <h3 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-tight">
-                                        {selectedJob.script?.title || 'Drafting...'}
-                                      </h3>
-                                    </div>
-
-                                    <div className="grid gap-6">
-                                      <div className="space-y-2">
-                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
-                                         <p className="text-base font-bold leading-relaxed italic text-slate-700 dark:text-slate-300">
-                                            "{selectedJob.script?.hook}"
-                                         </p>
+                                      <div>
+                                        <span className="inline-block px-3 py-1 rounded-lg bg-slate-50 dark:bg-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
+                                          Campaign Title
+                                        </span>
+                                        <h3 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                                          {(selectedJob as any).script?.title || 'Drafting...'}
+                                        </h3>
                                       </div>
-                                      <div className="h-px bg-slate-50 dark:bg-white/5" />
-                                      <div className="space-y-2">
-                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
-                                         <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
-                                            {selectedJob.script?.cta}
-                                         </p>
+  
+                                      <div className="grid gap-6">
+                                        <div className="space-y-2">
+                                           <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
+                                           <p className="text-base font-bold leading-relaxed italic text-slate-700 dark:text-slate-300">
+                                              "{(selectedJob as any).script?.hook}"
+                                           </p>
+                                        </div>
+                                        <div className="h-px bg-slate-50 dark:bg-white/5" />
+                                        <div className="space-y-2">
+                                           <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
+                                           <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
+                                              {(selectedJob as any).script?.cta}
+                                           </p>
+                                        </div>
                                       </div>
-                                    </div>
                                   </div>
                                 </div>
                               </>
@@ -1173,7 +1174,7 @@ function App() {
                                   ))}
                                 </div>
                               </div>
-                            ) : engineMode === 'video' && selectedJob?.output?.preview?.url ? (
+                            ) : engineMode === 'video' && (selectedJob as any)?.output?.preview?.url ? (
                               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
                                  <div className="relative group mx-auto w-full max-w-[360px]">
                                     <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
@@ -1182,7 +1183,7 @@ function App() {
                                         ref={previewVideoRef}
                                         controls
                                         playsInline
-                                        src={selectedJob.output.preview.url}
+                                        src={(selectedJob as any).output.preview.url}
                                         onLoadedMetadata={(event) => {
                                           const duration = Number(event.currentTarget.duration || 0) || 0;
                                           if (duration > 0 && Number.isFinite(duration)) {
@@ -1231,7 +1232,7 @@ function App() {
                                          <input
                                             type="range"
                                             min={0}
-                                            max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
+                                            max={(selectedJob as any).metadata?.durationSeconds || previewDurationSeconds || 0}
                                             step={0.1}
                                             value={trimStart}
                                             onChange={(event) => {
@@ -1253,7 +1254,7 @@ function App() {
                                               onClick={() => {
                                                 const currentTime = previewVideoRef.current?.currentTime;
                                                 if (currentTime == null) return;
-                                                const maxSeconds = Number(selectedJob.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
+                                                const maxSeconds = Number((selectedJob as any).metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
                                                 const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
                                                 setTrimEnd(nextEnd);
                                               }}
@@ -1265,7 +1266,7 @@ function App() {
                                          <input
                                             type="range"
                                             min={0}
-                                            max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
+                                            max={(selectedJob as any).metadata?.durationSeconds || previewDurationSeconds || 0}
                                             step={0.1}
                                             value={trimEnd}
                                             onChange={(event) => {
@@ -1282,20 +1283,20 @@ function App() {
                                       <button disabled={trimLoading} onClick={handleTrim} className="py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-indigo-500 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-flare dark:text-slate-900 shadow-lg shadow-indigo-600/20">
                                          {trimLoading ? 'Processing...' : 'Export Clip'}
                                       </button>
-                                      <a href={selectedJob.output.video?.url} target="_blank" className="flex items-center justify-center gap-2 py-5 rounded-2xl bg-white/10 border border-white/20 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-white/20">
+                                      <a href={(selectedJob as any).output.video?.url} target="_blank" className="flex items-center justify-center gap-2 py-5 rounded-2xl bg-white/10 border border-white/20 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-white/20">
                                          <Download size={16} />
                                          Full Master
                                       </a>
                                    </div>
 
-                                   {selectedJob.output?.trim?.asset?.url ? (
+                                   {(selectedJob as any).output?.trim?.asset?.url ? (
                                      <div className="mt-8 space-y-4 rounded-[28px] border border-white/10 bg-white/5 p-5">
                                        <div className="flex items-center justify-between gap-3">
                                          <div className="text-[10px] font-black uppercase tracking-widest opacity-60">
                                            Latest exported clip
                                          </div>
                                          <a
-                                           href={selectedJob.output.trim.asset.url}
+                                           href={(selectedJob as any).output.trim.asset.url}
                                            target="_blank"
                                            download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
                                            className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
@@ -1307,7 +1308,7 @@ function App() {
                                        <video
                                          controls
                                          playsInline
-                                         src={selectedJob.output.trim.asset.url}
+                                         src={(selectedJob as any).output.trim.asset.url}
                                          className="aspect-[9/16] w-full rounded-[22px] bg-black object-contain"
                                        />
                                      </div>
