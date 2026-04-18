@@ -233,7 +233,7 @@ export const generateScriptPackage = async (
     },
     body: JSON.stringify({
       model: config.openAiModel,
-      max_tokens: 1500,
+      max_tokens: 800,
       temperature: 0.55,
       response_format: {
         type: 'json_schema',
