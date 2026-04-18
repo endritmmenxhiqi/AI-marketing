@@ -534,18 +534,20 @@ const chooseMedia = async ({
 export const processVideoJob = async (jobId: string) => {
   const videoJob = await VideoJob.findById(jobId);
   if (!videoJob) {
-    throw new Error(`Job ${jobId} was not found.`);
+    console.error(`[VideoOrchestrator] Job ${jobId} not found.`);
+    return;
   }
 
   const jobDir = path.join(config.workingDir, String(videoJob._id));
   await ensureDir(jobDir);
 
-  await publishJobProgress(String(videoJob._id), {
-    status: 'processing',
-    stage: 'writing-script',
-    progress: 10,
-    message: 'Writing a conversion-focused script...'
-  });
+  try {
+    await publishJobProgress(String(videoJob._id), {
+      status: 'processing',
+      stage: 'writing-script',
+      progress: 10,
+      message: 'Writing a conversion-focused script...'
+    });
 
   const script = await generateScriptPackage(
     videoJob.description,
@@ -707,5 +709,21 @@ export const processVideoJob = async (jobId: string) => {
     )
   );
 
-  return videoJob;
+    return videoJob;
+  } catch (error: any) {
+    console.error(`[VideoOrchestrator] Job ${jobId} failed:`, error.message);
+    videoJob.status = 'failed';
+    videoJob.stage = 'failed';
+    videoJob.error = error.message;
+    await videoJob.save();
+
+    await publishJobProgress(String(videoJob._id), {
+      status: 'failed',
+      stage: 'failed',
+      progress: 0,
+      message: `Error: ${error.message}`
+    });
+    
+    throw error; // Re-throw for background handlers, but caught by our wrapper now
+  }
 };
