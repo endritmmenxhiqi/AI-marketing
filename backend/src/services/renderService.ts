@@ -128,20 +128,25 @@ const createSceneClip = async ({
   const sourcePrep = (() => {
     if (plan.media.kind !== 'video') {
       const frameCount = Math.ceil(sceneDuration * 30);
-      const variants = [
-        `scale=1300:2300:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0009,1.14)':d=${frameCount}:s=1080x1920,fps=30`,
-        `scale=1360:2360:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.10)':x='(iw-iw/zoom)*min(on/${Math.max(
-          frameCount,
-          1
-        )},1)':y='(ih-ih/zoom)*0.18':d=${frameCount}:s=1080x1920,fps=30`,
-        `scale=1360:2360:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.11)':x='(iw-iw/zoom)*0.12':y='(ih-ih/zoom)*min(on/${Math.max(
-          frameCount,
-          1
-        )},1)':d=${frameCount}:s=1080x1920,fps=30`,
-        `scale=1300:2300:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='if(lte(on,1),1.02,max(1.02,zoom-0.00025))':d=${frameCount}:s=1080x1920,fps=30`
-      ];
+      const isUpload = plan.media.source === 'upload';
+      const aspect = (plan.media.width || 1080) / Math.max(plan.media.height || 1920, 1);
+      const isWide = aspect > TARGET_ASPECT_RATIO + 0.12;
 
-      return `[0:v]${variants[plan.index % variants.length]}[bg0]`;
+      // Variants of Ken Burns effects
+      const motionVariants = [
+        `zoompan=z='min(zoom+0.0008,1.15)':d=${frameCount}:s=1080x1920,fps=30`,
+        `zoompan=z='min(zoom+0.0007,1.12)':x='(iw-iw/zoom)*min(on/${frameCount},1)':y='(ih-ih/zoom)*0.15':d=${frameCount}:s=1080x1920,fps=30`,
+        `zoompan=z='min(zoom+0.0007,1.13)':x='(iw-iw/zoom)*0.10':y='(ih-ih/zoom)*min(on/${frameCount},1)':d=${frameCount}:s=1080x1920,fps=30`,
+        `zoompan=z='if(lte(on,1),1.05,max(1.05,zoom-0.0003))':d=${frameCount}:s=1080x1920,fps=30`
+      ];
+      const selectedMotion = motionVariants[plan.index % motionVariants.length];
+
+      if (isUpload && isWide) {
+        // For uploaded images that are not vertical, create a professional blurred background
+        return `[0:v]split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:10,eq=brightness=-0.05:contrast=1.05[bgfill];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease,setsar=1[fgfit];[bgfill][fgfit]overlay=(W-w)/2:(H-h)/2,${selectedMotion}[bg0]`;
+      }
+
+      return `[0:v]scale=1300:2300:force_original_aspect_ratio=increase,crop=1080:1920,${selectedMotion}[bg0]`;
     }
 
     const trimStart =

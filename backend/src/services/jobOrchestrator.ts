@@ -213,8 +213,8 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
     requireAnchorMatch: false,
     minimumVideoDurationRatio: 0.75,
     minimumVideoSeconds: 4,
-    useHeroUploadForFirstScene: false,
-    useHeroUploadForLastScene: false
+    useHeroUploadForFirstScene: true,
+    useHeroUploadForLastScene: true
   };
 };
 
@@ -316,6 +316,10 @@ const shouldPreferImageOverVideo = ({
   strategy: MediaStrategy;
   description: string;
 }) => {
+  if (bestCandidate.source === 'upload') {
+    return false;
+  }
+
   if (bestCandidate.kind !== 'video') {
     return false;
   }
@@ -384,17 +388,20 @@ const chooseMedia = async ({
   usedMediaKeys: Set<string>;
 }): Promise<MediaCandidate> => {
   const strategy = buildMediaStrategy(description, productCategory);
+  const isMiddleScene = sceneIndex === Math.floor(sceneCount / 2);
+  
   if (
     productImagePath &&
-    ((strategy.useHeroUploadForFirstScene && sceneIndex === 0) ||
-      (strategy.useHeroUploadForLastScene && sceneIndex === sceneCount - 1))
+    (sceneIndex === 0 || sceneIndex === sceneCount - 1 || isMiddleScene)
   ) {
-    return createUploadFallback(
-      productImagePath,
-      sceneIndex === 0
-        ? 'Used the uploaded product image to open with a product-faithful hero scene.'
-        : 'Used the uploaded product image to close with a clear product-and-CTA hero shot.'
-    );
+    let reason = 'Used the uploaded product image to open with a product-faithful hero scene.';
+    if (sceneIndex === sceneCount - 1) {
+      reason = 'Used the uploaded product image to close with a clear product-and-CTA hero shot.';
+    } else if (isMiddleScene) {
+      reason = 'Inserted the product image in the middle of the video to reinforce your brand.';
+    }
+
+    return createUploadFallback(productImagePath, reason);
   }
 
   const candidates = await findSceneMedia(scene, productCategory, description);
