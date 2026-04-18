@@ -224,11 +224,11 @@ function AuthScreen({
         <div className="auth-card-body">
 
           {/* Brand */}
-          <div className="auth-brand-row">
-            <div className="auth-icon-badge">
-              <Sparkles size={20} />
+          <div className="auth-brand-row" style={{ alignItems: 'flex-start' }}>
+            <div className="auth-logo-wrap" style={{ flexShrink: 0 }}>
+              <BrandLogo className="h-14 w-14 shadow-lg shadow-indigo-500/20" />
             </div>
-            <div>
+            <div style={{ paddingTop: '2px' }}>
               <h1 className="auth-heading">{t('appName')}</h1>
               <p className="auth-subheading">
                 {mode === 'forgot-password' ? t('forgotTitle') : (mode === 'login' ? t('loginGreeting') : t('registerGreeting'))}
