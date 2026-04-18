@@ -250,7 +250,7 @@ const assembleFinalVideo = async ({
 
   const filters: string[] = [];
   scenePaths.forEach((_, index) => {
-    filters.push(`[${index}:v]setpts=PTS-STARTPTS,format=yuv420p[v${index}]`);
+    filters.push(`[${index}:v]scale=1080:1920,setsar=1,setpts=PTS-STARTPTS,format=yuv420p[v${index}]`);
   });
   const currentLabel = 'vcat';
   filters.push(`${scenePaths.map((_, index) => `[v${index}]`).join('')}concat=n=${scenePaths.length}:v=1:a=0[${currentLabel}]`);
