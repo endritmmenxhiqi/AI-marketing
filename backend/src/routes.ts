@@ -188,7 +188,17 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
 
 router.get('/jobs/:jobId', async (req, res, next) => {
   try {
-    const job = await VideoJob.findById(req.params.jobId).lean();
+    const { jobId } = req.params;
+    if (!jobId.match(/^[0-9a-fA-F]{24}$/)) {
+      res.status(400).json({ message: 'Invalid Job ID format.' });
+      return;
+    }
+
+    const isVideo = (await VideoJob.findById(jobId)) !== null;
+    const job = isVideo 
+      ? await VideoJob.findById(jobId).lean() 
+      : await PhotoJob.findById(jobId).lean();
+
     if (!job) {
       res.status(404).json({ message: 'Job not found.' });
       return;
@@ -210,6 +220,11 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
       : null;
 
   try {
+    if (!jobId.match(/^[0-9a-fA-F]{24}$/)) {
+      res.status(400).json({ message: 'Invalid Job ID format.' });
+      return;
+    }
+
     const isVideo = (await VideoJob.findById(jobId)) !== null;
     const job = isVideo 
       ? await VideoJob.findById(jobId).lean() 

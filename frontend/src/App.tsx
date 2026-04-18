@@ -29,7 +29,7 @@ import {
   Trash2,
   Zap,
 } from 'lucide-react';
-import { createJob, fetchJobs, loginUser, registerUser, forgotPassword, trimJob, VideoJob } from './lib/api';
+import { createJob, createPhotoJob, fetchJobs, loginUser, registerUser, forgotPassword, trimJob, VideoJob, PhotoJob } from './lib/api';
 import { useJobEvents } from './hooks/useJobEvents';
 import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
@@ -502,9 +502,9 @@ function App() {
       .then((data) => {
         setJobs(data.videoJobs);
         setPhotoJobs(data.photoJobs);
-        const firstJob = engineMode === 'video' ? data.videoJobs[0] : data.photoJobs[0];
-        if (firstJob?._id) {
-          setSelectedJobId(firstJob._id);
+        const currentList = engineMode === 'video' ? data.videoJobs : data.photoJobs;
+        if (currentList.length > 0 && !selectedJobId) {
+          setSelectedJobId(currentList[0]._id);
         }
       })
       .catch((err) => {

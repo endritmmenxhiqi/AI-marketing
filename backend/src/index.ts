@@ -26,6 +26,15 @@ const boot = async () => {
   const app = createApp();
   const server = createServer(app);
 
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${config.port} is already in use. Please clear it and try again.`);
+    } else {
+      console.error('Server error:', err);
+    }
+    process.exit(1);
+  });
+
   server.listen(config.port, () => {
     console.log(`AI Marketing Studio backend listening on ${config.appUrl}`);
   });
