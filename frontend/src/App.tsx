@@ -476,6 +476,8 @@ function App() {
     email: localStorage.getItem('user_email') || '',
   }));
   const [jobs, setJobs] = useState<VideoJob[]>([]);
+  const [photoJobs, setPhotoJobs] = useState<PhotoJob[]>([]);
+  const [engineMode, setEngineMode] = useState<'video' | 'photo'>('video');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [productCategory, setProductCategory] = useState('food-dessert');
@@ -498,9 +500,11 @@ function App() {
     if (!auth.token) return;
     fetchJobs()
       .then((data) => {
-        setJobs(data);
-        if (data[0]?._id) {
-          setSelectedJobId(data[0]._id);
+        setJobs(data.videoJobs);
+        setPhotoJobs(data.photoJobs);
+        const firstJob = engineMode === 'video' ? data.videoJobs[0] : data.photoJobs[0];
+        if (firstJob?._id) {
+          setSelectedJobId(firstJob._id);
         }
       })
       .catch((err) => {
@@ -513,24 +517,25 @@ function App() {
   }, [auth.token]);
 
   const selectedJob = useMemo(
-    () => jobs.find((job) => job._id === selectedJobId) || null,
-    [jobs, selectedJobId]
+    () => (engineMode === 'video' ? jobs : photoJobs).find((job: any) => job._id === selectedJobId) || null,
+    [jobs, photoJobs, selectedJobId, engineMode]
   );
   const firstName = auth.email.split('@')[0] || 'creator';
   const categoryLabel =
     categories.find((item) => item.value === productCategory)?.label || 'General product';
-  const jobsReady = jobs.filter((job) => job.status === 'completed').length;
-  const previewReady = Boolean(selectedJob?.output?.preview?.url);
+  const currentJobs = engineMode === 'video' ? jobs : photoJobs;
+  const jobsReady = currentJobs.filter((job) => job.status === 'completed').length;
+  const previewReady = Boolean(selectedJob?.output?.preview?.url) || Boolean((selectedJob as any)?.output?.variants?.length > 0);
   const workspaceTabs = [
     { id: 'overview' as const, label: 'Campaign' },
-    { id: 'preview' as const, label: 'Preview' },
-    { id: 'history' as const, label: `History${jobs.length > 0 ? ` (${jobs.length})` : ''}` },
+    { id: 'preview' as const, label: engineMode === 'video' ? 'Preview' : 'Gallery' },
+    { id: 'history' as const, label: `History${currentJobs.length > 0 ? ` (${currentJobs.length})` : ''}` },
   ];
-  const jobsProcessing = jobs.filter((job) => job.status === 'processing').length;
+  const jobsProcessing = currentJobs.filter((job) => job.status === 'processing').length;
   const dashboardStats = [
     {
       label: 'Jobs created',
-      value: jobs.length,
+      value: currentJobs.length,
     },
     {
       label: 'Ready exports',
@@ -570,7 +575,8 @@ function App() {
   useJobEvents(
     selectedJobId,
     (payload) => {
-      setJobs((current) =>
+      const setter = engineMode === 'video' ? setJobs : setPhotoJobs;
+      setter((current: any[]) =>
         current.map((job) => (job._id === selectedJobId ? { ...job, ...payload } : job))
       );
     },
@@ -619,21 +625,33 @@ function App() {
     try {
       setSubmitting(true);
       setError('');
-      const job = await createJob({
-        image: file,
-        description,
-        productCategory,
-        style,
-        enableStyleTransfer,
-      });
+      
+      if (engineMode === 'video') {
+        const job = await createJob({
+          image: file,
+          description,
+          productCategory,
+          style,
+          enableStyleTransfer,
+        });
+        setJobs((current) => [job, ...current]);
+        setSelectedJobId(job._id);
+      } else {
+        const job = await createPhotoJob({
+          image: file,
+          description,
+          productCategory,
+          style,
+        });
+        setPhotoJobs((current) => [job, ...current]);
+        setSelectedJobId(job._id);
+      }
 
-      setJobs((current) => [job, ...current]);
-      setSelectedJobId(job._id);
       setActiveWorkspaceTab('overview');
       setDescription('');
       clearSelectedFile();
     } catch (nextError: any) {
-      setError(nextError.message || 'Unable to create a video job.');
+      setError(nextError.message || `Unable to create a ${engineMode} job.`);
     } finally {
       setSubmitting(false);
     }
@@ -809,8 +827,26 @@ function App() {
                   <section className={`${shellCard} flex flex-col gap-8`}>
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
-                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">New Campaign</h2>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select a template or start from scratch</p>
+                        <div className="flex items-center gap-3 mb-1">
+                          <button 
+                            onClick={() => { setEngineMode('video'); setSelectedJobId(jobs[0]?._id || null); }}
+                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${engineMode === 'video' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-400 dark:bg-white/5'}`}
+                          >
+                            Video Ads
+                          </button>
+                          <button 
+                            onClick={() => { setEngineMode('photo'); setSelectedJobId(photoJobs[0]?._id || null); }}
+                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${engineMode === 'photo' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-400 dark:bg-white/5'}`}
+                          >
+                            Photo Ads
+                          </button>
+                        </div>
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                          New {engineMode === 'video' ? 'Video' : 'Photo'} Campaign
+                        </h2>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                          {engineMode === 'video' ? 'Create a high-conversion video ad' : 'Design professional marketing photos'}
+                        </p>
                       </div>
                       <div className="flex -space-x-2">
                          {[1,2,3].map(i => (
@@ -1110,7 +1146,24 @@ function App() {
                             exit={{ opacity: 0, y: -10 }}
                             className="space-y-8 pb-4"
                           >
-                            {selectedJob?.output?.preview?.url ? (
+                            {engineMode === 'photo' && (selectedJob as any)?.output?.variants ? (
+                              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">AI Generated Variants</div>
+                                <div className="grid gap-4 sm:grid-cols-1">
+                                  {(selectedJob as any).output.variants.map((v: any, i: number) => (
+                                    <div key={i} className="group relative overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl dark:border-white/5 dark:bg-white/5">
+                                      <img src={v.url} alt={`Variant ${i+1}`} className="w-full aspect-[4/5] object-cover" />
+                                      <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="text-white text-[10px] font-black uppercase tracking-widest">Variant {i+1}</div>
+                                        <a href={v.url} target="_blank" className="p-2 rounded-xl bg-white/20 text-white backdrop-blur hover:bg-white/40 transition-all">
+                                          <Download size={18} />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : engineMode === 'video' && selectedJob?.output?.preview?.url ? (
                               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
                                  <div className="relative group mx-auto w-full max-w-[360px]">
                                     <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
@@ -1276,10 +1329,10 @@ function App() {
                             className="space-y-4 pb-4"
                           >
                             <div className="grid gap-3">
-                              {jobs.length === 0 ? (
+                              {currentJobs.length === 0 ? (
                                 <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">Zero Records found.</div>
                               ) : (
-                                jobs.map((job) => (
+                                currentJobs.map((job) => (
                                   <button
                                     key={job._id}
                                     onClick={() => setSelectedJobId(job._id)}
@@ -1297,7 +1350,7 @@ function App() {
                                        }`} />
                                        <div className="text-left min-w-0">
                                           <div className="text-sm font-black text-slate-900 dark:text-white truncate max-w-[180px] tracking-tight">
-                                             {job.script?.title || job.style}
+                                             {(job as any).script?.title || (job as any).prompt?.slice(0, 30) || job.style}
                                           </div>
                                           <div className="flex items-center gap-2 mt-1">
                                             <span className="text-[9px] font-black uppercase opacity-30 tracking-widest truncate">

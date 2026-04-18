@@ -52,6 +52,26 @@ export interface VideoJob {
   };
 }
 
+export interface PhotoJob {
+  _id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  stage: string;
+  progress: number;
+  message: string;
+  error?: string;
+  description: string;
+  productCategory?: string;
+  style: string;
+  source: 'upload' | 'prompt';
+  imagePath?: string;
+  imageUrl?: string;
+  createdAt: string;
+  output?: {
+    variants?: Array<{ url: string; localPath?: string }>;
+    final?: { url: string; localPath?: string };
+  };
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export interface AuthUser {
@@ -164,6 +184,35 @@ export const createJob = async (payload: {
   return payloadJson.data as VideoJob;
 };
 
+export const createPhotoJob = async (payload: {
+  image?: File | null;
+  description: string;
+  productCategory: string;
+  style: string;
+}) => {
+  const formData = new FormData();
+  if (payload.image) {
+    formData.append('image', payload.image);
+  }
+  formData.append('description', payload.description);
+  formData.append('productCategory', payload.productCategory);
+  formData.append('style', payload.style);
+
+  const response = await fetch(`${API_BASE}/photo-jobs`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create photo job.' }));
+    throw new Error(error.message || 'Failed to create photo job.');
+  }
+
+  const payloadJson = await response.json();
+  return payloadJson.data as PhotoJob;
+};
+
 export const fetchJobs = async () => {
   const response = await fetch(`${API_BASE}/jobs`, {
     headers: authHeaders(),
@@ -175,7 +224,7 @@ export const fetchJobs = async () => {
     throw new Error('Failed to fetch jobs.');
   }
   const payload = await response.json();
-  return payload.data as VideoJob[];
+  return payload.data as { videoJobs: VideoJob[]; photoJobs: PhotoJob[] };
 };
 
 export const fetchJob = async (jobId: string) => {

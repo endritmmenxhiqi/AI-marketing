@@ -8,6 +8,7 @@ import multer from 'multer';
 import IORedis from 'ioredis';
 import mime from 'mime-types';
 import { VideoJob } from './models/VideoJob';
+import { PhotoJob } from './models/PhotoJob';
 import { config } from './config';
 import { videoQueue } from './queue';
 import { ensureDir, fileExists, relativeFrom, uniqueFile } from './utils/files';
@@ -15,6 +16,7 @@ import { getJobChannel } from './services/jobProgressService';
 import { trimVideo } from './services/renderService';
 import { uploadAsset } from './services/storageService';
 import { processVideoJob } from './services/jobOrchestrator';
+import { processPhotoJob } from './services/photoOrchestrator';
 import { localJobEvents } from './services/localEventBus';
 
 const router = express.Router();
@@ -26,8 +28,66 @@ router.get('/health', (_req, res) => {
 
 router.get('/jobs', async (_req, res, next) => {
   try {
-    const jobs = await VideoJob.find().sort({ createdAt: -1 }).limit(12).lean();
-    res.json({ data: jobs });
+    const videoJobs = await VideoJob.find().sort({ createdAt: -1 }).limit(10).lean();
+    const photoJobs = await PhotoJob.find().sort({ createdAt: -1 }).limit(10).lean();
+    res.json({ data: { videoJobs, photoJobs } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/photo-jobs', upload.single('image'), async (req, res, next) => {
+  try {
+    const description = String(req.body.description || '').trim();
+    const style = String(req.body.style || '').trim();
+    const productCategory = String(req.body.productCategory || 'general-product').trim();
+
+    if (!description || !style) {
+      res.status(400).json({ message: 'Description and style are required.' });
+      return;
+    }
+
+    let imagePath = '';
+    let imageUrl = '';
+    const source = req.file ? 'upload' : 'prompt';
+
+    if (req.file) {
+      await ensureDir(config.uploadsDir);
+      const extension = mime.extension(req.file.mimetype || '') || 'png';
+      const imageFileName = uniqueFile('product-photo', extension);
+      imagePath = path.join(config.uploadsDir, imageFileName);
+      await fs.writeFile(imagePath, req.file.buffer);
+      imageUrl = `${config.appUrl}/storage/uploads/${imageFileName}`;
+    }
+
+    const job = await PhotoJob.create({
+      description,
+      productCategory,
+      style,
+      source,
+      imagePath,
+      imageUrl,
+      message: req.file ? 'Design fix queued.' : 'AI Photo Creation queued.'
+    });
+
+    setImmediate(() => {
+      processPhotoJob(String(job._id)).catch(async (error) => {
+        await PhotoJob.findByIdAndUpdate(job._id, {
+          status: 'failed',
+          stage: 'failed',
+          message: 'Design failed.',
+          error: error.message
+        });
+        localJobEvents.emit(getJobChannel(String(job._id)), {
+          status: 'failed',
+          stage: 'failed',
+          message: 'Design failed.',
+          error: error.message
+        });
+      });
+    });
+
+    res.status(201).json({ data: job });
   } catch (error) {
     next(error);
   }
@@ -150,7 +210,11 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
       : null;
 
   try {
-    const job = await VideoJob.findById(jobId).lean();
+    const isVideo = (await VideoJob.findById(jobId)) !== null;
+    const job = isVideo 
+      ? await VideoJob.findById(jobId).lean() 
+      : await PhotoJob.findById(jobId).lean();
+
     if (!job) {
       res.status(404).json({ message: 'Job not found.' });
       return;
