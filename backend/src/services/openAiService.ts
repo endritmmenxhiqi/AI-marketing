@@ -223,14 +223,17 @@ export const generateScriptPackage = async (
             ].join(' ')
         : '';
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.openAiApiKey}`
+      Authorization: `Bearer ${config.openAiApiKey}`,
+      'HTTP-Referer': config.frontendUrl,
+      'X-Title': 'AI Marketing Studio'
     },
     body: JSON.stringify({
       model: config.openAiModel,
+      max_tokens: 1500,
       temperature: 0.55,
       response_format: {
         type: 'json_schema',

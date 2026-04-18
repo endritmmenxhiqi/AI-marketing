@@ -58,3 +58,5 @@ backend/public/
 
 # Local FFmpeg binaries (too large for GitHub)
 backend/tools/ffmpeg/*.exe
+backend/bin/
+backend/scratch/

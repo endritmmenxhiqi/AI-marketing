@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider } from './context/AuthContext';
+import AppLoadingScreen from './components/common/AppLoadingScreen';
 import App from './App';
 import './index.css';
 
@@ -13,7 +14,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <LanguageProvider>
           <AuthProvider>
-            <App />
+            <AppLoadingScreen>
+              <App />
+            </AppLoadingScreen>
           </AuthProvider>
         </LanguageProvider>
       </ThemeProvider>

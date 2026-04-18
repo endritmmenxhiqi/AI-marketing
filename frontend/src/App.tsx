@@ -34,6 +34,7 @@ import { useJobEvents } from './hooks/useJobEvents';
 import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import BrandLogo from './components/common/BrandLogo';
 
 const styles = [
   { value: 'energetic', label: 'Energetic', tone: 'Fast hook, bold cadence, punchy CTA' },
@@ -47,7 +48,6 @@ const categories = [
   { value: 'food-dessert', label: 'Food & Dessert' },
   { value: 'fashion-accessories', label: 'Fashion & Accessories' },
   { value: 'fitness-wellness', label: 'Fitness & Wellness' },
-  { value: 'gaming-esports', label: 'Gaming & Esports' },
   { value: 'sports-football', label: 'Sports / Football' },
   { value: 'tech-gadgets', label: 'Tech & Gadgets' },
   { value: 'home-lifestyle', label: 'Home & Lifestyle' },
@@ -79,14 +79,6 @@ const quickBriefs = [
     style: 'minimal',
     description:
       'A pocket-size wireless charger for remote workers who need clean desk setups and reliable battery backup while traveling. Emphasize convenience, portability, and daily use.',
-  },
-  {
-    id: 'esports',
-    label: 'Esports hype',
-    category: 'gaming-esports',
-    style: 'cinematic',
-    description:
-      'A cinematic esports tournament promo inspired by Counter-Strike 2. Show arena lights, focused players at PCs, keyboard and mouse closeups, headset comms, roaring crowds, trophy moments, and a high-stakes final match atmosphere.',
   },
   {
     id: 'football',
@@ -511,7 +503,13 @@ function App() {
           setSelectedJobId(data[0]._id);
         }
       })
-      .catch(() => { });
+      .catch((err) => {
+        if (err.message === 'UNAUTHORIZED') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user_email');
+          setAuth({ token: '', email: '' });
+        }
+      });
   }, [auth.token]);
 
   const selectedJob = useMemo(
@@ -737,9 +735,7 @@ function App() {
                     <div className="relative space-y-6">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-flare/10 dark:text-flare">
-                              <Sparkles size={22} />
-                            </div>
+                            <BrandLogo />
                             <div>
                               <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
                                 AI Marketing Studio
@@ -923,7 +919,7 @@ function App() {
                              Visual Style
                           </label>
                           <div className="grid grid-cols-2 gap-2">
-                            {styles.map((item) => (
+                            {styles.slice(0, 2).map((item) => (
                               <button
                                 key={item.value}
                                 type="button"

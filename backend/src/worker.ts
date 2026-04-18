@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { Worker, Job } from 'bullmq';
 import { connectDatabase } from './db';
 import { config } from './config';
 import { VIDEO_QUEUE_NAME, closeRedisConnections, ensureRedisConnection, redisConnection } from './queue';
@@ -27,7 +27,7 @@ const bootWorker = async () => {
 
   const worker = new Worker(
     VIDEO_QUEUE_NAME,
-    async (queueJob) => {
+    async (queueJob: Job) => {
       try {
         return await processVideoJob(String(queueJob.data.jobId));
       } catch (error: any) {
@@ -47,11 +47,11 @@ const bootWorker = async () => {
     }
   );
 
-  worker.on('completed', (job) => {
+  worker.on('completed', (job: Job) => {
     console.log(`Completed video job ${job.data.jobId}`);
   });
 
-  worker.on('failed', (job, error) => {
+  worker.on('failed', (job: Job | undefined, error: Error) => {
     console.error(`Failed video job ${job?.data?.jobId}:`, error.message);
   });
 };

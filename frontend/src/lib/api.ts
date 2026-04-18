@@ -169,6 +169,9 @@ export const fetchJobs = async () => {
     headers: authHeaders(),
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('UNAUTHORIZED');
+    }
     throw new Error('Failed to fetch jobs.');
   }
   const payload = await response.json();

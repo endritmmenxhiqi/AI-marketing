@@ -3,6 +3,11 @@ const config = require('../config');
 
 const openai = new OpenAI({
   apiKey: config.openaiApiKey,
+  baseURL: 'https://openrouter.ai/api/v1',
+  defaultHeaders: {
+    'HTTP-Referer': config.frontendUrl || 'http://localhost:5173',
+    'X-Title': 'AI Marketing Studio',
+  }
 });
 
 /**
