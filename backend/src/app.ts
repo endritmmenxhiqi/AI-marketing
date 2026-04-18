@@ -17,6 +17,7 @@ export const createApp = () => {
   app.use(express.json({ limit: '10mb' }));
   app.use('/storage', express.static(path.join(config.rootDir, 'storage/exports')));
   app.use('/storage/uploads', express.static(path.join(config.rootDir, 'storage/uploads')));
+  app.use('/storage/work', express.static(config.workingDir));
 
   app.get('/', (_req, res) => {
     res.json({

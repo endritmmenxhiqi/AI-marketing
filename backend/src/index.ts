@@ -12,6 +12,10 @@ const boot = async () => {
     }
   });
 
+  if (config.queueMode === 'bullmq' && !process.env.REDIS_URL) {
+    console.warn('Missing recommended environment variable: REDIS_URL');
+  }
+
   await Promise.all([
     ensureDir(config.uploadsDir),
     ensureDir(config.workingDir),
@@ -40,10 +44,17 @@ const boot = async () => {
   });
 };
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 boot().catch(async (error) => {
-  console.error(error);
+  console.error('Fatal boot error:', error);
   if (config.queueMode === 'bullmq') {
     await closeRedisConnections();
   }
-  process.exit(1);
+  // Only exit if the error happened during the actual boot sequence
+  if (error.code === 'EADDRINUSE') {
+    process.exit(1);
+  }
 });

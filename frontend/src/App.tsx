@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -572,14 +572,16 @@ function App() {
     };
   }, [previewUrl]);
 
+  const handleJobUpdate = useCallback((payload: any) => {
+    const setter = engineMode === 'video' ? setJobs : setPhotoJobs;
+    setter((current: any[]) =>
+      current.map((job) => (job._id === selectedJobId ? { ...job, ...payload } : job))
+    );
+  }, [selectedJobId, engineMode]);
+
   useJobEvents(
     selectedJobId,
-    (payload) => {
-      const setter = engineMode === 'video' ? setJobs : setPhotoJobs;
-      setter((current: any[]) =>
-        current.map((job) => (job._id === selectedJobId ? { ...job, ...payload } : job))
-      );
-    },
+    handleJobUpdate,
     Boolean(selectedJobId)
   );
 
@@ -829,13 +831,21 @@ function App() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-3 mb-1">
                           <button 
-                            onClick={() => { setEngineMode('video'); setSelectedJobId(jobs[0]?._id || null); }}
+                            onClick={() => { 
+                              setEngineMode('video'); 
+                              setSelectedJobId(jobs[0]?._id || null);
+                              setActiveWorkspaceTab('overview');
+                            }}
                             className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${engineMode === 'video' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-400 dark:bg-white/5'}`}
                           >
                             Video Ads
                           </button>
                           <button 
-                            onClick={() => { setEngineMode('photo'); setSelectedJobId(photoJobs[0]?._id || null); }}
+                            onClick={() => { 
+                              setEngineMode('photo'); 
+                              setSelectedJobId(photoJobs[0]?._id || null);
+                              setActiveWorkspaceTab('overview');
+                            }}
                             className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${engineMode === 'photo' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-400 dark:bg-white/5'}`}
                           >
                             Photo Ads
@@ -1149,14 +1159,14 @@ function App() {
                             {engineMode === 'photo' && (selectedJob as any)?.output?.variants ? (
                               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
                                 <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">AI Generated Variants</div>
-                                <div className="grid gap-4 sm:grid-cols-1">
+                                <div className="grid gap-4 sm:grid-cols-2">
                                   {(selectedJob as any).output.variants.map((v: any, i: number) => (
-                                    <div key={i} className="group relative overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl dark:border-white/5 dark:bg-white/5">
-                                      <img src={v.url} alt={`Variant ${i+1}`} className="w-full aspect-[4/5] object-cover" />
-                                      <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="text-white text-[10px] font-black uppercase tracking-widest">Variant {i+1}</div>
-                                        <a href={v.url} target="_blank" className="p-2 rounded-xl bg-white/20 text-white backdrop-blur hover:bg-white/40 transition-all">
-                                          <Download size={18} />
+                                    <div key={i} className="group relative overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-lg dark:border-white/5 dark:bg-white/5">
+                                      <img src={v.url} alt={`Variant ${i+1}`} className="w-full aspect-square object-cover h-auto max-h-[320px]" />
+                                      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="text-white text-[9px] font-black uppercase tracking-widest">Variant {i+1}</div>
+                                        <a href={v.url} target="_blank" className="p-1.5 rounded-lg bg-white/20 text-white backdrop-blur hover:bg-white/40 transition-all">
+                                          <Download size={14} />
                                         </a>
                                       </div>
                                     </div>
@@ -1333,15 +1343,15 @@ function App() {
                                 <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">Zero Records found.</div>
                               ) : (
                                 currentJobs.map((job) => (
-                                  <button
-                                    key={job._id}
-                                    onClick={() => setSelectedJobId(job._id)}
-                                    className={`group relative flex items-center justify-between p-5 rounded-[28px] border transition-all duration-300 ${
-                                      selectedJobId === job._id
-                                        ? 'border-indigo-500 bg-indigo-500/5 shadow-lg shadow-indigo-500/5 dark:border-flare/40 dark:bg-flare/5'
-                                        : 'border-slate-100 bg-white/40 hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-white/10'
-                                    }`}
-                                  >
+                                    <div
+                                      key={job._id}
+                                      onClick={() => setSelectedJobId(job._id)}
+                                      className={`group relative flex items-center justify-between p-5 rounded-[28px] border cursor-pointer transition-all duration-300 ${
+                                        selectedJobId === job._id
+                                          ? 'border-indigo-500 bg-indigo-500/5 shadow-lg shadow-indigo-500/5 dark:border-flare/40 dark:bg-flare/5'
+                                          : 'border-slate-100 bg-white/40 hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-white/10'
+                                      }`}
+                                    >
                                     <div className="flex items-center gap-5 flex-1 min-w-0">
                                        <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${
                                          job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
@@ -1381,8 +1391,8 @@ function App() {
                                          <ChevronRight size={18} className="text-slate-400" />
                                       </div>
                                     </div>
-                                  </button>
-                                ))
+                                    </div>
+                                  ))
                               )}
                             </div>
                           </motion.div>

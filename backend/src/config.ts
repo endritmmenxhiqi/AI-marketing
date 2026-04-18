@@ -65,7 +65,7 @@ export const config = {
   outputDir: path.join(rootDir, 'storage/exports'),
 };
 
-export const requiredAtBoot = ['MONGODB_URI', 'REDIS_URL'] as const;
+export const requiredAtBoot = ['MONGODB_URI'] as const;
 
 module.exports = Object.assign(config, {
   config,

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getJobEventsUrl } from '../lib/api';
 
 export const useJobEvents = (
@@ -6,12 +6,18 @@ export const useJobEvents = (
   onMessage: (payload: any) => void,
   enabled = true
 ) => {
+  const onMessageRef = useRef(onMessage);
+  
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
   useEffect(() => {
     if (!jobId || !enabled) return;
 
     const source = new EventSource(getJobEventsUrl(jobId));
     source.onmessage = (event) => {
-      onMessage(JSON.parse(event.data));
+      onMessageRef.current(JSON.parse(event.data));
     };
     source.onerror = () => {
       source.close();
@@ -20,5 +26,5 @@ export const useJobEvents = (
     return () => {
       source.close();
     };
-  }, [enabled, jobId, onMessage]);
+  }, [enabled, jobId]);
 };

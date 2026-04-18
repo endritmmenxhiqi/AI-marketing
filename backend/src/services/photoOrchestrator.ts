@@ -6,32 +6,44 @@ import { ensureDir, uniqueFile } from '../utils/files';
 import { sleep } from '../utils/sleep';
 import { publishJobProgress } from './jobProgressService';
 
-// Default professional marketing model if none configured
-const DEFAULT_SDXL_MODEL = 'stability-ai/sdxl:39ed52f2a78e9340f5e1c1aa9222406f77ad345c81d3656c80d7d91e1349f051';
+// AI Horde Constants (Anonymous Mode)
+const HORDE_API_URL = 'https://aihorde.net/api/v2';
+const HORDE_ANONYMOUS_KEY = '0000000000';
 
-const saveRemoteImage = async (url: string, outputDir: string, label: string) => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Image download failed: ${response.status}`);
-  const extension = url.split('.').pop()?.split('?')[0] || 'png';
-  const outputPath = path.join(outputDir, uniqueFile(label, extension));
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(outputPath, buffer);
-  return outputPath;
+/**
+ * Downloads a remote image with retry logic for network resilience.
+ */
+const saveRemoteImage = async (url: string, outputDir: string, label: string, retries = 3): Promise<string> => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[PhotoJob] Download attempt ${attempt}/${retries} for ${label}: ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) {
+         throw new Error(`Server returned ${response.status} ${response.statusText}`);
+      }
+      const extension = 'png';
+      const outputPath = path.join(outputDir, uniqueFile(label, extension));
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await fs.writeFile(outputPath, buffer);
+      return outputPath;
+    } catch (err: any) {
+      console.warn(`[PhotoJob] Download attempt ${attempt} failed: ${err.message}`);
+      if (attempt === retries) throw err;
+      // Wait before retrying (backoff)
+      await sleep(2000 * attempt);
+    }
+  }
+  throw new Error('All download attempts failed.');
 };
 
-const generatePhotoDesignPrompt = async (description: string, style: string, category: string) => {
+const generatePhotoDesignPrompt = async (description: string, style: string, category: string, isRedesign: boolean) => {
   const prompt = `Act as a high-end commercial photographer and art director. 
-  Generate a professional "Visual Brief" and "AI Image Prompt" for a marketing photo of a product.
-  
+  Generate a professional "Visual Brief" and "AI Image Prompt" for a marketing photo.
   Product: ${description}
   Category: ${category}
   Creative Style: ${style}
-  
-  Requirements:
-  - Focus on premium background, exquisite lighting, and cinematic composition.
-  - Do NOT include text, prices, or buttons.
-  - Describe the product hero placement.
-  
+  Task: ${isRedesign ? 'Redesign environment while keeping product recognizable.' : 'Create fresh marketing photo.'}
+  Requirements: 8k commercial photography, premium lighting, cinematic composition. NO TEXT.
   Return ONLY a JSON object with the key: "imagePrompt".`;
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -43,105 +55,138 @@ const generatePhotoDesignPrompt = async (description: string, style: string, cat
     body: JSON.stringify({
       model: config.openAiModel,
       messages: [{ role: 'system', content: prompt }],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      max_tokens: 800
     })
   });
 
-  if (!response.ok) throw new Error('OpenRouter prompt generation failed.');
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('OpenRouter Error:', errorText);
+    throw new Error('Art Direction failed (Check OpenRouter credits).');
+  }
+  
   const data = await response.json();
   const content = JSON.parse(data.choices[0].message.content);
   return content.imagePrompt as string;
 };
 
+const generateWithAIHorde = async (prompt: string, sourceImageBase64: string, modelType: string) => {
+  const response = await fetch(`${HORDE_API_URL}/generate/async`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: HORDE_ANONYMOUS_KEY },
+    body: JSON.stringify({
+      prompt: `${prompt}, professional commercial photography, 8k, masterpiece, highly detailed`,
+      source_image: sourceImageBase64,
+      source_processing: 'img2img',
+      params: { n: 3, steps: 20, denoising_strength: 0.6, cfg_scale: 7.5, width: 512, height: 512, sampler_name: 'k_euler_a' },
+      models: modelType === 'sdxl' ? ['SDXL_1.0'] : ['stable_diffusion']
+    })
+  });
+
+  if (!response.ok) throw new Error(`AI Horde rejected: ${await response.text()}`);
+  const { id } = await response.json();
+
+  let finished = false;
+  let attempts = 0;
+  while (!finished && attempts < 120) {
+    await sleep(3000);
+    const checkRes = await fetch(`${HORDE_API_URL}/generate/check/${id}`);
+    const checkData = await checkRes.json();
+    if (checkData.done) { finished = true; break; }
+    attempts++;
+  }
+
+  if (!finished) throw new Error('AI Horde task timed out.');
+
+  const statusRes = await fetch(`${HORDE_API_URL}/generate/status/${id}`);
+  const statusData = await statusRes.json();
+  if (statusData.faulted) throw new Error('AI Horde job failed during processing.');
+  
+  return statusData.generations.map((g: any) => g.img);
+};
+
 export const processPhotoJob = async (jobId: string) => {
   const job = await PhotoJob.findById(jobId);
-  if (!job) throw new Error(`Job ${jobId} not found.`);
+  if (!job) return;
 
   const jobDir = path.join(config.workingDir, `photo-${job._id}`);
   await ensureDir(jobDir);
   job.metadata = { ...(job.metadata || {}), jobFolder: jobDir, startedAt: new Date() };
 
   try {
-    await publishJobProgress(jobId, { status: 'processing', stage: 'writing-brief', progress: 20, message: 'Designing the marketing concept...' });
+    const isRedesign = job.source === 'upload' && !!job.imagePath;
+    await publishJobProgress(jobId, { status: 'processing', stage: 'writing-brief', progress: 10, message: 'Step 1: Analyzing and Art Direction...' });
     
-    // 1. Generate Prompt
-    const enhancedPrompt = await generatePhotoDesignPrompt(job.description, job.style, job.productCategory);
+    // 1. Generate Art Direction
+    const enhancedPrompt = await generatePhotoDesignPrompt(job.description, job.style, job.productCategory, isRedesign);
     job.prompt = enhancedPrompt;
     await job.save();
 
-    await publishJobProgress(jobId, { status: 'processing', stage: 'generating-design', progress: 50, message: 'AI is rendering your marketing photo...' });
+    await publishJobProgress(jobId, { status: 'processing', stage: 'generating-design', progress: 40, message: 'Step 2: AI Painting (Retries enabled)...' });
 
-    // 2. Call Replicate
-    const model = config.replicateModel || DEFAULT_SDXL_MODEL;
-    let input: any = {
-      prompt: `${enhancedPrompt}. Professional commercial photography, advertising style, ${job.style} mood, 8k resolution.`,
-      negative_prompt: 'text, watermark, logo, blurry, low quality, price tag, buttons, distorted',
-      num_outputs: 3,
-      guidance_scale: 7.5,
-      num_inference_steps: 50,
-    };
+    let variants = [];
 
-    if (job.source === 'upload' && job.imagePath) {
+    if (isRedesign) {
       const imageBuffer = await fs.readFile(job.imagePath);
-      input.image = `data:image/png;base64,${imageBuffer.toString('base64')}`;
-      input.prompt = `Commercial redesign of this product: ${input.prompt}`;
-      input.prompt_strength = 0.65; // Keep product fidelity but redesign background
+      const base64 = imageBuffer.toString('base64');
+      const outputImages = await generateWithAIHorde(enhancedPrompt, base64, 'sd');
+      
+      for (const [i, imgUrl] of outputImages.entries()) {
+        try {
+          const localPath = await saveRemoteImage(imgUrl, jobDir, `variant-${i + 1}`);
+          const fileName = path.basename(localPath);
+          variants.push({ 
+            url: `${config.backendUrl}/storage/work/photo-${job._id}/${fileName}`, 
+            localPath, 
+            provider: 'aihorde', 
+            key: `photo/${job._id}/${fileName}` 
+          });
+        } catch (err: any) {
+          console.error(`[PhotoJob] Failing variant ${i+1}:`, err.message);
+        }
+      }
+    } else {
+      for (let i = 0; i < 3; i++) {
+        const seed = Math.floor(Math.random() * 100000);
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?seed=${seed}&width=1024&height=1024&nologo=true`;
+        try {
+          const localPath = await saveRemoteImage(url, jobDir, `variant-${i + 1}`);
+          const fileName = path.basename(localPath);
+          variants.push({ 
+            url: `${config.backendUrl}/storage/work/photo-${job._id}/${fileName}`, 
+            localPath, 
+            provider: 'pollinations', 
+            key: `photo/${job._id}/${fileName}` 
+          });
+        } catch (err: any) {
+          console.error(`[PhotoJob] Failing variant ${i+1}:`, err.message);
+        }
+      }
     }
 
-    const response = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Token ${config.replicateApiToken}`
-      },
-      body: JSON.stringify({ model, input })
-    });
-
-    if (!response.ok) throw new Error(`Replicate failed: ${await response.text()}`);
-    let prediction = await response.json();
-
-    while (prediction.status === 'starting' || prediction.status === 'processing') {
-      await sleep(1500);
-      const poll = await fetch(prediction.urls.get, {
-        headers: { Authorization: `Token ${config.replicateApiToken}` }
-      });
-      prediction = await poll.json();
-    }
-
-    if (prediction.status !== 'succeeded') throw new Error(`Design generation failed with status: ${prediction.status}`);
-
-    // 3. Save variants
-    await publishJobProgress(jobId, { status: 'processing', stage: 'uploading-assets', progress: 90, message: 'Finalizing your designs...' });
-    
-    const outputUrls = Array.isArray(prediction.output) ? prediction.output : [prediction.output];
-    const variants = [];
-    for (const [i, url] of outputUrls.slice(0, 3).entries()) {
-      const localPath = await saveRemoteImage(url, jobDir, `variant-${i + 1}`);
-      variants.push({ url, localPath, provider: 'replicate', key: `photo/${job._id}/variant-${i + 1}.png` });
+    if (variants.length === 0) {
+      throw new Error('Connection Issue: Failed to download images from AI engine. Please check your internet connection.');
     }
 
     job.output = { ...job.output, variants };
     job.status = 'completed';
-    job.stage = 'completed';
     job.progress = 100;
-    job.message = 'Marketing designs are ready!';
-    job.metadata.completedAt = new Date();
+    job.message = 'Success! Professional photos are ready.';
     await job.save();
 
     await publishJobProgress(jobId, {
       status: 'completed',
-      stage: 'completed',
       progress: 100,
-      message: 'Marketing designs are ready!',
+      message: 'Success! Professional photos are ready.',
       variants: job.output.variants
     });
 
   } catch (error: any) {
+    console.error('Photo Orchestrator Failure:', error.message);
     job.status = 'failed';
-    job.stage = 'failed';
     job.error = error.message;
-    job.metadata.failedAt = new Date();
     await job.save();
-    throw error;
+    await publishJobProgress(jobId, { status: 'failed', progress: 0, message: `Error: ${error.message}` });
   }
 };
