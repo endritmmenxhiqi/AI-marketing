@@ -3,11 +3,12 @@ import { getJobEventsUrl } from '../lib/api';
 
 export const useJobEvents = (
   jobId: string | null,
+  token: string,
   onMessage: (payload: any) => void,
   enabled = true
 ) => {
   useEffect(() => {
-    if (!jobId || !enabled) return;
+    if (!jobId || !token || !enabled) return;
 
     const source = new EventSource(getJobEventsUrl(jobId));
     source.onmessage = (event) => {
@@ -20,5 +21,5 @@ export const useJobEvents = (
     return () => {
       source.close();
     };
-  }, [enabled, jobId, onMessage]);
+  }, [enabled, jobId, onMessage, token]);
 };

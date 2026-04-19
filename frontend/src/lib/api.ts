@@ -60,9 +60,22 @@ export interface AuthUser {
   role: string;
 }
 
+type ApiError = Error & {
+  status?: number;
+};
+
+const getAccessToken = () => localStorage.getItem('token') || '';
+
 const authHeaders = (): Record<string, string> => {
-  const token = localStorage.getItem('token');
+  const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const createApiError = async (response: Response, fallbackMessage: string): Promise<ApiError> => {
+  const payload = await response.json().catch(() => ({ message: fallbackMessage }));
+  const error = new Error(payload.message || fallbackMessage) as ApiError;
+  error.status = response.status;
+  return error;
 };
 
 export const loginUser = async (email: string, password: string) => {
@@ -74,11 +87,11 @@ export const loginUser = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Login failed.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Login failed.');
+    throw await createApiError(response, 'Login failed.');
   }
 
+  const payload = await response.json();
   return payload as { token: string; user: AuthUser };
 };
 
@@ -91,11 +104,11 @@ export const registerUser = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Registration failed.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Registration failed.');
+    throw await createApiError(response, 'Registration failed.');
   }
 
+  const payload = await response.json();
   return payload as { token: string; user: AuthUser };
 };
 
@@ -108,11 +121,11 @@ export const forgotPassword = async (email: string) => {
     body: JSON.stringify({ email }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Failed to send reset email.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Failed to send reset email.');
+    throw await createApiError(response, 'Failed to send reset email.');
   }
 
+  const payload = await response.json();
   return payload as { message: string };
 };
 
@@ -125,11 +138,11 @@ export const resetPassword = async (token: string, password: string) => {
     body: JSON.stringify({ password }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Failed to reset password.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Failed to reset password.');
+    throw await createApiError(response, 'Failed to reset password.');
   }
 
+  const payload = await response.json();
   return payload as { message: string; user?: any; token?: string };
 };
 
@@ -156,8 +169,7 @@ export const createJob = async (payload: {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to create job.' }));
-    throw new Error(error.message || 'Failed to create job.');
+    throw await createApiError(response, 'Failed to create job.');
   }
 
   const payloadJson = await response.json();
@@ -169,7 +181,7 @@ export const fetchJobs = async () => {
     headers: authHeaders(),
   });
   if (!response.ok) {
-    throw new Error('Failed to fetch jobs.');
+    throw await createApiError(response, 'Failed to fetch jobs.');
   }
   const payload = await response.json();
   return payload.data as VideoJob[];
@@ -180,7 +192,7 @@ export const fetchJob = async (jobId: string) => {
     headers: authHeaders(),
   });
   if (!response.ok) {
-    throw new Error('Failed to fetch job.');
+    throw await createApiError(response, 'Failed to fetch job.');
   }
   const payload = await response.json();
   return payload.data as VideoJob;
@@ -197,12 +209,19 @@ export const trimJob = async (jobId: string, startSeconds: number, endSeconds: n
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to trim video.' }));
-    throw new Error(error.message || 'Failed to trim video.');
+    throw await createApiError(response, 'Failed to trim video.');
   }
 
   const payload = await response.json();
   return payload.data;
 };
 
-export const getJobEventsUrl = (jobId: string) => `${API_BASE}/jobs/${jobId}/events`;
+export const getJobEventsUrl = (jobId: string) => {
+  const url = new URL(`${API_BASE}/jobs/${jobId}/events`);
+  const token = getAccessToken();
+  if (token) {
+    url.searchParams.set('access_token', token);
+  }
+
+  return url.toString();
+};
