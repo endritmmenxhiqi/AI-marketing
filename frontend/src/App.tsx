@@ -502,16 +502,55 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  const clearAuthSession = (message = '') => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user_email');
+    setAuth({ token: '', email: '' });
+    setJobs([]);
+    setSelectedJobId(null);
+    setError(message);
+  };
+
   useEffect(() => {
-    if (!auth.token) return;
+    let isActive = true;
+
+    if (!auth.token) {
+      setJobs([]);
+      setSelectedJobId(null);
+      return () => {
+        isActive = false;
+      };
+    }
+
     fetchJobs()
       .then((data) => {
-        setJobs(data);
-        if (data[0]?._id) {
-          setSelectedJobId(data[0]._id);
+        if (!isActive) {
+          return;
         }
+
+        setJobs(data);
+        setSelectedJobId((current) =>
+          current && data.some((job) => job._id === current) ? current : data[0]?._id || null
+        );
       })
-      .catch(() => { });
+      .catch((nextError: any) => {
+        if (!isActive) {
+          return;
+        }
+
+        if (nextError?.status === 401) {
+          clearAuthSession('Your session expired. Please sign in again.');
+          return;
+        }
+
+        setJobs([]);
+        setSelectedJobId(null);
+        setError(nextError.message || 'Unable to load your video jobs.');
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, [auth.token]);
 
   const selectedJob = useMemo(
@@ -571,6 +610,7 @@ function App() {
 
   useJobEvents(
     selectedJobId,
+    auth.token,
     (payload) => {
       setJobs((current) =>
         current.map((job) => (job._id === selectedJobId ? { ...job, ...payload } : job))
@@ -635,6 +675,11 @@ function App() {
       setDescription('');
       clearSelectedFile();
     } catch (nextError: any) {
+      if (nextError?.status === 401) {
+        clearAuthSession('Your session expired. Please sign in again.');
+        return;
+      }
+
       setError(nextError.message || 'Unable to create a video job.');
     } finally {
       setSubmitting(false);
@@ -675,6 +720,11 @@ function App() {
         )
       );
     } catch (nextError: any) {
+      if (nextError?.status === 401) {
+        clearAuthSession('Your session expired. Please sign in again.');
+        return;
+      }
+
       setError(nextError.message || 'Unable to trim the video.');
     } finally {
       setTrimLoading(false);
@@ -682,11 +732,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user_email');
-    setAuth({ token: '', email: '' });
-    setJobs([]);
-    setSelectedJobId(null);
+    clearAuthSession('');
   };
 
   const applyQuickBrief = (preset: (typeof quickBriefs)[number]) => {
