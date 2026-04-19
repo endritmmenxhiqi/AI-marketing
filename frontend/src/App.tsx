@@ -782,20 +782,20 @@ function App() {
                   <div className={`${shellCard} relative overflow-hidden bg-gradient-to-br from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/90`}>
                     <div className="relative space-y-6">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                         <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-flare/10 dark:text-flare">
-                              <Sparkles size={22} />
-                            </div>
-                            <div>
-                              <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
-                                AI Marketing Studio
-                              </h1>
-                              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                                Create high-conversion short-form ads in seconds.
-                              </p>
-                            </div>
-                         </div>
-                        
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-flare/10 dark:text-flare">
+                            <Sparkles size={22} />
+                          </div>
+                          <div>
+                            <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
+                              AI Marketing Studio
+                            </h1>
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                              Create high-conversion short-form ads in seconds.
+                            </p>
+                          </div>
+                        </div>
+
                         <div className="flex items-center gap-2">
                           <button
                             className="auth-theme-toggle"
@@ -829,26 +829,32 @@ function App() {
                     </div>
                   </div>
 
-                  <div className={`${shellCard} flex flex-col justify-between overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 text-white dark:from-indigo-600/20 dark:to-purple-600/20 dark:text-white`}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className={`${shellCard} relative flex flex-col justify-between overflow-hidden border-0 !bg-transparent text-slate-900 shadow-2xl shadow-indigo-100 dark:!bg-gradient-to-br dark:from-indigo-600/20 dark:to-purple-600/20 dark:shadow-none dark:border dark:border-white/10 dark:text-white`}>
+                    {/* Light mode beautiful frosted gradient backdrop */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/95 to-fuchsia-50/95 backdrop-blur-xl dark:hidden pointer-events-none" />
+                    
+                    {/* Light mode top-right glow */}
+                    <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-gradient-to-br from-indigo-400/20 to-purple-400/20 blur-3xl dark:hidden pointer-events-none" />
+
+                    <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">Account info</div>
-                        <h2 className="mt-1 text-2xl font-black capitalize tracking-tight text-white">{firstName}</h2>
-                        <p className="text-sm font-medium opacity-60 text-slate-300 dark:text-slate-400">{auth.email}</p>
+                        <div className="text-[10px] font-black uppercase tracking-[0.15em] text-indigo-500 dark:text-slate-400">Account</div>
+                        <h2 className="mt-1 text-2xl font-black capitalize tracking-tight text-slate-900 dark:text-white">{firstName}</h2>
+                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
                       </div>
-                      <button type="button" onClick={handleLogout} className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-500 transition-all hover:bg-red-500 hover:text-white dark:bg-rose-500/15 dark:text-rose-400">
-                        <LogOut size={18} />
+                      <button type="button" onClick={handleLogout} className="group flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/50 transition-all hover:bg-rose-50 hover:text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white dark:ring-0">
+                        <LogOut size={16} className="text-slate-400 group-hover:text-rose-500 transition-colors dark:text-inherit" />
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                       <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/10 dark:bg-white/5 border border-white/10 dark:border-white/5">
-                          <span className="text-[10px] uppercase font-bold opacity-50 text-slate-400">Active style</span>
-                          <span className="text-sm font-semibold text-white">{styles.find(s => s.value === style)?.label || style}</span>
+                    <div className="relative z-10 grid grid-cols-2 gap-3 mt-6">
+                       <div className="flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Active Style</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-white">{styles.find(s => s.value === style)?.label || style}</span>
                        </div>
-                       <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/10 dark:bg-white/5 border border-white/10 dark:border-white/5">
-                          <span className="text-[10px] uppercase font-bold opacity-50 text-slate-400">Active category</span>
-                          <span className="text-sm font-semibold truncate text-white">{categories.find(c => c.value === productCategory)?.label || productCategory}</span>
+                       <div className="flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Category</span>
+                          <span className="text-sm font-bold truncate text-slate-800 dark:text-white">{categories.find(c => c.value === productCategory)?.label || productCategory}</span>
                        </div>
                     </div>
                   </div>
@@ -863,11 +869,11 @@ function App() {
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select a template or start from scratch</p>
                       </div>
                       <div className="flex -space-x-2">
-                         {[1,2,3].map(i => (
-                           <div key={i} className="h-6 w-6 rounded-full border-2 border-white bg-slate-100 dark:border-slate-900 dark:bg-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-400">
-                             {i}
-                           </div>
-                         ))}
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="h-6 w-6 rounded-full border-2 border-white bg-slate-100 dark:border-slate-900 dark:bg-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-400">
+                            {i}
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -894,7 +900,7 @@ function App() {
                           <div className="text-xs font-bold text-slate-900 dark:text-white">{preset.label}</div>
                           <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{preset.category.split('-').join(' ')}</div>
                           <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <Zap size={10} className="text-indigo-500 dark:text-flare" />
+                            <Zap size={10} className="text-indigo-500 dark:text-flare" />
                           </div>
                         </button>
                       ))}
@@ -943,8 +949,8 @@ function App() {
                       <div className="grid gap-6 md:grid-cols-2">
                         <div className="space-y-3">
                           <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
-                             <Target size={12} />
-                             Product Category
+                            <Target size={12} />
+                            Product Category
                           </label>
                           <select
                             value={productCategory}
@@ -965,8 +971,8 @@ function App() {
 
                         <div className="space-y-3">
                           <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
-                             <Palette size={12} />
-                             Visual Style
+                            <Palette size={12} />
+                            Visual Style
                           </label>
                           <div className="grid grid-cols-2 gap-2">
                             {styles.map((item) => (
@@ -974,11 +980,10 @@ function App() {
                                 key={item.value}
                                 type="button"
                                 onClick={() => setStyle(item.value)}
-                                className={`rounded-xl border p-3 text-center transition-all ${
-                                  style === item.value
+                                className={`rounded-xl border p-3 text-center transition-all ${style === item.value
                                     ? 'border-indigo-500 bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 dark:border-flare dark:bg-flare dark:text-slate-900 dark:shadow-flare/10'
                                     : 'border-slate-200 bg-white/50 text-slate-600 font-bold dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-400'
-                                }`}
+                                  }`}
                               >
                                 <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
                               </button>
@@ -989,11 +994,11 @@ function App() {
 
                       <div className="space-y-3">
                         <label className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
-                           <div className="flex items-center gap-2">
-                              <PenTool size={12} />
-                              Proprietary Brief
-                           </div>
-                           <span className={`${description.length > 700 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/800</span>
+                          <div className="flex items-center gap-2">
+                            <PenTool size={12} />
+                            Proprietary Brief
+                          </div>
+                          <span className={`${description.length > 700 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/800</span>
                         </label>
                         <textarea
                           value={description}
@@ -1007,11 +1012,11 @@ function App() {
 
                       <div className="pt-2">
                         <button type="button" onClick={handleSubmit} disabled={submitting} className="group relative w-full overflow-hidden rounded-[24px] bg-slate-900 py-6 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
-                           <div className="relative z-10 flex items-center justify-center gap-3">
-                              {submitting ? <LoaderCircle className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                              <span>{submitting ? 'Creating Studio Magic...' : 'Generate Campaign'}</span>
-                           </div>
-                           <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-flare dark:to-coral" />
+                          <div className="relative z-10 flex items-center justify-center gap-3">
+                            {submitting ? <LoaderCircle className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                            <span>{submitting ? 'Creating Studio Magic...' : 'Generate Campaign'}</span>
+                          </div>
+                          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-flare dark:to-coral" />
                         </button>
                       </div>
                     </div>
@@ -1022,22 +1027,22 @@ function App() {
                     <div className="flex flex-col gap-6">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-6 dark:border-white/5">
                         <div className="space-y-1.5">
-                           <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                             Studio Workspace
-                           </h2>
-                           <div className="flex items-center gap-2">
-                              {selectedJob ? (
-                                <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadgeClass(selectedJob.status)}`}>
-                                  {selectedJob.status}
-                                </div>
-                              ) : null}
-                              <span className="text-xs font-bold text-slate-400 truncate max-w-[200px]">
-                                {selectedJob?.script?.title || 'No active workspace'}
-                              </span>
-                           </div>
+                          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                            Studio Workspace
+                          </h2>
+                          <div className="flex items-center gap-2">
+                            {selectedJob ? (
+                              <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadgeClass(selectedJob.status)}`}>
+                                {selectedJob.status}
+                              </div>
+                            ) : null}
+                            <span className="text-xs font-bold text-slate-400 truncate max-w-[200px]">
+                              {selectedJob?.script?.title || 'No active workspace'}
+                            </span>
+                          </div>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400">
-                           <Layout size={20} />
+                          <Layout size={20} />
                         </div>
                       </div>
 
@@ -1047,11 +1052,10 @@ function App() {
                             key={tab.id}
                             type="button"
                             onClick={() => setActiveWorkspaceTab(tab.id)}
-                            className={`flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                              activeWorkspaceTab === tab.id
+                            className={`flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeWorkspaceTab === tab.id
                                 ? 'bg-white shadow-xl shadow-slate-200/50 text-slate-900 dark:bg-white/10 dark:shadow-none dark:text-white'
                                 : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-                            }`}
+                              }`}
                           >
                             {tab.label}
                           </button>
@@ -1081,7 +1085,7 @@ function App() {
                                       {stageLabels[selectedJob.stage] || selectedJob.stage}
                                     </div>
                                   </div>
-                                  
+
                                   <div className="p-6 rounded-[32px] bg-emerald-500/[0.03] border border-emerald-500/10 dark:bg-emerald-500/[0.06]">
                                     <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-emerald-500 opacity-60">
                                       <Zap size={14} />
@@ -1091,8 +1095,8 @@ function App() {
                                       <div className="text-3xl font-black text-slate-900 dark:text-white leading-none">{selectedJob.progress}%</div>
                                     </div>
                                     <div className="mt-4 h-1.5 rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden">
-                                      <motion.div 
-                                        className="h-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]" 
+                                      <motion.div
+                                        className="h-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]"
                                         initial={{ width: 0 }}
                                         animate={{ width: `${selectedJob.progress}%` }}
                                         transition={{ duration: 1, ease: "easeOut" }}
@@ -1103,10 +1107,10 @@ function App() {
 
                                 <div className="p-8 rounded-[40px] bg-white border border-slate-200 shadow-sm dark:bg-white/[0.02] dark:border-white/5 space-y-6">
                                   <div className="flex items-center justify-between border-b border-slate-50 pb-5 dark:border-white/5">
-                                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content Blueprint</div>
-                                     <div className="h-2 w-2 rounded-full bg-indigo-500 dark:bg-flare animate-pulse" />
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content Blueprint</div>
+                                    <div className="h-2 w-2 rounded-full bg-indigo-500 dark:bg-flare animate-pulse" />
                                   </div>
-                                  
+
                                   <div className="space-y-6">
                                     <div>
                                       <span className="inline-block px-3 py-1 rounded-lg bg-slate-50 dark:bg-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
@@ -1119,17 +1123,17 @@ function App() {
 
                                     <div className="grid gap-6">
                                       <div className="space-y-2">
-                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
-                                         <p className="text-base font-bold leading-relaxed italic text-slate-700 dark:text-slate-300">
-                                            "{selectedJob.script?.hook}"
-                                         </p>
+                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
+                                        <p className="text-base font-bold leading-relaxed italic text-slate-700 dark:text-slate-300">
+                                          "{selectedJob.script?.hook}"
+                                        </p>
                                       </div>
                                       <div className="h-px bg-slate-50 dark:bg-white/5" />
                                       <div className="space-y-2">
-                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
-                                         <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
-                                            {selectedJob.script?.cta}
-                                         </p>
+                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
+                                        <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
+                                          {selectedJob.script?.cta}
+                                        </p>
                                       </div>
                                     </div>
                                   </div>
@@ -1162,156 +1166,156 @@ function App() {
                           >
                             {selectedJob?.output?.preview?.url ? (
                               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                                 <div className="relative group mx-auto w-full max-w-[360px]">
-                                    <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
-                                    <div className="relative overflow-hidden rounded-[48px] border-[12px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
-                                      <video
-                                        ref={previewVideoRef}
-                                        controls
-                                        playsInline
-                                        src={selectedJob.output.preview.url}
-                                        onLoadedMetadata={(event) => {
-                                          const duration = Number(event.currentTarget.duration || 0) || 0;
-                                          if (duration > 0 && Number.isFinite(duration)) {
-                                            setPreviewDurationSeconds(duration);
-                                          }
+                                <div className="relative group mx-auto w-full max-w-[360px]">
+                                  <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
+                                  <div className="relative overflow-hidden rounded-[48px] border-[12px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
+                                    <video
+                                      ref={previewVideoRef}
+                                      controls
+                                      playsInline
+                                      src={selectedJob.output.preview.url}
+                                      onLoadedMetadata={(event) => {
+                                        const duration = Number(event.currentTarget.duration || 0) || 0;
+                                        if (duration > 0 && Number.isFinite(duration)) {
+                                          setPreviewDurationSeconds(duration);
+                                        }
+                                      }}
+                                      className="aspect-[9/16] w-full bg-black object-contain shadow-inner"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="p-8 rounded-[40px] bg-white text-slate-900 shadow-[0_20px_60px_rgba(99,102,241,0.12)] border border-slate-200 dark:bg-slate-900/50 dark:border-white/10 dark:shadow-[0_20px_60px_rgba(255,209,102,0.06)] dark:backdrop-blur-xl dark:text-white dark:border">
+                                  <div className="flex items-center justify-between mb-8">
+                                    <div className="flex items-center gap-3">
+                                      <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-white/10 dark:border-transparent">
+                                        <Scissors size={20} className="text-indigo-600 dark:text-flare" />
+                                      </div>
+                                      <span className="text-base font-black tracking-tight uppercase">Segment Studio</span>
+                                    </div>
+                                    <div className="px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-black uppercase tracking-widest dark:bg-flare/10 dark:border-transparent dark:text-flare">
+                                      {formatSeconds(Math.max(0, trimEnd - trimStart))} Segment
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-10">
+                                    <div className="space-y-4">
+                                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
+                                        <span>In-point</span>
+                                        <span className="text-indigo-600 dark:text-white">{formatSeconds(trimStart)}</span>
+                                      </div>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentTime = previewVideoRef.current?.currentTime;
+                                            if (currentTime == null) return;
+                                            const nextStart = Number(currentTime) || 0;
+                                            setTrimStart(nextStart);
+                                            setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
+                                          }}
+                                          className="px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                        >
+                                          Set from playhead
+                                        </button>
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min={0}
+                                        max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
+                                        step={0.1}
+                                        value={trimStart}
+                                        onChange={(event) => {
+                                          const nextStart = Number(event.target.value) || 0;
+                                          setTrimStart(nextStart);
+                                          setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
                                         }}
-                                        className="aspect-[9/16] w-full bg-black object-contain shadow-inner"
+                                        className="w-full accent-indigo-500 dark:accent-flare"
                                       />
                                     </div>
-                                 </div>
+                                    <div className="space-y-4">
+                                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
+                                        <span>Out-point</span>
+                                        <span className="text-indigo-600 dark:text-white">{formatSeconds(trimEnd)}</span>
+                                      </div>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentTime = previewVideoRef.current?.currentTime;
+                                            if (currentTime == null) return;
+                                            const maxSeconds = Number(selectedJob.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
+                                            const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
+                                            setTrimEnd(nextEnd);
+                                          }}
+                                          className="px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                        >
+                                          Set from playhead
+                                        </button>
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min={0}
+                                        max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
+                                        step={0.1}
+                                        value={trimEnd}
+                                        onChange={(event) => {
+                                          const nextEnd = Number(event.target.value) || 0;
+                                          setTrimEnd(nextEnd);
+                                          setTrimStart((current) => (nextEnd > current + 0.05 ? current : Math.max(0, nextEnd - 0.5)));
+                                        }}
+                                        className="w-full accent-indigo-500 dark:accent-flare"
+                                      />
+                                    </div>
+                                  </div>
 
-                                 <div className="p-8 rounded-[40px] bg-slate-950 text-white shadow-2xl dark:bg-white/5 dark:border dark:border-white/5">
-                                   <div className="flex items-center justify-between mb-8">
-                                      <div className="flex items-center gap-3">
-                                         <div className="p-2 rounded-xl bg-white/10">
-                                            <Scissors size={20} className="text-indigo-400 dark:text-flare" />
-                                         </div>
-                                         <span className="text-base font-black tracking-tight uppercase">Segment Studio</span>
-                                      </div>
-                                      <div className="px-4 py-1.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest dark:bg-flare/10 dark:text-flare">
-                                         {formatSeconds(Math.max(0, trimEnd - trimStart))} Segment
-                                      </div>
-                                   </div>
-                                   
-                                   <div className="space-y-10">
-                                      <div className="space-y-4">
-                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-40">
-                                            <span>In-point</span>
-                                            <span className="text-white opacity-100">{formatSeconds(trimStart)}</span>
-                                         </div>
-                                         <div className="flex items-center justify-end gap-2">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentTime = previewVideoRef.current?.currentTime;
-                                                if (currentTime == null) return;
-                                                const nextStart = Number(currentTime) || 0;
-                                                setTrimStart(nextStart);
-                                                setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
-                                              }}
-                                              className="px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
-                                            >
-                                              Set from playhead
-                                            </button>
-                                         </div>
-                                         <input
-                                            type="range"
-                                            min={0}
-                                            max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
-                                            step={0.1}
-                                            value={trimStart}
-                                            onChange={(event) => {
-                                              const nextStart = Number(event.target.value) || 0;
-                                              setTrimStart(nextStart);
-                                              setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
-                                            }}
-                                            className="w-full accent-indigo-500 dark:accent-flare"
-                                         />
-                                      </div>
-                                      <div className="space-y-4">
-                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-40">
-                                            <span>Out-point</span>
-                                            <span className="text-white opacity-100">{formatSeconds(trimEnd)}</span>
-                                         </div>
-                                         <div className="flex items-center justify-end gap-2">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentTime = previewVideoRef.current?.currentTime;
-                                                if (currentTime == null) return;
-                                                const maxSeconds = Number(selectedJob.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
-                                                const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
-                                                setTrimEnd(nextEnd);
-                                              }}
-                                              className="px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
-                                            >
-                                              Set from playhead
-                                            </button>
-                                         </div>
-                                         <input
-                                            type="range"
-                                            min={0}
-                                            max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
-                                            step={0.1}
-                                            value={trimEnd}
-                                            onChange={(event) => {
-                                              const nextEnd = Number(event.target.value) || 0;
-                                              setTrimEnd(nextEnd);
-                                              setTrimStart((current) => (nextEnd > current + 0.05 ? current : Math.max(0, nextEnd - 0.5)));
-                                            }}
-                                            className="w-full accent-indigo-500 dark:accent-flare"
-                                         />
-                                      </div>
-                                   </div>
+                                  <div className="grid grid-cols-2 gap-4 mt-10">
+                                    <button disabled={trimLoading} onClick={handleTrim} className="py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-flare dark:to-coral dark:text-slate-900 shadow-[0_8px_24px_rgba(99,102,241,0.35)] dark:shadow-[0_8px_24px_rgba(255,209,102,0.25)]">
+                                      {trimLoading ? 'Processing...' : 'Export Clip'}
+                                    </button>
+                                    <a href={selectedJob.output.video?.url} target="_blank" className="flex items-center justify-center gap-2 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/20 dark:hover:border-white/30 dark:hover:text-white">
+                                      <Download size={16} />
+                                      Full Master
+                                    </a>
+                                  </div>
 
-                                   <div className="grid grid-cols-2 gap-4 mt-10">
-                                      <button disabled={trimLoading} onClick={handleTrim} className="py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-indigo-500 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-flare dark:text-slate-900 shadow-lg shadow-indigo-600/20">
-                                         {trimLoading ? 'Processing...' : 'Export Clip'}
-                                      </button>
-                                      <a href={selectedJob.output.video?.url} target="_blank" className="flex items-center justify-center gap-2 py-5 rounded-2xl bg-white/10 border border-white/20 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-white/20">
-                                         <Download size={16} />
-                                         Full Master
-                                      </a>
-                                   </div>
-
-                                   {selectedJob.output?.trim?.asset?.url ? (
-                                     <div className="mt-8 space-y-4 rounded-[28px] border border-white/10 bg-white/5 p-5">
-                                       <div className="flex items-center justify-between gap-3">
-                                         <div className="text-[10px] font-black uppercase tracking-widest opacity-60">
-                                           Latest exported clip
-                                         </div>
-                                         <a
-                                           href={selectedJob.output.trim.asset.url}
-                                           target="_blank"
-                                           download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
-                                           className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-white/20"
-                                         >
-                                           <Download size={14} />
-                                           Download clip
-                                         </a>
-                                       </div>
-                                       <video
-                                         controls
-                                         playsInline
-                                         src={selectedJob.output.trim.asset.url}
-                                         className="aspect-[9/16] w-full rounded-[22px] bg-black object-contain"
-                                       />
-                                     </div>
-                                   ) : null}
-                                 </div>
+                                  {selectedJob.output?.trim?.asset?.url ? (
+                                    <div className="mt-8 space-y-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/60">
+                                          Latest exported clip
+                                        </div>
+                                        <a
+                                          href={selectedJob.output.trim.asset.url}
+                                          target="_blank"
+                                          download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
+                                          className="inline-flex items-center gap-2 rounded-full bg-white border border-slate-200 px-4 py-2 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-50 hover:text-indigo-600 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                        >
+                                          <Download size={14} />
+                                          Download clip
+                                        </a>
+                                      </div>
+                                      <video
+                                        controls
+                                        playsInline
+                                        src={selectedJob.output.trim.asset.url}
+                                        className="aspect-[9/16] w-full rounded-[22px] bg-black object-contain"
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
                               </div>
                             ) : (
                               <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
-                                 <motion.div 
-                                   animate={{ rotate: 360 }}
-                                   transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                                   className="p-8 rounded-full bg-slate-50 dark:bg-white/5 mb-6"
-                                 >
-                                    <Clapperboard size={48} className="opacity-20" />
-                                 </motion.div>
-                                 <h4 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-tight">Finalizing Assets</h4>
-                                 <p className="mt-2 text-sm font-medium opacity-50">Visual data is being processed in the background.</p>
+                                <motion.div
+                                  animate={{ rotate: 360 }}
+                                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                                  className="p-8 rounded-full bg-slate-50 dark:bg-white/5 mb-6"
+                                >
+                                  <Clapperboard size={48} className="opacity-20" />
+                                </motion.div>
+                                <h4 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-tight">Finalizing Assets</h4>
+                                <p className="mt-2 text-sm font-medium opacity-50">Visual data is being processed in the background.</p>
                               </div>
                             )}
                           </motion.div>
@@ -1333,36 +1337,33 @@ function App() {
                                   <button
                                     key={job._id}
                                     onClick={() => setSelectedJobId(job._id)}
-                                    className={`group relative flex items-center justify-between p-5 rounded-[28px] border transition-all duration-300 ${
-                                      selectedJobId === job._id
+                                    className={`group relative flex items-center justify-between p-5 rounded-[28px] border transition-all duration-300 ${selectedJobId === job._id
                                         ? 'border-indigo-500 bg-indigo-500/5 shadow-lg shadow-indigo-500/5 dark:border-flare/40 dark:bg-flare/5'
                                         : 'border-slate-100 bg-white/40 hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-white/10'
-                                    }`}
+                                      }`}
                                   >
                                     <div className="flex items-center gap-5 flex-1 min-w-0">
-                                       <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${
-                                         job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
-                                         job.status === 'failed' ? 'bg-rose-500 shadow-rose-500/40 animate-pulse' :
-                                         'bg-amber-400 shadow-amber-400/40 animate-pulse'
-                                       }`} />
-                                       <div className="text-left min-w-0">
-                                          <div className="text-sm font-black text-slate-900 dark:text-white truncate max-w-[180px] tracking-tight">
-                                             {job.script?.title || job.style}
-                                          </div>
-                                          <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[9px] font-black uppercase opacity-30 tracking-widest truncate">
-                                              {job.productCategory}
-                                            </span>
-                                            <div className="shrink-0 h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
-                                            <span className={`text-[9px] font-black ${
-                                              job.status === 'completed' ? 'text-emerald-500' :
+                                      <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
+                                          job.status === 'failed' ? 'bg-rose-500 shadow-rose-500/40 animate-pulse' :
+                                            'bg-amber-400 shadow-amber-400/40 animate-pulse'
+                                        }`} />
+                                      <div className="text-left min-w-0">
+                                        <div className="text-sm font-black text-slate-900 dark:text-white truncate max-w-[180px] tracking-tight">
+                                          {job.script?.title || job.style}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <span className="text-[9px] font-black uppercase opacity-30 tracking-widest truncate">
+                                            {job.productCategory}
+                                          </span>
+                                          <div className="shrink-0 h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
+                                          <span className={`text-[9px] font-black ${job.status === 'completed' ? 'text-emerald-500' :
                                               job.status === 'failed' ? 'text-rose-500' :
-                                              'text-indigo-500 dark:text-flare'
+                                                'text-indigo-500 dark:text-flare'
                                             }`}>
-                                              {job.status === 'completed' ? '✓ Ready' : job.status === 'failed' ? '✕ Failed' : `${job.progress}% Sync`}
-                                            </span>
-                                          </div>
-                                       </div>
+                                            {job.status === 'completed' ? '✓ Ready' : job.status === 'failed' ? '✕ Failed' : `${job.progress}% Sync`}
+                                          </span>
+                                        </div>
+                                      </div>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                       {job.status === 'failed' && (
@@ -1375,7 +1376,7 @@ function App() {
                                         </button>
                                       )}
                                       <div className="h-10 w-10 rounded-2xl bg-slate-50 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center dark:bg-white/5 translate-x-2 group-hover:translate-x-0">
-                                         <ChevronRight size={18} className="text-slate-400" />
+                                        <ChevronRight size={18} className="text-slate-400" />
                                       </div>
                                     </div>
                                   </button>
