@@ -76,6 +76,11 @@ const trimSchema = new Schema(
 
 const videoJobSchema = new Schema(
   {
+    owner: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
+    },
     status: { type: String, default: 'queued', index: true },
     stage: { type: String, default: 'queued' },
     progress: { type: Number, default: 0 },
@@ -115,6 +120,8 @@ const videoJobSchema = new Schema(
   },
   { timestamps: true }
 );
+
+videoJobSchema.index({ owner: 1, createdAt: -1 });
 
 export const VideoJob =
   mongoose.models.VideoJob || mongoose.model('VideoJob', videoJobSchema);

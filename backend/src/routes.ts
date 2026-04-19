@@ -7,6 +7,7 @@ import express from 'express';
 import multer from 'multer';
 import IORedis from 'ioredis';
 import mime from 'mime-types';
+import mongoose from 'mongoose';
 import { VideoJob } from './models/VideoJob';
 import { config } from './config';
 import { videoQueue } from './queue';
@@ -16,25 +17,115 @@ import { trimVideo } from './services/renderService';
 import { uploadAsset } from './services/storageService';
 import { processVideoJob } from './services/jobOrchestrator';
 import { localJobEvents } from './services/localEventBus';
+import { AuthenticatedRequest, getAuthenticatedUserId, requireAuth } from './auth';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+const defaultJobListLimit = 12;
+const maximumJobListLimit = 50;
+
+type AuthenticatedUploadRequest = AuthenticatedRequest & {
+  file?: Express.Multer.File;
+};
+
+const parseLimit = (value: unknown) => {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return defaultJobListLimit;
+  }
+
+  return Math.max(1, Math.min(Math.floor(parsed), maximumJobListLimit));
+};
+
+const readSingleParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] || '' : value || '';
+
+const getOwnedJobFilter = (ownerId: string, jobId: string) => {
+  if (!mongoose.isValidObjectId(jobId)) {
+    return null;
+  }
+
+  return {
+    _id: jobId,
+    owner: ownerId
+  };
+};
+
+const sanitizeStorageAsset = <T extends Record<string, unknown> | null | undefined>(asset: T) => {
+  if (!asset) {
+    return asset;
+  }
+
+  const { localPath: _localPath, ...rest } = asset;
+  return rest;
+};
+
+const sanitizeJob = (job: any) => {
+  if (!job) {
+    return job;
+  }
+
+  const plainJob = typeof job.toObject === 'function' ? job.toObject() : { ...job };
+  delete plainJob.owner;
+  delete plainJob.imagePath;
+
+  if (plainJob.metadata) {
+    delete plainJob.metadata.jobFolder;
+  }
+
+  if (plainJob.output) {
+    plainJob.output.video = sanitizeStorageAsset(plainJob.output.video);
+    plainJob.output.preview = sanitizeStorageAsset(plainJob.output.preview);
+    plainJob.output.voiceover = sanitizeStorageAsset(plainJob.output.voiceover);
+    plainJob.output.sceneFiles = Array.isArray(plainJob.output.sceneFiles)
+      ? plainJob.output.sceneFiles.map((asset: Record<string, unknown>) => sanitizeStorageAsset(asset))
+      : [];
+
+    if (plainJob.output.trim) {
+      plainJob.output.trim = {
+        ...plainJob.output.trim,
+        asset: sanitizeStorageAsset(plainJob.output.trim.asset)
+      };
+    }
+  }
+
+  if (plainJob.script?.scenes) {
+    plainJob.script.scenes = plainJob.script.scenes.map((scene: Record<string, unknown>) => {
+      const nextScene = { ...scene };
+      delete nextScene.voicePath;
+
+      if (nextScene.media && typeof nextScene.media === 'object') {
+        nextScene.media = sanitizeStorageAsset(nextScene.media as Record<string, unknown>);
+      }
+
+      return nextScene;
+    });
+  }
+
+  return plainJob;
+};
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', project: 'AI Marketing Studio MVP' });
 });
 
-router.get('/jobs', async (_req, res, next) => {
+router.get('/jobs', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const jobs = await VideoJob.find().sort({ createdAt: -1 }).limit(12).lean();
-    res.json({ data: jobs });
+    const userId = getAuthenticatedUserId(req);
+    const jobs = await VideoJob.find({ owner: userId })
+      .sort({ createdAt: -1 })
+      .limit(parseLimit(req.query.limit))
+      .lean();
+    res.json({ data: jobs.map((job) => sanitizeJob(job)) });
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/jobs', upload.single('image'), async (req, res, next) => {
+router.post('/jobs', requireAuth, upload.single('image'), async (req: AuthenticatedUploadRequest, res, next) => {
   try {
+    const userId = getAuthenticatedUserId(req);
     const description = String(req.body.description || '').trim();
     const style = String(req.body.style || '').trim();
     const productCategory = String(req.body.productCategory || 'general-product').trim();
@@ -61,6 +152,7 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
     }
 
     const job = await VideoJob.create({
+      owner: userId,
       description,
       productCategory,
       style,
@@ -120,28 +212,30 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
 
     await job.save();
 
-    res.status(201).json({ data: job });
+    res.status(201).json({ data: sanitizeJob(job) });
   } catch (error) {
     next(error);
   }
 });
 
-router.get('/jobs/:jobId', async (req, res, next) => {
+router.get('/jobs/:jobId', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const job = await VideoJob.findById(req.params.jobId).lean();
+    const userId = getAuthenticatedUserId(req);
+    const filter = getOwnedJobFilter(userId, readSingleParam(req.params.jobId));
+    const job = filter ? await VideoJob.findOne(filter).lean() : null;
     if (!job) {
       res.status(404).json({ message: 'Job not found.' });
       return;
     }
 
-    res.json({ data: job });
+    res.json({ data: sanitizeJob(job) });
   } catch (error) {
     next(error);
   }
 });
 
-router.get('/jobs/:jobId/events', async (req, res, next) => {
-  const { jobId } = req.params;
+router.get('/jobs/:jobId/events', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  const jobId = readSingleParam(req.params.jobId);
   const subscriber =
     config.queueMode === 'bullmq'
       ? new IORedis(config.redisUrl, {
@@ -150,7 +244,9 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
       : null;
 
   try {
-    const job = await VideoJob.findById(jobId).lean();
+    const userId = getAuthenticatedUserId(req);
+    const filter = getOwnedJobFilter(userId, jobId);
+    const job = filter ? await VideoJob.findOne(filter).lean() : null;
     if (!job) {
       res.status(404).json({ message: 'Job not found.' });
       return;
@@ -160,7 +256,7 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders?.();
-    res.write(`data: ${JSON.stringify(job)}\n\n`);
+    res.write(`data: ${JSON.stringify(sanitizeJob(job))}\n\n`);
 
     const channel = getJobChannel(jobId);
     const localHandler = (payload: unknown) => {
@@ -195,11 +291,13 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
   }
 });
 
-router.post('/jobs/:jobId/trim', async (req, res, next) => {
+router.post('/jobs/:jobId/trim', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
+    const userId = getAuthenticatedUserId(req);
     const startSeconds = Number(req.body.startSeconds || 0);
     const endSeconds = Number(req.body.endSeconds || 0);
-    const job = await VideoJob.findById(req.params.jobId);
+    const filter = getOwnedJobFilter(userId, readSingleParam(req.params.jobId));
+    const job = filter ? await VideoJob.findOne(filter) : null;
 
     if (!job || (!job.output?.video?.localPath && !job.output?.video?.url)) {
       res.status(404).json({ message: 'Rendered video not found for this job.' });
