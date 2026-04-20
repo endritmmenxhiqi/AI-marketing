@@ -18,7 +18,7 @@ const generationSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Product description is required'],
       trim: true,
-      maxlength: [1200, 'Product description cannot exceed 1200 characters'],
+      maxlength: [2000, 'Product description cannot exceed 2000 characters'],
     },
     keywords: {
       type: [String],

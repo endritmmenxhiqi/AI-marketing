@@ -201,6 +201,14 @@ export const generateScriptPackage = async (
           'Do not drift into generic cakes, cupcakes, frosting, whipped cream, or unrelated bakery prep unless the brief explicitly describes those.',
           'Usage occasions like gifting, guests, or after-dinner can support the message, but the product itself must stay the visual star.'
         ].join(' ')
+      : productCategory === 'perfume-fragrance'
+        ? [
+            'For perfume and fragrance ads, prioritize elegant product shots, perfume spray, bottle closeups, refined grooming moments, luxury interior lighting, and confident premium lifestyle scenes.',
+            'Prefer visible fragrance-adjacent visuals that stock sites can actually return: perfume bottle on vanity, spray mist, dressed up man or woman, mirror prep, luxury room, and fashion detail closeups.',
+            'When the user uploads a specific perfume bottle, treat that product as sacred: supporting scenes can show lifestyle, grooming, fashion, and luxury environments, but they must not imply or introduce different competing fragrance bottles.',
+            'Avoid drifting into generic beauty tutorial footage, makeup-only scenes, spa filler, random skincare application, office scenes, tech product shots, or unrelated lifestyle clips unless the brief explicitly asks for them.',
+            'The fragrance bottle, packaging, ritual, and premium identity should stay central to the story.'
+          ].join(' ')
       : productCategory === 'fitness-wellness'
         ? [
             'For fitness and wellness ads, prioritize visible movement, training, progress, energy, confidence, and action.',

@@ -31,6 +31,22 @@ const genericQueryTokens = new Set([
   'technology'
 ]);
 const foodMismatchTokens = new Set(['cake', 'cream', 'cupcake', 'frosting', 'icing', 'whipped']);
+const perfumeMismatchTokens = new Set([
+  'app',
+  'computer',
+  'dessert',
+  'food',
+  'gaming',
+  'gym',
+  'kitchen',
+  'laptop',
+  'office',
+  'pet',
+  'podcast',
+  'skincare',
+  'smartphone',
+  'workout'
+]);
 const fitnessMismatchTokens = new Set(['conversation', 'desk', 'interview', 'meeting', 'office', 'podcast', 'talking']);
 const footballMismatchTokens = new Set(['nfl', 'touchdown', 'quarterback', 'superbowl', 'helmet', 'american']);
 const esportsMismatchTokens = new Set([
@@ -53,6 +69,30 @@ const esportsBriefTokens = [
   'e sports',
   'gaming tournament',
   'major finals'
+];
+const perfumeProductSceneTokens = new Set([
+  'atomizer',
+  'bottle',
+  'cap',
+  'closeup',
+  'close',
+  'flacon',
+  'fragrance',
+  'mist',
+  'package',
+  'packaging',
+  'perfume',
+  'product',
+  'spray',
+  'scent'
+]);
+const perfumeLifestyleFallbackTerms = [
+  'luxury interior',
+  'mirror preparation',
+  'well dressed man',
+  'elegant woman',
+  'suit details',
+  'city night'
 ];
 type MediaStrategy = {
   anchors: string[];
@@ -92,6 +132,48 @@ const createUploadFallback = (
   selectionReason: reason
 });
 
+const isPerfumeUploadLocked = (productCategory: string, productImagePath: string) =>
+  productCategory === 'perfume-fragrance' && Boolean(productImagePath);
+
+const isPerfumeProductScene = (scene: ScriptScene) => {
+  const sceneTokens = tokenize(
+    [scene.headline, scene.visualBrief, ...(scene.onScreenText || []), ...(scene.pexelsKeywords || [])].join(' ')
+  );
+
+  return sceneTokens.some((token) => perfumeProductSceneTokens.has(token));
+};
+
+const sanitizePerfumeSupportText = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter((part) => !perfumeProductSceneTokens.has(part.toLowerCase().replace(/[^a-z0-9-]/g, '')))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildPerfumeSupportScene = (scene: ScriptScene): ScriptScene => {
+  const filteredKeywords = scene.pexelsKeywords.filter((keyword) => {
+    const keywordTokens = tokenize(keyword);
+    return keywordTokens.length ? !keywordTokens.some((token) => perfumeProductSceneTokens.has(token)) : false;
+  });
+
+  const supportKeywords = Array.from(
+    new Set([...filteredKeywords, ...perfumeLifestyleFallbackTerms])
+  ).slice(0, 6);
+
+  const headline = sanitizePerfumeSupportText(scene.headline) || 'Luxury fragrance lifestyle';
+  const visualBrief =
+    sanitizePerfumeSupportText(scene.visualBrief) ||
+    'Elegant lifestyle support scene in a luxury interior with refined styling and confident presence.';
+
+  return {
+    ...scene,
+    headline,
+    visualBrief,
+    pexelsKeywords: supportKeywords
+  };
+};
+
 const buildMediaStrategy = (description: string, productCategory: string): MediaStrategy => {
   const descriptionTokens = Array.from(new Set(tokenize(description)));
 
@@ -120,6 +202,42 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       minimumVideoSeconds: 5,
       useHeroUploadForFirstScene: false,
       useHeroUploadForLastScene: false
+    };
+  }
+
+  if (productCategory === 'perfume-fragrance') {
+    return {
+      anchors: Array.from(
+        new Set([
+          ...descriptionTokens.filter((token) =>
+            [
+              'perfume',
+              'fragrance',
+              'cologne',
+              'scent',
+              'bottle',
+              'spray',
+              'luxury',
+              'masculine',
+              'feminine',
+              'grooming',
+              'elegant'
+            ].includes(token)
+          ),
+          'perfume',
+          'fragrance',
+          'bottle',
+          'spray',
+          'luxury'
+        ])
+      ),
+      avoidTokens: Array.from(perfumeMismatchTokens),
+      preferStillImages: false,
+      requireAnchorMatch: false,
+      minimumVideoDurationRatio: 0.78,
+      minimumVideoSeconds: 4,
+      useHeroUploadForFirstScene: true,
+      useHeroUploadForLastScene: true
     };
   }
 
@@ -384,6 +502,8 @@ const chooseMedia = async ({
   usedMediaKeys: Set<string>;
 }): Promise<MediaCandidate> => {
   const strategy = buildMediaStrategy(description, productCategory);
+  const perfumeUploadLocked = isPerfumeUploadLocked(productCategory, productImagePath);
+  const perfumeProductScene = perfumeUploadLocked && isPerfumeProductScene(scene);
   if (
     productImagePath &&
     ((strategy.useHeroUploadForFirstScene && sceneIndex === 0) ||
@@ -397,7 +517,18 @@ const chooseMedia = async ({
     );
   }
 
-  const candidates = await findSceneMedia(scene, productCategory, description);
+  if (perfumeProductScene) {
+    return createUploadFallback(
+      productImagePath,
+      'Locked this perfume product scene to the uploaded bottle so competing fragrance products never replace it.'
+    );
+  }
+
+  const mediaSearchScene =
+    perfumeUploadLocked && !perfumeProductScene ? buildPerfumeSupportScene(scene) : scene;
+  const searchMode =
+    perfumeUploadLocked && !perfumeProductScene ? 'perfume-support' : 'default';
+  const candidates = await findSceneMedia(mediaSearchScene, productCategory, description, searchMode);
 
   if (candidates.length >= 1) {
     const ranked = [...candidates]
@@ -406,7 +537,7 @@ const chooseMedia = async ({
         candidate,
         score: scoreCandidate({
           candidate,
-          scene,
+          scene: mediaSearchScene,
           productCategory,
           targetDuration,
           description,

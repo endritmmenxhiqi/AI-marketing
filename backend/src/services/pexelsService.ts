@@ -22,6 +22,23 @@ const fitnessAvoidTerms = new Set([
   'seminar',
   'talking'
 ]);
+const perfumeAvoidTerms = new Set([
+  'app',
+  'computer',
+  'dessert',
+  'food',
+  'gaming',
+  'gym',
+  'kitchen',
+  'laptop',
+  'meeting',
+  'office',
+  'pet',
+  'podcast',
+  'skincare',
+  'smartphone',
+  'workout'
+]);
 const esportsAvoidTerms = new Set([
   'business',
   'coding',
@@ -172,6 +189,29 @@ const buildFitnessSignals = (description: string) => {
   };
 };
 
+const buildPerfumeSignals = (description: string) => {
+  const normalized = description.toLowerCase();
+  const anchors = unique([
+    'perfume bottle luxury',
+    'fragrance bottle close up',
+    'perfume spray slow motion',
+    'luxury fragrance product',
+    'mens perfume luxury',
+    'womens perfume luxury',
+    normalized.includes('men') || normalized.includes('masculine') ? 'well dressed man perfume' : '',
+    normalized.includes('women') || normalized.includes('feminine') ? 'elegant woman perfume' : '',
+    normalized.includes('gold') ? 'gold perfume bottle luxury' : '',
+    normalized.includes('black') ? 'black perfume bottle luxury' : '',
+    normalized.includes('vanity') ? 'perfume vanity close up' : '',
+    normalized.includes('spray') ? 'perfume spray close up' : ''
+  ]);
+
+  return {
+    anchors,
+    avoidTerms: Array.from(perfumeAvoidTerms)
+  };
+};
+
 const footballAvoidTerms = new Set([
   'nfl',
   'touchdown',
@@ -223,14 +263,21 @@ const buildEsportsSignals = (description: string) => {
 const buildSearchQueries = ({
   scene,
   productCategory,
-  description
+  description,
+  searchMode = 'default'
 }: {
   scene: ScriptScene;
   productCategory: string;
   description: string;
+  searchMode?: 'default' | 'perfume-support';
 }) => {
-  const categoryText = productCategory.replace(/-/g, ' ');
+  const categoryText =
+    searchMode === 'perfume-support' ? 'luxury lifestyle' : productCategory.replace(/-/g, ' ');
   const foodSignals = productCategory === 'food-dessert' ? buildFoodSignals(description) : null;
+  const perfumeSignals =
+    productCategory === 'perfume-fragrance' && searchMode !== 'perfume-support'
+      ? buildPerfumeSignals(description)
+      : null;
   const fitnessSignals =
     productCategory === 'fitness-wellness' ? buildFitnessSignals(description) : null;
   const footballSignals =
@@ -241,7 +288,11 @@ const buildSearchQueries = ({
   const productTokens = tokenize(description).slice(0, 10);
   const productPhrase = productTokens.slice(0, 4).join(' ');
   const actionHint =
-    productCategory === 'fitness-wellness'
+    searchMode === 'perfume-support'
+      ? 'well dressed person luxury interior mirror preparation suit details city night'
+      : productCategory === 'perfume-fragrance'
+      ? 'perfume bottle spray close up luxury interior'
+      : productCategory === 'fitness-wellness'
       ? 'person workout movement training'
       : productCategory === 'food-dessert'
         ? 'close up serving texture'
@@ -258,6 +309,14 @@ const buildSearchQueries = ({
       `${anchor} serving`,
       `${anchor} ${scene.visualBrief}`,
       `${anchor} ${scene.headline}`,
+      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+    ]),
+    ...(perfumeSignals?.anchors || []).flatMap((anchor) => [
+      anchor,
+      `${anchor} vertical`,
+      `${anchor} close up`,
+      `${anchor} luxury`,
+      `${anchor} ${scene.visualBrief}`,
       ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
     ]),
     ...(fitnessSignals?.anchors || []).flatMap((anchor) => [
@@ -305,6 +364,7 @@ const buildSearchQueries = ({
 
         const avoidTerms = [
           ...(foodSignals?.avoidTerms || []),
+          ...(perfumeSignals?.avoidTerms || []),
           ...(fitnessSignals?.avoidTerms || []),
           ...(footballSignals?.avoidTerms || []),
           ...(esportsSignals?.avoidTerms || [])
@@ -318,7 +378,8 @@ const buildSearchQueries = ({
 export const findSceneMedia = async (
   scene: ScriptScene,
   productCategory: string,
-  description: string
+  description: string,
+  searchMode: 'default' | 'perfume-support' = 'default'
 ) => {
   if (!config.pexelsApiKey) {
     return [];
@@ -327,7 +388,8 @@ export const findSceneMedia = async (
   const queries = buildSearchQueries({
     scene,
     productCategory,
-    description
+    description,
+    searchMode
   });
 
   const selected: MediaCandidate[] = [];

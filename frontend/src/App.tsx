@@ -44,6 +44,7 @@ const styles = [
 
 const categories = [
   { value: 'beauty-skincare', label: 'Beauty & Skincare' },
+  { value: 'perfume-fragrance', label: 'Perfume & Fragrance' },
   { value: 'food-dessert', label: 'Food & Dessert' },
   { value: 'fashion-accessories', label: 'Fashion & Accessories' },
   { value: 'fitness-wellness', label: 'Fitness & Wellness' },
@@ -108,6 +109,8 @@ const stageLabels: Record<string, string> = {
   'completed': 'Ready',
   'failed': 'Failed',
 };
+
+const DESCRIPTION_MAX_LENGTH = 2000;
 
 const formatSeconds = (value: number) => `${value.toFixed(1)}s`;
 const formatFileSize = (bytes: number) => {
@@ -561,7 +564,6 @@ function App() {
   const categoryLabel =
     categories.find((item) => item.value === productCategory)?.label || 'General product';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
-  const previewReady = Boolean(selectedJob?.output?.preview?.url);
   const workspaceTabs = [
     { id: 'overview' as const, label: 'Campaign' },
     { id: 'preview' as const, label: 'Preview' },
@@ -753,9 +755,9 @@ function App() {
   };
 
   const shellCard =
-    'rounded-[28px] border border-slate-200/80 bg-white/85 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-slate-950/55 dark:shadow-glow';
+    'dashboard-shell-card rounded-[28px] border border-slate-200/80 bg-white/85 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-slate-950/55 dark:shadow-glow';
   const shellMutedCard =
-    'rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-white/10 dark:bg-white/[0.04]';
+    'dashboard-muted-card rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-white/10 dark:bg-white/[0.04]';
   const getStatusBadgeClass = (status?: string) => {
     if (status === 'completed') {
       return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200';
@@ -776,10 +778,10 @@ function App() {
           !auth.token ? (
             <AuthScreen onAuthenticated={setAuth} />
           ) : (
-            <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_85%_15%,rgba(236,72,153,0.10),transparent_24%),linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fbff_100%)] text-slate-900 transition-colors dark:bg-mesh dark:text-white">
-              <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-8 px-4 py-6 lg:px-8">
-                <header className="grid gap-6 xl:grid-cols-[1fr,400px]">
-                  <div className={`${shellCard} relative overflow-hidden bg-gradient-to-br from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/90`}>
+            <div className="studio-dashboard min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_85%_15%,rgba(236,72,153,0.10),transparent_24%),linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fbff_100%)] text-slate-900 transition-colors dark:bg-mesh dark:text-white">
+              <div className="studio-dashboard__inner mx-auto flex min-h-screen max-w-7xl flex-col gap-8 px-4 py-6 lg:px-8">
+                <header className="studio-dashboard__header grid gap-6 xl:grid-cols-[1fr,400px]">
+                  <div className={`${shellCard} dashboard-hero-card relative overflow-hidden bg-gradient-to-br from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/90`}>
                     <div className="relative space-y-6">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
@@ -818,7 +820,7 @@ function App() {
 
                       <div className="grid gap-3 md:grid-cols-3">
                         {dashboardStats.map((item) => (
-                          <div key={item.label} className={`${shellMutedCard} group transition-all hover:bg-white/95 dark:hover:bg-white/10`}>
+                          <div key={item.label} className={`${shellMutedCard} dashboard-stat-card group transition-all hover:bg-white/95 dark:hover:bg-white/10`}>
                             <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500">
                               {item.label}
                             </div>
@@ -829,7 +831,7 @@ function App() {
                     </div>
                   </div>
 
-                  <div className={`${shellCard} relative flex flex-col justify-between overflow-hidden border-0 !bg-transparent text-slate-900 shadow-2xl shadow-indigo-100 dark:!bg-gradient-to-br dark:from-indigo-600/20 dark:to-purple-600/20 dark:shadow-none dark:border dark:border-white/10 dark:text-white`}>
+                  <div className={`${shellCard} dashboard-account-card relative flex flex-col justify-between overflow-hidden text-slate-900 dark:text-white`}>
                     {/* Light mode beautiful frosted gradient backdrop */}
                     <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/95 to-fuchsia-50/95 backdrop-blur-xl dark:hidden pointer-events-none" />
                     
@@ -842,17 +844,17 @@ function App() {
                         <h2 className="mt-1 text-2xl font-black capitalize tracking-tight text-slate-900 dark:text-white">{firstName}</h2>
                         <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
                       </div>
-                      <button type="button" onClick={handleLogout} className="group flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/50 transition-all hover:bg-rose-50 hover:text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white dark:ring-0">
+                      <button type="button" onClick={handleLogout} className="dashboard-logout-btn group flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/50 transition-all hover:bg-rose-50 hover:text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white dark:ring-0">
                         <LogOut size={16} className="text-slate-400 group-hover:text-rose-500 transition-colors dark:text-inherit" />
                       </button>
                     </div>
 
                     <div className="relative z-10 grid grid-cols-2 gap-3 mt-6">
-                       <div className="flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                       <div className="dashboard-account-meta flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
                           <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Active Style</span>
                           <span className="text-sm font-bold text-slate-800 dark:text-white">{styles.find(s => s.value === style)?.label || style}</span>
                        </div>
-                       <div className="flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                       <div className="dashboard-account-meta flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
                           <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Category</span>
                           <span className="text-sm font-bold truncate text-slate-800 dark:text-white">{categories.find(c => c.value === productCategory)?.label || productCategory}</span>
                        </div>
@@ -860,9 +862,9 @@ function App() {
                   </div>
                 </header>
 
-                <main className="grid gap-8 xl:grid-cols-[1fr,1.15fr]">
+                <main className="studio-dashboard__main grid gap-8 xl:grid-cols-[1fr,1.15fr]">
                   {/* LEFT COLUMN: Creation Section */}
-                  <section className={`${shellCard} flex flex-col gap-8`}>
+                  <section className={`${shellCard} dashboard-builder-card flex flex-col gap-8`}>
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
                         <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">New Campaign</h2>
@@ -870,7 +872,7 @@ function App() {
                       </div>
                       <div className="flex -space-x-2">
                         {[1, 2, 3].map(i => (
-                          <div key={i} className="h-6 w-6 rounded-full border-2 border-white bg-slate-100 dark:border-slate-900 dark:bg-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-400">
+                          <div key={i} className="dashboard-step-dot flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[8px] font-bold text-slate-400 dark:border-slate-900 dark:bg-slate-800">
                             {i}
                           </div>
                         ))}
@@ -879,7 +881,7 @@ function App() {
 
                     {/* Error Banner */}
                     {error && (
-                      <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
+                      <div className="dashboard-error-banner flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
                         <span className="mt-0.5 shrink-0 text-rose-500">⚠</span>
                         <div className="flex-1">
                           <div className="font-bold">Campaign Error</div>
@@ -895,7 +897,7 @@ function App() {
                           key={preset.id}
                           type="button"
                           onClick={() => applyQuickBrief(preset)}
-                          className="group relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border border-slate-200 bg-white/40 text-left transition-all hover:border-indigo-500/50 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-flare/40"
+                          className="quick-brief-btn dashboard-quick-brief group relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border border-slate-200 bg-white/40 text-left transition-all hover:border-indigo-500/50 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-flare/40"
                         >
                           <div className="text-xs font-bold text-slate-900 dark:text-white">{preset.label}</div>
                           <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{preset.category.split('-').join(' ')}</div>
@@ -911,7 +913,7 @@ function App() {
                         <div
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={onDrop}
-                          className="flex flex-col items-center justify-center gap-4 p-10 rounded-[32px] border-2 border-dashed border-slate-200 bg-slate-50/50 backdrop-blur-sm transition-all hover:border-indigo-500/40 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-flare/30 dark:hover:bg-white/[0.03]"
+                          className="dashboard-upload-zone flex flex-col items-center justify-center gap-4 p-10 rounded-[32px] border-2 border-dashed border-slate-200 bg-slate-50/50 backdrop-blur-sm transition-all hover:border-indigo-500/40 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-flare/30 dark:hover:bg-white/[0.03]"
                         >
                           {file ? (
                             <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
@@ -955,7 +957,7 @@ function App() {
                           <select
                             value={productCategory}
                             onChange={(event) => setProductCategory(event.target.value)}
-                            className="w-full rounded-2xl border border-slate-200 bg-white/50 px-5 py-4 text-sm font-bold text-slate-900 outline-none transition-all focus:border-indigo-500/50 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-flare/40"
+                            className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-5 py-4 text-sm font-bold text-slate-900 outline-none transition-all focus:border-indigo-500/50 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-flare/40"
                           >
                             {categories.map((item) => (
                               <option
@@ -980,10 +982,9 @@ function App() {
                                 key={item.value}
                                 type="button"
                                 onClick={() => setStyle(item.value)}
-                                className={`rounded-xl border p-3 text-center transition-all ${style === item.value
-                                    ? 'border-indigo-500 bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 dark:border-flare dark:bg-flare dark:text-slate-900 dark:shadow-flare/10'
-                                    : 'border-slate-200 bg-white/50 text-slate-600 font-bold dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-400'
-                                  }`}
+                                aria-pressed={style === item.value}
+                                title={item.tone}
+                                className={`style-btn rounded-xl border p-3 text-center transition-all ${style === item.value ? 'selected' : ''}`}
                               >
                                 <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
                               </button>
@@ -998,20 +999,20 @@ function App() {
                             <PenTool size={12} />
                             Proprietary Brief
                           </div>
-                          <span className={`${description.length > 700 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/800</span>
+                          <span className={`${description.length > DESCRIPTION_MAX_LENGTH - 250 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/{DESCRIPTION_MAX_LENGTH}</span>
                         </label>
                         <textarea
                           value={description}
                           onChange={(event) => setDescription(event.target.value)}
                           rows={6}
-                          maxLength={800}
-                          className="w-full rounded-[28px] border border-slate-200 bg-white/50 px-6 py-5 text-sm font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500/50 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-flare/40 dark:placeholder:text-slate-600"
+                          maxLength={DESCRIPTION_MAX_LENGTH}
+                          className="dashboard-field campaign-textarea w-full rounded-[28px] border border-slate-200 bg-white/50 px-6 py-5 text-sm font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500/50 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-flare/40 dark:placeholder:text-slate-600"
                           placeholder="Describe the product, target audience, and the problem you solve..."
                         />
                       </div>
 
                       <div className="pt-2">
-                        <button type="button" onClick={handleSubmit} disabled={submitting} className="group relative w-full overflow-hidden rounded-[24px] bg-slate-900 py-6 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+                        <button type="button" onClick={handleSubmit} disabled={submitting} className="dashboard-submit dashboard-action-btn dashboard-action-btn--primary group relative w-full overflow-hidden rounded-[24px] bg-slate-900 py-6 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
                           <div className="relative z-10 flex items-center justify-center gap-3">
                             {submitting ? <LoaderCircle className="animate-spin" size={20} /> : <Sparkles size={20} />}
                             <span>{submitting ? 'Creating Studio Magic...' : 'Generate Campaign'}</span>
@@ -1023,9 +1024,9 @@ function App() {
                   </section>
 
                   {/* RIGHT COLUMN: Studio Workspace */}
-                  <section className={`${shellCard} flex flex-col gap-8 bg-white/60 dark:bg-slate-950/40 backdrop-blur-2xl border-l border-slate-200 dark:border-white/5`}>
+                  <section className={`${shellCard} dashboard-workspace-card flex flex-col gap-8 bg-white/60 dark:bg-slate-950/40 backdrop-blur-2xl border-l border-slate-200 dark:border-white/5`}>
                     <div className="flex flex-col gap-6">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-6 dark:border-white/5">
+                      <div className="dashboard-workspace-head flex items-center justify-between border-b border-slate-100 pb-6 dark:border-white/5">
                         <div className="space-y-1.5">
                           <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                             Studio Workspace
@@ -1041,21 +1042,18 @@ function App() {
                             </span>
                           </div>
                         </div>
-                        <div className="h-10 w-10 rounded-full bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400">
+                        <div className="dashboard-workspace-icon flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-400 dark:bg-white/5">
                           <Layout size={20} />
                         </div>
                       </div>
 
-                      <div className="flex gap-1.5 p-1.5 rounded-2xl bg-slate-100/50 dark:bg-white/5">
+                      <div className="dashboard-tabs flex gap-1.5 rounded-2xl bg-slate-100/50 p-1.5 dark:bg-white/5">
                         {workspaceTabs.map((tab) => (
                           <button
                             key={tab.id}
                             type="button"
                             onClick={() => setActiveWorkspaceTab(tab.id)}
-                            className={`flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeWorkspaceTab === tab.id
-                                ? 'bg-white shadow-xl shadow-slate-200/50 text-slate-900 dark:bg-white/10 dark:shadow-none dark:text-white'
-                                : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
-                              }`}
+                            className={`dashboard-tab ${activeWorkspaceTab === tab.id ? 'active' : ''} flex-1 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all`}
                           >
                             {tab.label}
                           </button>
@@ -1076,7 +1074,7 @@ function App() {
                             {selectedJob ? (
                               <>
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                  <div className="p-6 rounded-[32px] bg-indigo-500/[0.03] border border-indigo-500/10 dark:bg-flare/[0.03] dark:border-flare/10">
+                                  <div className="dashboard-insight-card dashboard-insight-card--stage p-6 rounded-[32px] bg-indigo-500/[0.03] border border-indigo-500/10 dark:bg-flare/[0.03] dark:border-flare/10">
                                     <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-indigo-500 dark:text-flare opacity-60">
                                       <Activity size={14} />
                                       Production Stage
@@ -1086,7 +1084,7 @@ function App() {
                                     </div>
                                   </div>
 
-                                  <div className="p-6 rounded-[32px] bg-emerald-500/[0.03] border border-emerald-500/10 dark:bg-emerald-500/[0.06]">
+                                  <div className="dashboard-insight-card dashboard-insight-card--progress p-6 rounded-[32px] bg-emerald-500/[0.03] border border-emerald-500/10 dark:bg-emerald-500/[0.06]">
                                     <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-emerald-500 opacity-60">
                                       <Zap size={14} />
                                       Live Progress
@@ -1105,7 +1103,7 @@ function App() {
                                   </div>
                                 </div>
 
-                                <div className="p-8 rounded-[40px] bg-white border border-slate-200 shadow-sm dark:bg-white/[0.02] dark:border-white/5 space-y-6">
+                                <div className="dashboard-blueprint-card p-8 rounded-[40px] bg-white border border-slate-200 shadow-sm dark:bg-white/[0.02] dark:border-white/5 space-y-6">
                                   <div className="flex items-center justify-between border-b border-slate-50 pb-5 dark:border-white/5">
                                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content Blueprint</div>
                                     <div className="h-2 w-2 rounded-full bg-indigo-500 dark:bg-flare animate-pulse" />
@@ -1140,7 +1138,7 @@ function App() {
                                 </div>
                               </>
                             ) : (
-                              <div className="flex flex-col items-center justify-center py-24 text-center">
+                              <div className="dashboard-empty-state flex flex-col items-center justify-center py-24 text-center">
                                 <div className="relative mb-8">
                                   <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full animate-pulse dark:bg-flare/10" />
                                   <div className="relative p-8 rounded-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-200 dark:text-white/5">
@@ -1166,9 +1164,9 @@ function App() {
                           >
                             {selectedJob?.output?.preview?.url ? (
                               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                                <div className="relative group mx-auto w-full max-w-[360px]">
+                                <div className="dashboard-preview-stage relative group mx-auto w-full max-w-[360px]">
                                   <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
-                                  <div className="relative overflow-hidden rounded-[48px] border-[12px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
+                                  <div className="dashboard-preview-frame relative overflow-hidden rounded-[48px] border-[12px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
                                     <video
                                       ref={previewVideoRef}
                                       controls
@@ -1185,7 +1183,7 @@ function App() {
                                   </div>
                                 </div>
 
-                                <div className="p-8 rounded-[40px] bg-white text-slate-900 shadow-[0_20px_60px_rgba(99,102,241,0.12)] border border-slate-200 dark:bg-slate-900/50 dark:border-white/10 dark:shadow-[0_20px_60px_rgba(255,209,102,0.06)] dark:backdrop-blur-xl dark:text-white dark:border">
+                                <div className="dashboard-segment-card p-8 rounded-[40px] bg-white text-slate-900 shadow-[0_20px_60px_rgba(99,102,241,0.12)] border border-slate-200 dark:bg-slate-900/50 dark:border-white/10 dark:shadow-[0_20px_60px_rgba(255,209,102,0.06)] dark:backdrop-blur-xl dark:text-white dark:border">
                                   <div className="flex items-center justify-between mb-8">
                                     <div className="flex items-center gap-3">
                                       <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-white/10 dark:border-transparent">
@@ -1214,7 +1212,7 @@ function App() {
                                             setTrimStart(nextStart);
                                             setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
                                           }}
-                                          className="px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                          className="dashboard-pill-btn px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
                                         >
                                           Set from playhead
                                         </button>
@@ -1248,7 +1246,7 @@ function App() {
                                             const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
                                             setTrimEnd(nextEnd);
                                           }}
-                                          className="px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                          className="dashboard-pill-btn px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
                                         >
                                           Set from playhead
                                         </button>
@@ -1270,17 +1268,17 @@ function App() {
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-4 mt-10">
-                                    <button disabled={trimLoading} onClick={handleTrim} className="py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-flare dark:to-coral dark:text-slate-900 shadow-[0_8px_24px_rgba(99,102,241,0.35)] dark:shadow-[0_8px_24px_rgba(255,209,102,0.25)]">
+                                    <button disabled={trimLoading} onClick={handleTrim} className="dashboard-action-btn dashboard-action-btn--primary py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-flare dark:to-coral dark:text-slate-900 shadow-[0_8px_24px_rgba(99,102,241,0.35)] dark:shadow-[0_8px_24px_rgba(255,209,102,0.25)]">
                                       {trimLoading ? 'Processing...' : 'Export Clip'}
                                     </button>
-                                    <a href={selectedJob.output.video?.url} target="_blank" className="flex items-center justify-center gap-2 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/20 dark:hover:border-white/30 dark:hover:text-white">
+                                    <a href={selectedJob.output.video?.url} target="_blank" className="dashboard-action-btn dashboard-action-btn--secondary flex items-center justify-center gap-2 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/20 dark:hover:border-white/30 dark:hover:text-white">
                                       <Download size={16} />
                                       Full Master
                                     </a>
                                   </div>
 
                                   {selectedJob.output?.trim?.asset?.url ? (
-                                    <div className="mt-8 space-y-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+                                    <div className="dashboard-export-card mt-8 space-y-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/60">
                                           Latest exported clip
@@ -1289,7 +1287,7 @@ function App() {
                                           href={selectedJob.output.trim.asset.url}
                                           target="_blank"
                                           download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
-                                          className="inline-flex items-center gap-2 rounded-full bg-white border border-slate-200 px-4 py-2 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-50 hover:text-indigo-600 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                          className="dashboard-pill-btn inline-flex items-center gap-2 rounded-full bg-white border border-slate-200 px-4 py-2 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-50 hover:text-indigo-600 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
                                         >
                                           <Download size={14} />
                                           Download clip
@@ -1306,7 +1304,7 @@ function App() {
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400">
+                              <div className="dashboard-preview-empty flex flex-col items-center justify-center py-24 text-center text-slate-400">
                                 <motion.div
                                   animate={{ rotate: 360 }}
                                   transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
@@ -1337,10 +1335,7 @@ function App() {
                                   <button
                                     key={job._id}
                                     onClick={() => setSelectedJobId(job._id)}
-                                    className={`group relative flex items-center justify-between p-5 rounded-[28px] border transition-all duration-300 ${selectedJobId === job._id
-                                        ? 'border-indigo-500 bg-indigo-500/5 shadow-lg shadow-indigo-500/5 dark:border-flare/40 dark:bg-flare/5'
-                                        : 'border-slate-100 bg-white/40 hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-white/10'
-                                      }`}
+                                    className={`dashboard-history-item ${selectedJobId === job._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[28px] border p-5 transition-all duration-300`}
                                   >
                                     <div className="flex items-center gap-5 flex-1 min-w-0">
                                       <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
@@ -1360,7 +1355,7 @@ function App() {
                                               job.status === 'failed' ? 'text-rose-500' :
                                                 'text-indigo-500 dark:text-flare'
                                             }`}>
-                                            {job.status === 'completed' ? '✓ Ready' : job.status === 'failed' ? '✕ Failed' : `${job.progress}% Sync`}
+                                            {job.status === 'completed' ? 'Ready' : job.status === 'failed' ? 'Failed' : `${job.progress}% Sync`}
                                           </span>
                                         </div>
                                       </div>
@@ -1370,7 +1365,7 @@ function App() {
                                         <button
                                           type="button"
                                           onClick={(e) => { e.stopPropagation(); handleRegenerate(job); }}
-                                          className="px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-600 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all dark:bg-flare/10 dark:text-flare dark:hover:bg-flare dark:hover:text-slate-900"
+                                          className="dashboard-pill-btn px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-600 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all dark:bg-flare/10 dark:text-flare dark:hover:bg-flare dark:hover:text-slate-900"
                                         >
                                           Retry
                                         </button>
