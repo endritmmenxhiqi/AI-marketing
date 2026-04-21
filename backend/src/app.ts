@@ -9,9 +9,29 @@ const authRoutes = require(path.join(config.rootDir, 'src/routes/authRoutes.js')
 export const createApp = () => {
   const app = express();
 
+  const allowedOrigins = [config.frontendUrl, 'http://localhost:5173', 'http://localhost:5174'];
+  app.disable('x-powered-by');
+  app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : 0);
+
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    next();
+  });
+
   app.use(
     cors({
-      origin: config.frontendUrl
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1 || config.env === 'development') {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true
     })
   );
   app.use(express.json({ limit: '10mb' }));

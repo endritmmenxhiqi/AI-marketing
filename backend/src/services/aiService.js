@@ -1,8 +1,21 @@
 const OpenAI = require('openai');
 const config = require('../config');
 
+const defaultHeaders = {};
+if (config.openaiBaseUrl?.includes('openrouter.ai')) {
+  if (config.openaiSiteUrl) {
+    defaultHeaders['HTTP-Referer'] = config.openaiSiteUrl;
+  }
+
+  if (config.openaiAppName) {
+    defaultHeaders['X-Title'] = config.openaiAppName;
+  }
+}
+
 const openai = new OpenAI({
   apiKey: config.openaiApiKey,
+  baseURL: config.openaiBaseUrl,
+  defaultHeaders,
 });
 
 /**

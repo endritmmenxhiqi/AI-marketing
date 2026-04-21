@@ -76,6 +76,11 @@ const trimSchema = new Schema(
 
 const videoJobSchema = new Schema(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
     status: { type: String, default: 'queued', index: true },
     stage: { type: String, default: 'queued' },
     progress: { type: Number, default: 0 },

@@ -5,6 +5,9 @@ import { resetPassword } from '../lib/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 
+const passwordPolicyMessage =
+  'Password must be at least 10 characters and include uppercase, lowercase, number, and special character.';
+
 const ResetPasswordPage = () => {
   const { theme, toggleTheme } = useTheme();
   const { token } = useParams();
@@ -30,8 +33,16 @@ const ResetPasswordPage = () => {
       setError(t('errorRequired'));
       return;
     }
-    if (password.length < 6) {
-      setError(t('errorPassLength'));
+    if (
+      !(
+        password.length >= 10 &&
+        /[a-z]/.test(password) &&
+        /[A-Z]/.test(password) &&
+        /[0-9]/.test(password) &&
+        /[^a-zA-Z0-9]/.test(password)
+      )
+    ) {
+      setError(passwordPolicyMessage);
       return;
     }
     if (password !== confirmPassword) {
@@ -42,16 +53,11 @@ const ResetPasswordPage = () => {
     setLoading(true);
     try {
       const payload = await resetPassword(token, password);
-      
-      // If the backend returns a token and user after reset, we can log them in
+
+      // The backend now restores the session through a secure cookie.
       if (payload.token && payload.user) {
-        localStorage.setItem('token', payload.token);
-        localStorage.setItem('user_email', payload.user.email);
-        
-        // Use window.location.href to force a full reload and update App state
         window.location.href = '/';
       } else {
-        // Fallback: just go to login
         navigate('/');
       }
     } catch (err) {

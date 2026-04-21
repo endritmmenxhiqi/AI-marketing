@@ -52,7 +52,7 @@ export interface VideoJob {
   };
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
 
 export interface AuthUser {
   id: string;
@@ -60,13 +60,26 @@ export interface AuthUser {
   role: string;
 }
 
-const authHeaders = (): Record<string, string> => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+type ApiError = Error & { status?: number };
+
+const buildError = async (response: Response, fallbackMessage: string) => {
+  const payload = await response.json().catch(() => ({ message: fallbackMessage }));
+  const error = new Error(payload.message || fallbackMessage) as ApiError;
+  error.status = response.status;
+  return error;
 };
 
+const apiFetch = async (input: string, init: RequestInit = {}) =>
+  fetch(input, {
+    credentials: 'include',
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+    },
+  });
+
 export const loginUser = async (email: string, password: string) => {
-  const response = await fetch(`${API_BASE}/auth/login`, {
+  const response = await apiFetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -74,16 +87,15 @@ export const loginUser = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Login failed.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Login failed.');
+    throw await buildError(response, 'Login failed.');
   }
 
-  return payload as { token: string; user: AuthUser };
+  return (await response.json()) as { token: string; user: AuthUser };
 };
 
 export const registerUser = async (email: string, password: string) => {
-  const response = await fetch(`${API_BASE}/auth/register`, {
+  const response = await apiFetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -91,16 +103,37 @@ export const registerUser = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Registration failed.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Registration failed.');
+    throw await buildError(response, 'Registration failed.');
   }
 
-  return payload as { token: string; user: AuthUser };
+  return (await response.json()) as { token: string; user: AuthUser };
+};
+
+export const fetchCurrentUser = async () => {
+  const response = await apiFetch(`${API_BASE}/auth/me`);
+  if (!response.ok) {
+    throw await buildError(response, 'Failed to restore session.');
+  }
+
+  const payload = (await response.json()) as { user: AuthUser };
+  return payload.user;
+};
+
+export const logoutUser = async () => {
+  const response = await apiFetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw await buildError(response, 'Failed to log out.');
+  }
+
+  return response.json();
 };
 
 export const forgotPassword = async (email: string) => {
-  const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+  const response = await apiFetch(`${API_BASE}/auth/forgot-password`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -108,16 +141,15 @@ export const forgotPassword = async (email: string) => {
     body: JSON.stringify({ email }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Failed to send reset email.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Failed to send reset email.');
+    throw await buildError(response, 'Failed to send reset email.');
   }
 
-  return payload as { message: string };
+  return (await response.json()) as { message: string };
 };
 
 export const resetPassword = async (token: string, password: string) => {
-  const response = await fetch(`${API_BASE}/auth/reset-password/${token}`, {
+  const response = await apiFetch(`${API_BASE}/auth/reset-password/${token}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -125,12 +157,11 @@ export const resetPassword = async (token: string, password: string) => {
     body: JSON.stringify({ password }),
   });
 
-  const payload = await response.json().catch(() => ({ message: 'Failed to reset password.' }));
   if (!response.ok) {
-    throw new Error(payload.message || 'Failed to reset password.');
+    throw await buildError(response, 'Failed to reset password.');
   }
 
-  return payload as { message: string; user?: any; token?: string };
+  return (await response.json()) as { message: string; user?: AuthUser; token?: string };
 };
 
 export const createJob = async (payload: {
@@ -149,15 +180,13 @@ export const createJob = async (payload: {
   formData.append('style', payload.style);
   formData.append('enableStyleTransfer', String(payload.enableStyleTransfer));
 
-  const response = await fetch(`${API_BASE}/jobs`, {
+  const response = await apiFetch(`${API_BASE}/jobs`, {
     method: 'POST',
-    headers: authHeaders(),
     body: formData,
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to create job.' }));
-    throw new Error(error.message || 'Failed to create job.');
+    throw await buildError(response, 'Failed to create job.');
   }
 
   const payloadJson = await response.json();
@@ -165,40 +194,34 @@ export const createJob = async (payload: {
 };
 
 export const fetchJobs = async () => {
-  const response = await fetch(`${API_BASE}/jobs`, {
-    headers: authHeaders(),
-  });
+  const response = await apiFetch(`${API_BASE}/jobs`);
   if (!response.ok) {
-    throw new Error('Failed to fetch jobs.');
+    throw await buildError(response, 'Failed to fetch jobs.');
   }
   const payload = await response.json();
   return payload.data as VideoJob[];
 };
 
 export const fetchJob = async (jobId: string) => {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
-    headers: authHeaders(),
-  });
+  const response = await apiFetch(`${API_BASE}/jobs/${jobId}`);
   if (!response.ok) {
-    throw new Error('Failed to fetch job.');
+    throw await buildError(response, 'Failed to fetch job.');
   }
   const payload = await response.json();
   return payload.data as VideoJob;
 };
 
 export const trimJob = async (jobId: string, startSeconds: number, endSeconds: number) => {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}/trim`, {
+  const response = await apiFetch(`${API_BASE}/jobs/${jobId}/trim`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
     },
     body: JSON.stringify({ startSeconds, endSeconds }),
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to trim video.' }));
-    throw new Error(error.message || 'Failed to trim video.');
+    throw await buildError(response, 'Failed to trim video.');
   }
 
   const payload = await response.json();

@@ -12,6 +12,13 @@ const config = {
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   openaiApiKey: process.env.OPENAI_API_KEY,
+  openaiBaseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+  openaiSiteUrl:
+    process.env.OPENAI_SITE_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.APP_URL ||
+    `http://localhost:${process.env.PORT || 5000}`,
+  openaiAppName: process.env.OPENAI_APP_NAME || 'AI Marketing Studio',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   pexelsApiKey: process.env.PEXELS_API_KEY,
   deepgramApiKey: process.env.DEEPGRAM_API_KEY,

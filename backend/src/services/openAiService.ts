@@ -25,6 +25,26 @@ const blockedKeywordTokens = new Set([
 ]);
 
 const SCRIPT_PROMPT_VERSION = 'v4';
+const openAiChatCompletionsUrl = `${config.openAiBaseUrl}/chat/completions`;
+
+const getOpenAiHeaders = () => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${config.openAiApiKey}`
+  };
+
+  if (config.openAiBaseUrl.includes('openrouter.ai')) {
+    if (config.openAiSiteUrl) {
+      headers['HTTP-Referer'] = config.openAiSiteUrl;
+    }
+
+    if (config.openAiAppName) {
+      headers['X-Title'] = config.openAiAppName;
+    }
+  }
+
+  return headers;
+};
 
 const scriptSchema = {
   name: 'marketing_video_script',
@@ -201,12 +221,9 @@ export const generateScriptPackage = async (
             ].join(' ')
         : '';
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(openAiChatCompletionsUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.openAiApiKey}`
-    },
+    headers: getOpenAiHeaders(),
     body: JSON.stringify({
       model: config.openAiModel,
       temperature: 0.55,

@@ -9,7 +9,7 @@ export const useJobEvents = (
   useEffect(() => {
     if (!jobId || !enabled) return;
 
-    const source = new EventSource(getJobEventsUrl(jobId));
+    const source = new EventSource(getJobEventsUrl(jobId), { withCredentials: true });
     source.onmessage = (event) => {
       onMessage(JSON.parse(event.data));
     };

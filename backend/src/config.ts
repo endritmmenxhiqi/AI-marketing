@@ -21,6 +21,13 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || '',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   openAiApiKey: process.env.OPENAI_API_KEY || '',
+  openAiBaseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+  openAiSiteUrl:
+    process.env.OPENAI_SITE_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.APP_URL ||
+    `http://localhost:${process.env.PORT || 5000}`,
+  openAiAppName: process.env.OPENAI_APP_NAME || 'AI Marketing Studio',
   openAiModel: process.env.OPENAI_MODEL || 'gpt-4o',
   deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
   deepgramTtsModel: process.env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',

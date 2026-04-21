@@ -16,6 +16,8 @@ import { trimVideo } from './services/renderService';
 import { uploadAsset } from './services/storageService';
 import { processVideoJob } from './services/jobOrchestrator';
 import { localJobEvents } from './services/localEventBus';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { protect } = require('./middleware/authMiddleware');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -24,16 +26,16 @@ router.get('/health', (_req, res) => {
   res.json({ status: 'ok', project: 'AI Marketing Studio MVP' });
 });
 
-router.get('/jobs', async (_req, res, next) => {
+router.get('/jobs', protect, async (req, res, next) => {
   try {
-    const jobs = await VideoJob.find().sort({ createdAt: -1 }).limit(12).lean();
+    const jobs = await VideoJob.find({ userId: req.user!.userId }).sort({ createdAt: -1 }).limit(12).lean();
     res.json({ data: jobs });
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/jobs', upload.single('image'), async (req, res, next) => {
+router.post('/jobs', protect, upload.single('image'), async (req, res, next) => {
   try {
     const description = String(req.body.description || '').trim();
     const style = String(req.body.style || '').trim();
@@ -61,6 +63,7 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
     }
 
     const job = await VideoJob.create({
+      userId: req.user!.userId,
       description,
       productCategory,
       style,
@@ -126,9 +129,9 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
   }
 });
 
-router.get('/jobs/:jobId', async (req, res, next) => {
+router.get('/jobs/:jobId', protect, async (req, res, next) => {
   try {
-    const job = await VideoJob.findById(req.params.jobId).lean();
+    const job = await VideoJob.findOne({ _id: req.params.jobId, userId: req.user!.userId }).lean();
     if (!job) {
       res.status(404).json({ message: 'Job not found.' });
       return;
@@ -140,7 +143,7 @@ router.get('/jobs/:jobId', async (req, res, next) => {
   }
 });
 
-router.get('/jobs/:jobId/events', async (req, res, next) => {
+router.get('/jobs/:jobId/events', protect, async (req, res, next) => {
   const { jobId } = req.params;
   const subscriber =
     config.queueMode === 'bullmq'
@@ -150,7 +153,7 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
       : null;
 
   try {
-    const job = await VideoJob.findById(jobId).lean();
+    const job = await VideoJob.findOne({ _id: jobId, userId: req.user!.userId }).lean();
     if (!job) {
       res.status(404).json({ message: 'Job not found.' });
       return;
@@ -195,11 +198,11 @@ router.get('/jobs/:jobId/events', async (req, res, next) => {
   }
 });
 
-router.post('/jobs/:jobId/trim', async (req, res, next) => {
+router.post('/jobs/:jobId/trim', protect, async (req, res, next) => {
   try {
     const startSeconds = Number(req.body.startSeconds || 0);
     const endSeconds = Number(req.body.endSeconds || 0);
-    const job = await VideoJob.findById(req.params.jobId);
+    const job = await VideoJob.findOne({ _id: req.params.jobId, userId: req.user!.userId });
 
     if (!job || (!job.output?.video?.localPath && !job.output?.video?.url)) {
       res.status(404).json({ message: 'Rendered video not found for this job.' });
