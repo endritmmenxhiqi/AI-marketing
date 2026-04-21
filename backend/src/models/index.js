@@ -1,1 +1,7 @@
-// Entry point for backend models
+const User = require('./User');
+const Generation = require('./Generation');
+
+module.exports = {
+  User,
+  Generation,
+};

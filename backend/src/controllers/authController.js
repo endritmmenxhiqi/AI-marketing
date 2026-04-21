@@ -1,12 +1,19 @@
-const { registerUser, loginUser, getUserById, generateResetToken, resetPassword: resetPasswordService } = require('../services/authService');
+const {
+  registerUser,
+  loginUser,
+  getUserById,
+  generateResetToken,
+  resetPassword: resetPasswordService,
+} = require('../services/authService');
 const { sendResetEmail } = require('../services/emailService');
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const {
+  clearAuthCookie,
+  setAuthCookie,
+  validatePasswordStrength,
+} = require('../utils/authSecurity');
 
 /** Basic email format validation */
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
-
-// ─── Controllers ──────────────────────────────────────────────────────────────
 
 /**
  * POST /api/auth/register
@@ -21,11 +28,14 @@ const register = async (req, res, next) => {
     if (!isValidEmail(email)) {
       return res.status(400).json({ success: false, message: 'Please provide a valid email' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ success: false, message: passwordValidation.message });
     }
 
     const data = await registerUser(email, password);
+    setAuthCookie(res, data.token);
     return res.status(201).json({ success: true, ...data });
   } catch (err) {
     next(err);
@@ -44,6 +54,7 @@ const login = async (req, res, next) => {
     }
 
     const data = await loginUser(email, password);
+    setAuthCookie(res, data.token);
     return res.status(200).json({ success: true, ...data });
   } catch (err) {
     next(err);
@@ -73,18 +84,22 @@ const forgotPassword = async (req, res, next) => {
     }
 
     const resetToken = await generateResetToken(email);
+    if (resetToken) {
+      const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const base = frontendBase.replace(/\/$/, '');
+      const resetUrl = `${base}/reset-password/${resetToken}`;
 
-    const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const base = frontendBase.replace(/\/$/, '');
-    const resetUrl = `${base}/reset-password/${resetToken}`;
-
-    // Attempt to send email; if it fails, still return resetUrl for local testing
-    try {
-      const { previewUrl } = await sendResetEmail(email, resetUrl);
-      return res.status(200).json({ success: true, message: 'Reset email sent', resetUrl, previewUrl });
-    } catch (sendErr) {
-      return res.status(200).json({ success: true, message: 'Token generated (email send failed)', resetUrl, error: sendErr.message });
+      try {
+        await sendResetEmail(email, resetUrl);
+      } catch (_sendErr) {
+        // Keep the response generic so the endpoint does not reveal account state.
+      }
     }
+
+    return res.status(200).json({
+      success: true,
+      message: 'If an account exists for that email, a reset link will be sent shortly.',
+    });
   } catch (err) {
     next(err);
   }
@@ -96,15 +111,25 @@ const forgotPassword = async (req, res, next) => {
 const resetPassword = async (req, res, next) => {
   try {
     const { password } = req.body;
-    if (!password || password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ success: false, message: passwordValidation.message });
     }
 
     const data = await resetPasswordService(req.params.token, password);
+    setAuthCookie(res, data.token);
     return res.status(200).json({ success: true, message: 'Password reset successful', ...data });
   } catch (err) {
     next(err);
   }
 };
 
-module.exports = { register, login, getMe, forgotPassword, resetPassword };
+/**
+ * POST /api/auth/logout
+ */
+const logout = async (_req, res) => {
+  clearAuthCookie(res);
+  return res.status(200).json({ success: true, message: 'Logged out successfully' });
+};
+
+module.exports = { register, login, getMe, forgotPassword, resetPassword, logout };

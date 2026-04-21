@@ -9,7 +9,7 @@ const app = express();
 // ─── Core Middleware ───────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/generated', express.static(path.join(__dirname, '../public/generated')));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
