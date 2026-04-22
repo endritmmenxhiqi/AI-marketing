@@ -1,5 +1,27 @@
 const mongoose = require('mongoose');
 
+const contentPackageSchema = new mongoose.Schema(
+  {
+    socialCaption: {
+      type: String,
+      default: '',
+    },
+    hashtagSuggestions: {
+      type: [String],
+      default: [],
+    },
+    thumbnailText: {
+      type: String,
+      default: '',
+    },
+    shortAdCopy: {
+      type: String,
+      default: '',
+    },
+  },
+  { _id: false }
+);
+
 const generationSchema = new mongoose.Schema(
   {
     owner: {
@@ -67,6 +89,10 @@ const generationSchema = new mongoose.Schema(
       visualDirection: {
         type: String,
         default: '',
+      },
+      contentPackage: {
+        type: contentPackageSchema,
+        default: () => ({}),
       },
       mediaKeywords: {
         type: [String],

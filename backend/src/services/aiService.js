@@ -63,6 +63,14 @@ const normalizeMarketingOutput = (payload) => ({
   hashtags: Array.isArray(payload.hashtags)
     ? payload.hashtags.map((item) => String(item).trim()).filter(Boolean)
     : [],
+  contentPackage: {
+    socialCaption: String(payload.contentPackage?.socialCaption || '').trim(),
+    hashtagSuggestions: Array.isArray(payload.contentPackage?.hashtagSuggestions)
+      ? payload.contentPackage.hashtagSuggestions.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    thumbnailText: String(payload.contentPackage?.thumbnailText || '').trim(),
+    shortAdCopy: String(payload.contentPackage?.shortAdCopy || '').trim(),
+  },
   voiceoverScript: String(payload.voiceoverScript || '').trim(),
   onScreenText: Array.isArray(payload.onScreenText)
     ? payload.onScreenText.map((item) => String(item).trim()).filter(Boolean)
@@ -86,8 +94,10 @@ const generateMarketingContent = async ({
       'You are an expert AI marketing strategist for short-form social video.',
       'Return only valid JSON with these keys:',
       'caption, hashtags, voiceoverScript, onScreenText, visualDirection, mediaKeywords, callToAction.',
+      'Include a contentPackage object with socialCaption, hashtagSuggestions, thumbnailText, and shortAdCopy.',
       'caption and callToAction must be strings.',
       'hashtags, onScreenText, and mediaKeywords must be arrays of strings.',
+      'contentPackage.hashtagSuggestions must be an array of strings.',
       'voiceoverScript and visualDirection must be strings.',
       'Make the content practical for short-form video marketing.',
     ].join(' ');

@@ -120,6 +120,33 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
+const buildContentPackageExport = (job: VideoJob) => {
+  const contentPackage = job.script?.contentPackage;
+  const hashtags = contentPackage?.hashtagSuggestions?.length
+    ? contentPackage.hashtagSuggestions
+    : job.script?.hashtags || [];
+
+  return [
+    `Campaign: ${job.script?.title || job.style || 'Marketing content package'}`,
+    `Product: ${job.description || 'N/A'}`,
+    '',
+    'Social Caption',
+    contentPackage?.socialCaption || 'N/A',
+    '',
+    'Hashtag Suggestions',
+    hashtags.length ? hashtags.map((tag) => `#${String(tag).replace(/^#/, '')}`).join(' ') : 'N/A',
+    '',
+    'Thumbnail Text',
+    contentPackage?.thumbnailText || 'N/A',
+    '',
+    'Short Ad Copy',
+    contentPackage?.shortAdCopy || 'N/A',
+    '',
+    'Call to Action',
+    job.script?.cta || 'N/A',
+  ].join('\n');
+};
+
 const passwordPolicyMessage =
   'Password must be at least 10 characters and include uppercase, lowercase, number, and special character.';
 
@@ -543,6 +570,7 @@ function App() {
   const [trimLoading, setTrimLoading] = useState(false);
   const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'overview' | 'preview' | 'history'>('overview');
+  const [contentPackageNotice, setContentPackageNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -600,6 +628,10 @@ function App() {
     () => jobs.find((job) => job._id === selectedJobId) || null,
     [jobs, selectedJobId]
   );
+  const contentPackage = selectedJob?.script?.contentPackage;
+  const contentPackageHashtags = contentPackage?.hashtagSuggestions?.length
+    ? contentPackage.hashtagSuggestions
+    : selectedJob?.script?.hashtags || [];
   const firstName = auth.email.split('@')[0] || 'creator';
   const showStartupSplash = isAppLoading || isSessionLoading;
   const categoryLabel =
@@ -642,6 +674,10 @@ function App() {
 
   useEffect(() => {
     setPreviewDurationSeconds(0);
+  }, [selectedJobId]);
+
+  useEffect(() => {
+    setContentPackageNotice('');
   }, [selectedJobId]);
 
   useEffect(() => {
@@ -761,6 +797,32 @@ function App() {
       setError(nextError.message || 'Unable to trim the video.');
     } finally {
       setTrimLoading(false);
+    }
+  };
+
+  const handleDownloadContentPackage = () => {
+    if (!selectedJob) return;
+
+    const exportText = buildContentPackageExport(selectedJob);
+    const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+    const downloadUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.download = `${selectedJob.script?.title || 'content-package'}.txt`.replace(/[^a-z0-9._-]+/gi, '-');
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+    setContentPackageNotice('Content package downloaded.');
+  };
+
+  const handleCopyContentPackage = async () => {
+    if (!selectedJob) return;
+
+    try {
+      const exportText = buildContentPackageExport(selectedJob);
+      await navigator.clipboard.writeText(exportText);
+      setContentPackageNotice('Content package copied to clipboard.');
+    } catch {
+      setContentPackageNotice('Clipboard copy failed. Use Export TXT instead.');
     }
   };
 
@@ -1174,6 +1236,85 @@ function App() {
                                            <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
                                               {selectedJob.script?.cta}
                                            </p>
+                                        </div>
+                                      </div>
+
+                                      <div className="rounded-[28px] border border-slate-100 bg-slate-50/70 p-5 dark:border-white/5 dark:bg-white/[0.03]">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                          <div>
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                              Content Package
+                                            </div>
+                                            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                              Ready for captions, thumbnails, and ad variations.
+                                            </p>
+                                          </div>
+                                          <div className="flex flex-wrap gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => void handleCopyContentPackage()}
+                                              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:border-flare/30 dark:hover:text-flare"
+                                            >
+                                              <Copy size={14} />
+                                              Copy
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={handleDownloadContentPackage}
+                                              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-indigo-500 dark:bg-flare dark:text-slate-900"
+                                            >
+                                              <Download size={14} />
+                                              Export TXT
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {contentPackageNotice && (
+                                          <div className="mt-3 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                            {contentPackageNotice}
+                                          </div>
+                                        )}
+
+                                        <div className="mt-4 grid gap-4">
+                                          <div className="space-y-2">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Social Caption</span>
+                                            <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                                              {contentPackage?.socialCaption || 'Generating after the video finishes.'}
+                                            </p>
+                                          </div>
+
+                                          <div className="space-y-2">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Hashtag Suggestions</span>
+                                            <div className="flex flex-wrap gap-2">
+                                              {contentPackageHashtags.length ? (
+                                                contentPackageHashtags.map((tag) => (
+                                                  <span
+                                                    key={tag}
+                                                    className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 shadow-sm dark:bg-white/5 dark:text-slate-300"
+                                                  >
+                                                    #{String(tag).replace(/^#/, '')}
+                                                  </span>
+                                                ))
+                                              ) : (
+                                                <span className="text-sm text-slate-500 dark:text-slate-400">Generating hashtag suggestions.</span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          <div className="grid gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Thumbnail Text</span>
+                                              <p className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm dark:bg-white/5 dark:text-white">
+                                                {contentPackage?.thumbnailText || 'Generating thumbnail text.'}
+                                              </p>
+                                            </div>
+                                            <div className="space-y-2">
+                                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Short Ad Copy</span>
+                                              <p className="rounded-2xl bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-300">
+                                                {contentPackage?.shortAdCopy || 'Generating short ad copy.'}
+                                              </p>
+                                            </div>
+                                          </div>
                                         </div>
                                       </div>
                                     </div>

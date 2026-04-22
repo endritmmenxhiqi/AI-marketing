@@ -16,6 +16,13 @@ export interface JobScene {
   };
 }
 
+export interface ContentPackage {
+  socialCaption?: string;
+  hashtagSuggestions?: string[];
+  thumbnailText?: string;
+  shortAdCopy?: string;
+}
+
 export interface VideoJob {
   _id: string;
   status: 'queued' | 'processing' | 'completed' | 'failed';
@@ -34,6 +41,7 @@ export interface VideoJob {
     hook?: string;
     cta?: string;
     hashtags?: string[];
+    contentPackage?: ContentPackage;
     scenes?: JobScene[];
   };
   output?: {

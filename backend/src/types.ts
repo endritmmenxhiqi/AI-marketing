@@ -24,6 +24,13 @@ export interface ScriptScene {
   imagePrompt: string;
 }
 
+export interface ContentPackage {
+  socialCaption: string;
+  hashtagSuggestions: string[];
+  thumbnailText: string;
+  shortAdCopy: string;
+}
+
 export interface ScriptPackage {
   title: string;
   hook: string;
@@ -31,6 +38,7 @@ export interface ScriptPackage {
   hashtags: string[];
   musicMood: string;
   scenes: ScriptScene[];
+  contentPackage: ContentPackage;
 }
 
 export interface MediaCandidate {

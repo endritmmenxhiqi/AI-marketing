@@ -37,6 +37,16 @@ const captionCueSchema = new Schema(
   { _id: false }
 );
 
+const contentPackageSchema = new Schema(
+  {
+    socialCaption: String,
+    hashtagSuggestions: [String],
+    thumbnailText: String,
+    shortAdCopy: String,
+  },
+  { _id: false }
+);
+
 const sceneSchema = new Schema(
   {
     sceneNumber: Number,
@@ -98,6 +108,7 @@ const videoJobSchema = new Schema(
       cta: String,
       hashtags: [String],
       musicMood: String,
+      contentPackage: contentPackageSchema,
       scenes: [sceneSchema],
     },
     output: {
