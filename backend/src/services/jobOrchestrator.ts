@@ -12,7 +12,9 @@ import { renderMarketingVideo } from './renderService';
 import { uploadAsset } from './storageService';
 import { selectBackgroundMusic } from './musicService';
 import { config } from '../config';
+import { mapWithConcurrency } from '../utils/async';
 import { ensureDir, relativeFrom } from '../utils/files';
+import { mergeJobMetadata } from '../utils/jobMetadata';
 
 const TARGET_ASPECT_RATIO = 9 / 16;
 const genericQueryTokens = new Set([
@@ -30,7 +32,52 @@ const genericQueryTokens = new Set([
   'success',
   'technology'
 ]);
+const querySignatureNoiseTokens = new Set([
+  ...genericQueryTokens,
+  'action',
+  'atmosphere',
+  'cinematic',
+  'close',
+  'crowd',
+  'detail',
+  'details',
+  'dramatic',
+  'elegant',
+  'exterior',
+  'hero',
+  'high',
+  'interior',
+  'lifestyle',
+  'lighting',
+  'luxury',
+  'macro',
+  'modern',
+  'motion',
+  'person',
+  'people',
+  'portrait',
+  'premium',
+  'ready',
+  'resolution',
+  'scene',
+  'shot',
+  'slow',
+  'vertical',
+  'video',
+  'wide'
+]);
 const foodMismatchTokens = new Set(['cake', 'cream', 'cupcake', 'frosting', 'icing', 'whipped']);
+const beverageMismatchTokens = new Set([
+  'beer',
+  'breakfast',
+  'coffee',
+  'cocktail',
+  'dessert',
+  'meal',
+  'office',
+  'smoothie',
+  'wine'
+]);
 const perfumeMismatchTokens = new Set([
   'app',
   'computer',
@@ -47,7 +94,40 @@ const perfumeMismatchTokens = new Set([
   'smartphone',
   'workout'
 ]);
+const homeLifestyleMismatchTokens = new Set([
+  'apartment',
+  'basement',
+  'business',
+  'car',
+  'conference',
+  'desk',
+  'hotel',
+  'meeting',
+  'office',
+  'podcast',
+  'showroom',
+  'small',
+  'warehouse',
+  'worker'
+]);
 const fitnessMismatchTokens = new Set(['conversation', 'desk', 'interview', 'meeting', 'office', 'podcast', 'talking']);
+const fashionMismatchTokens = new Set([
+  'balloon',
+  'bridal',
+  'business',
+  'car',
+  'conference',
+  'desk',
+  'engagement',
+  'hotel',
+  'meeting',
+  'office',
+  'podcast',
+  'proposal',
+  'showroom',
+  'valentine',
+  'wedding'
+]);
 const footballMismatchTokens = new Set(['nfl', 'touchdown', 'quarterback', 'superbowl', 'helmet', 'american']);
 const esportsMismatchTokens = new Set([
   'business',
@@ -103,6 +183,37 @@ type MediaStrategy = {
   minimumVideoSeconds: number;
   useHeroUploadForFirstScene: boolean;
   useHeroUploadForLastScene: boolean;
+};
+
+type JobPerformanceTimings = {
+  scriptMs?: number;
+  voiceMs?: number;
+  mediaMs?: number;
+  renderMs?: number;
+  uploadMs?: number;
+};
+
+type PreparedSceneMedia = {
+  scene: ScriptScene;
+  mediaSearchScene: ScriptScene;
+  productImagePath: string;
+  style: string;
+  productCategory: string;
+  description: string;
+  sceneDir: string;
+  allowStyleTransfer: boolean;
+  targetDuration: number;
+  sceneIndex: number;
+  sceneCount: number;
+  strategy: MediaStrategy;
+  candidates: MediaCandidate[];
+  fixedMedia?: MediaCandidate;
+};
+
+type MediaSelectionState = {
+  usedMediaKeys: Set<string>;
+  usedQuerySignatures: string[][];
+  usedCreatorKeys: Map<string, number>;
 };
 
 const isEsportsBrief = (description: string, productCategory: string) => {
@@ -200,8 +311,23 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       requireAnchorMatch: false,
       minimumVideoDurationRatio: 0.8,
       minimumVideoSeconds: 5,
-      useHeroUploadForFirstScene: false,
+      useHeroUploadForFirstScene: true,
       useHeroUploadForLastScene: false
+    };
+  }
+
+  if (productCategory === 'beverages-energy-drinks') {
+    return {
+      anchors: descriptionTokens.filter((token) =>
+        ['beverage', 'can', 'cold', 'condensation', 'drink', 'energy', 'fizz', 'ice', 'refreshment'].includes(token)
+      ),
+      avoidTokens: Array.from(beverageMismatchTokens),
+      preferStillImages: false,
+      requireAnchorMatch: false,
+      minimumVideoDurationRatio: 0.82,
+      minimumVideoSeconds: 4,
+      useHeroUploadForFirstScene: true,
+      useHeroUploadForLastScene: true
     };
   }
 
@@ -251,6 +377,95 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       requireAnchorMatch: false,
       minimumVideoDurationRatio: 0.82,
       minimumVideoSeconds: 5,
+      useHeroUploadForFirstScene: true,
+      useHeroUploadForLastScene: false
+    };
+  }
+
+  if (productCategory === 'fashion-accessories') {
+    const footwearBrief = descriptionTokens.some((token) =>
+      ['footwear', 'run', 'running', 'shoe', 'shoes', 'sneaker', 'sneakers', 'trainer', 'trainers'].includes(token)
+    );
+
+    return {
+      anchors: Array.from(
+        new Set([
+          ...descriptionTokens.filter((token) =>
+            [
+              'accessory',
+              'athletic',
+              'fashion',
+              'footwear',
+              'laces',
+              'luxury',
+              'outfit',
+              'run',
+              'running',
+              'shoe',
+              'shoes',
+              'sneaker',
+              'sneakers',
+              'streetwear',
+              'style',
+              'trainer',
+              'trainers',
+              'walking'
+            ].includes(token)
+          ),
+          ...(footwearBrief ? ['sneaker', 'shoe', 'footwear'] : ['fashion', 'style', 'accessory'])
+        ])
+      ),
+      avoidTokens: Array.from(fashionMismatchTokens),
+      preferStillImages: false,
+      requireAnchorMatch: footwearBrief,
+      minimumVideoDurationRatio: 0.82,
+      minimumVideoSeconds: 4,
+      useHeroUploadForFirstScene: true,
+      useHeroUploadForLastScene: true
+    };
+  }
+
+  if (productCategory === 'home-lifestyle') {
+    return {
+      anchors: Array.from(
+        new Set([
+          ...descriptionTokens.filter((token) =>
+            [
+              'architecture',
+              'estate',
+              'exterior',
+              'field',
+              'football',
+              'garden',
+              'grass',
+              'gym',
+              'home',
+              'house',
+              'interior',
+              'lifestyle',
+              'lawn',
+              'luxury',
+              'mansion',
+              'pitch',
+              'premium',
+              'property',
+              'real',
+              'soccer',
+              'villa'
+            ].includes(token)
+          ),
+          'luxury',
+          'villa',
+          'estate',
+          'mansion',
+          'interior'
+        ])
+      ),
+      avoidTokens: Array.from(homeLifestyleMismatchTokens),
+      preferStillImages: false,
+      requireAnchorMatch: true,
+      minimumVideoDurationRatio: 0.82,
+      minimumVideoSeconds: 5,
       useHeroUploadForFirstScene: false,
       useHeroUploadForLastScene: false
     };
@@ -291,7 +506,7 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       requireAnchorMatch: false,
       minimumVideoDurationRatio: 0.82,
       minimumVideoSeconds: 4,
-      useHeroUploadForFirstScene: false,
+      useHeroUploadForFirstScene: true,
       useHeroUploadForLastScene: false
     };
   }
@@ -319,7 +534,7 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
       requireAnchorMatch: false,
       minimumVideoDurationRatio: 0.8,
       minimumVideoSeconds: 4,
-      useHeroUploadForFirstScene: false,
+      useHeroUploadForFirstScene: true,
       useHeroUploadForLastScene: false
     };
   }
@@ -331,7 +546,7 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
     requireAnchorMatch: false,
     minimumVideoDurationRatio: 0.75,
     minimumVideoSeconds: 4,
-    useHeroUploadForFirstScene: false,
+    useHeroUploadForFirstScene: true,
     useHeroUploadForLastScene: false
   };
 };
@@ -376,10 +591,15 @@ const scoreCandidate = ({
   ).length;
   const aspect = candidate.width / Math.max(candidate.height, 1);
   const aspectScore = Math.max(0, 2.6 - Math.abs(aspect - TARGET_ASPECT_RATIO) * 4.5);
+  const pixelCount = candidate.width * candidate.height;
   const resolutionScore =
-    candidate.width * candidate.height >= 1080 * 1920
+    pixelCount >= 3840 * 2160
+      ? 2.7
+      : pixelCount >= 2560 * 1440
+        ? 2.1
+        : pixelCount >= 1080 * 1920
       ? 1.5
-      : candidate.width * candidate.height >= 720 * 1280
+      : pixelCount >= 720 * 1280
         ? 1
         : 0.4;
 
@@ -466,17 +686,203 @@ const buildSelectionReason = ({
   targetDuration: number;
 }) => {
   if (candidate.kind === 'video') {
+    const pixelCount = candidate.width * candidate.height;
+    const qualityDescriptor =
+      pixelCount >= 3840 * 2160
+        ? 'ultra-high-resolution'
+        : pixelCount >= 2560 * 1440
+          ? 'high-resolution'
+          : 'scene-ready';
+
     if ((candidate.duration || 0) >= targetDuration) {
-      return `Selected a video match with better vertical framing and enough duration for the ${targetDuration.toFixed(1)}s scene.`;
+      return `Selected a ${qualityDescriptor} video match with better vertical framing and enough duration for the ${targetDuration.toFixed(1)}s scene.`;
     }
 
-    return `Selected the strongest available video match and will hold the ending frame instead of looping it. Score ${score.toFixed(1)}.`;
+    return `Selected the strongest ${qualityDescriptor} video match and will hold the ending frame instead of looping it. Score ${score.toFixed(1)}.`;
   }
 
   return `Selected a still image because it matched the brief better than the available video clips. Score ${score.toFixed(1)}.`;
 };
 
-const chooseMedia = async ({
+const estimateVoiceDurationSeconds = (text: string) => {
+  const words = text
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean).length;
+
+  return Math.max(3.2, Number((words * 0.42).toFixed(2)));
+};
+
+const buildQuerySignature = (value: string) =>
+  Array.from(new Set(tokenize(value).filter((token) => !querySignatureNoiseTokens.has(token)))).slice(0, 8);
+
+const extractCreatorKey = (candidate: MediaCandidate) =>
+  String(candidate.attribution || '')
+    .toLowerCase()
+    .replace(/^pexels\s*\/\s*/i, '')
+    .trim();
+
+const jaccardSimilarity = (left: string[], right: string[]) => {
+  if (!left.length || !right.length) {
+    return 0;
+  }
+
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  const intersection = [...leftSet].filter((token) => rightSet.has(token)).length;
+  const union = new Set([...left, ...right]).size;
+  return union ? intersection / union : 0;
+};
+
+const scoreDiversityAdjustment = ({
+  candidate,
+  selectionState
+}: {
+  candidate: MediaCandidate;
+  selectionState: MediaSelectionState;
+}) => {
+  const signature = buildQuerySignature(candidate.query);
+  const maxSimilarity = selectionState.usedQuerySignatures.reduce((highest, priorSignature) => {
+    return Math.max(highest, jaccardSimilarity(signature, priorSignature));
+  }, 0);
+
+  let adjustment = 0;
+  if (maxSimilarity >= 0.8) {
+    adjustment -= 3.2;
+  } else if (maxSimilarity >= 0.62) {
+    adjustment -= 1.9;
+  } else if (maxSimilarity >= 0.45) {
+    adjustment -= 0.9;
+  } else if (selectionState.usedQuerySignatures.length > 0 && maxSimilarity <= 0.2) {
+    adjustment += 0.55;
+  }
+
+  const creatorKey = extractCreatorKey(candidate);
+  if (creatorKey && selectionState.usedCreatorKeys.has(creatorKey)) {
+    adjustment -= 0.65;
+  }
+
+  return Number(adjustment.toFixed(2));
+};
+
+const getMaxSignatureSimilarity = ({
+  signature,
+  selectionState
+}: {
+  signature: string[];
+  selectionState: MediaSelectionState;
+}) =>
+  selectionState.usedQuerySignatures.reduce((highest, priorSignature) => {
+    return Math.max(highest, jaccardSimilarity(signature, priorSignature));
+  }, 0);
+
+const shouldSkipNearDuplicateOption = ({
+  option,
+  ranked,
+  selectionState
+}: {
+  option: { candidate: MediaCandidate; score: number };
+  ranked: Array<{ candidate: MediaCandidate; score: number }>;
+  selectionState: MediaSelectionState;
+}) => {
+  if (!selectionState.usedQuerySignatures.length) {
+    return false;
+  }
+
+  const signature = buildQuerySignature(option.candidate.query);
+  if (!signature.length) {
+    return false;
+  }
+
+  const maxSimilarity = getMaxSignatureSimilarity({
+    signature,
+    selectionState
+  });
+  if (maxSimilarity < 0.78) {
+    return false;
+  }
+
+  const bestDistinctAlternative = ranked.find((candidateOption) => {
+    if (candidateOption.candidate.externalId === option.candidate.externalId) {
+      return false;
+    }
+
+    const alternativeSignature = buildQuerySignature(candidateOption.candidate.query);
+    if (!alternativeSignature.length) {
+      return false;
+    }
+
+    return (
+      getMaxSignatureSimilarity({
+        signature: alternativeSignature,
+        selectionState
+      }) <= 0.42
+    );
+  });
+
+  if (!bestDistinctAlternative) {
+    return false;
+  }
+
+  const scoreGap = Number((option.score - bestDistinctAlternative.score).toFixed(2));
+  return maxSimilarity >= 0.9 ? scoreGap < 2.4 : scoreGap < 1.15;
+};
+
+const reserveSelection = (selectionState: MediaSelectionState, candidate: MediaCandidate) => {
+  const mediaKey = candidate.externalId || candidate.url;
+  if (!mediaKey) {
+    return () => undefined;
+  }
+
+  if (selectionState.usedMediaKeys.has(mediaKey)) {
+    return null;
+  }
+
+  selectionState.usedMediaKeys.add(mediaKey);
+  const signature = buildQuerySignature(candidate.query);
+  const creatorKey = extractCreatorKey(candidate);
+  selectionState.usedQuerySignatures.push(signature);
+  if (creatorKey) {
+    selectionState.usedCreatorKeys.set(creatorKey, (selectionState.usedCreatorKeys.get(creatorKey) || 0) + 1);
+  }
+
+  return () => {
+    selectionState.usedMediaKeys.delete(mediaKey);
+    const signatureIndex = selectionState.usedQuerySignatures.findIndex(
+      (item) => item.join('|') === signature.join('|')
+    );
+    if (signatureIndex >= 0) {
+      selectionState.usedQuerySignatures.splice(signatureIndex, 1);
+    }
+    if (creatorKey) {
+      const nextCount = (selectionState.usedCreatorKeys.get(creatorKey) || 1) - 1;
+      if (nextCount <= 0) {
+        selectionState.usedCreatorKeys.delete(creatorKey);
+      } else {
+        selectionState.usedCreatorKeys.set(creatorKey, nextCount);
+      }
+    }
+  };
+};
+
+const registerFixedMediaSelection = (selectionState: MediaSelectionState, media: MediaCandidate) => {
+  const mediaKey = media.externalId || media.url;
+  if (mediaKey) {
+    selectionState.usedMediaKeys.add(mediaKey);
+  }
+
+  const signature = buildQuerySignature(media.query);
+  if (signature.length) {
+    selectionState.usedQuerySignatures.push(signature);
+  }
+
+  const creatorKey = extractCreatorKey(media);
+  if (creatorKey) {
+    selectionState.usedCreatorKeys.set(creatorKey, (selectionState.usedCreatorKeys.get(creatorKey) || 0) + 1);
+  }
+};
+
+const prepareSceneMedia = async ({
   scene,
   productImagePath,
   style,
@@ -487,7 +893,6 @@ const chooseMedia = async ({
   targetDuration,
   sceneIndex,
   sceneCount,
-  usedMediaKeys
 }: {
   scene: ScriptScene;
   productImagePath: string;
@@ -499,8 +904,7 @@ const chooseMedia = async ({
   targetDuration: number;
   sceneIndex: number;
   sceneCount: number;
-  usedMediaKeys: Set<string>;
-}): Promise<MediaCandidate> => {
+}): Promise<PreparedSceneMedia> => {
   const strategy = buildMediaStrategy(description, productCategory);
   const perfumeUploadLocked = isPerfumeUploadLocked(productCategory, productImagePath);
   const perfumeProductScene = perfumeUploadLocked && isPerfumeProductScene(scene);
@@ -509,19 +913,49 @@ const chooseMedia = async ({
     ((strategy.useHeroUploadForFirstScene && sceneIndex === 0) ||
       (strategy.useHeroUploadForLastScene && sceneIndex === sceneCount - 1))
   ) {
-    return createUploadFallback(
+    return {
+      scene,
+      mediaSearchScene: scene,
       productImagePath,
-      sceneIndex === 0
-        ? 'Used the uploaded product image to open with a product-faithful hero scene.'
-        : 'Used the uploaded product image to close with a clear product-and-CTA hero shot.'
-    );
+      style,
+      productCategory,
+      description,
+      sceneDir,
+      allowStyleTransfer,
+      targetDuration,
+      sceneIndex,
+      sceneCount,
+      strategy,
+      candidates: [],
+      fixedMedia: createUploadFallback(
+        productImagePath,
+        sceneIndex === 0
+          ? 'Used the uploaded product image to open with a product-faithful hero scene.'
+          : 'Used the uploaded product image to close with a clear product-and-CTA hero shot.'
+      )
+    };
   }
 
   if (perfumeProductScene) {
-    return createUploadFallback(
+    return {
+      scene,
+      mediaSearchScene: scene,
       productImagePath,
-      'Locked this perfume product scene to the uploaded bottle so competing fragrance products never replace it.'
-    );
+      style,
+      productCategory,
+      description,
+      sceneDir,
+      allowStyleTransfer,
+      targetDuration,
+      sceneIndex,
+      sceneCount,
+      strategy,
+      candidates: [],
+      fixedMedia: createUploadFallback(
+        productImagePath,
+        'Locked this perfume product scene to the uploaded bottle so competing fragrance products never replace it.'
+      )
+    };
   }
 
   const mediaSearchScene =
@@ -530,20 +964,71 @@ const chooseMedia = async ({
     perfumeUploadLocked && !perfumeProductScene ? 'perfume-support' : 'default';
   const candidates = await findSceneMedia(mediaSearchScene, productCategory, description, searchMode);
 
+  return {
+    scene,
+    mediaSearchScene,
+    productImagePath,
+    style,
+    productCategory,
+    description,
+    sceneDir,
+    allowStyleTransfer,
+    targetDuration,
+    sceneIndex,
+    sceneCount,
+    strategy,
+    candidates
+  };
+};
+
+const finalizePreparedMedia = async (
+  prepared: PreparedSceneMedia,
+  selectionState: MediaSelectionState
+): Promise<MediaCandidate> => {
+  const {
+    scene,
+    mediaSearchScene,
+    productImagePath,
+    style,
+    productCategory,
+    description,
+    sceneDir,
+    allowStyleTransfer,
+    targetDuration,
+    strategy,
+    candidates,
+    fixedMedia
+  } = prepared;
+
+  if (fixedMedia) {
+    registerFixedMediaSelection(selectionState, fixedMedia);
+    return fixedMedia;
+  }
+
   if (candidates.length >= 1) {
     const ranked = [...candidates]
-      .filter((candidate) => !usedMediaKeys.has(candidate.externalId || candidate.url))
-      .map((candidate) => ({
-        candidate,
-        score: scoreCandidate({
+      .filter((candidate) => !selectionState.usedMediaKeys.has(candidate.externalId || candidate.url))
+      .map((candidate) => {
+        const baseScore = scoreCandidate({
           candidate,
           scene: mediaSearchScene,
           productCategory,
           targetDuration,
           description,
           strategy
-        })
-      }))
+        });
+        const diversityAdjustment = scoreDiversityAdjustment({
+          candidate,
+          selectionState
+        });
+
+        return {
+          candidate,
+          baseScore,
+          diversityAdjustment,
+          score: Number((baseScore + diversityAdjustment).toFixed(2))
+        };
+      })
       .sort((left, right) => right.score - left.score);
 
     const imageOption = ranked.find((item) => item.candidate.kind !== 'video');
@@ -560,47 +1045,90 @@ const chooseMedia = async ({
       })
         ? imageOption
         : best;
-    if (preferred && preferred.score >= 4.4) {
-      const selected = preferred.candidate;
-      const extension = selected.kind === 'video' ? 'mp4' : 'jpg';
-      const localPath = await downloadToFile({
-        url: selected.url,
-        outputDir: sceneDir,
-        label: `${scene.sceneNumber}-${selected.kind}`,
-        extension
-      });
 
-      return {
-        ...selected,
-        localPath,
-        selectionScore: preferred.score,
-        selectionReason: buildSelectionReason({
-          candidate: selected,
-          score: preferred.score,
-          targetDuration
-        })
-      } satisfies MediaCandidate;
+    const rankedSelections =
+      preferred && best && preferred.candidate.externalId !== best.candidate.externalId
+        ? [preferred, ...ranked.filter((item) => item.candidate.externalId !== preferred.candidate.externalId)]
+        : ranked;
+
+    for (const option of rankedSelections) {
+      if (option.score < 4.4 && productImagePath) {
+        continue;
+      }
+      if (shouldSkipNearDuplicateOption({ option, ranked: rankedSelections, selectionState })) {
+        continue;
+      }
+
+      const selected = option.candidate;
+      const releaseReservation = reserveSelection(selectionState, selected);
+      if (releaseReservation === null) {
+        continue;
+      }
+
+      try {
+        const extension = selected.kind === 'video' ? 'mp4' : 'jpg';
+        const localPath = await downloadToFile({
+          url: selected.url,
+          outputDir: sceneDir,
+          label: `${scene.sceneNumber}-${selected.kind}`,
+          extension
+        });
+
+        return {
+          ...selected,
+          localPath,
+          selectionScore: option.score,
+          selectionReason: buildSelectionReason({
+            candidate: selected,
+            score: option.score,
+            targetDuration
+          })
+        } satisfies MediaCandidate;
+      } catch (error) {
+        releaseReservation?.();
+        if (option === rankedSelections[rankedSelections.length - 1]) {
+          throw error;
+        }
+      }
     }
 
     if (!productImagePath && best) {
-      const selected = best.candidate;
-      const extension = selected.kind === 'video' ? 'mp4' : 'jpg';
-      const localPath = await downloadToFile({
-        url: selected.url,
-        outputDir: sceneDir,
-        label: `${scene.sceneNumber}-${selected.kind}`,
-        extension
-      });
+      for (const option of ranked) {
+        if (shouldSkipNearDuplicateOption({ option, ranked, selectionState })) {
+          continue;
+        }
 
-      return {
-        ...selected,
-        localPath,
-        selectionScore: best.score,
-        selectionReason:
-          best.score >= 0
-            ? 'Used the strongest stock match because no product image was uploaded for this scene.'
-            : 'Used the least-wrong stock match because no product image was uploaded for this scene.'
-      } satisfies MediaCandidate;
+        const selected = option.candidate;
+        const releaseReservation = reserveSelection(selectionState, selected);
+        if (releaseReservation === null) {
+          continue;
+        }
+
+        try {
+          const extension = selected.kind === 'video' ? 'mp4' : 'jpg';
+          const localPath = await downloadToFile({
+            url: selected.url,
+            outputDir: sceneDir,
+            label: `${scene.sceneNumber}-${selected.kind}`,
+            extension
+          });
+
+          return {
+            ...selected,
+            localPath,
+            selectionScore: option.score,
+            selectionReason:
+              option.score >= 0
+                ? 'Used the strongest stock match because no product image was uploaded for this scene.'
+                : 'Used the least-wrong stock match because no product image was uploaded for this scene.'
+          } satisfies MediaCandidate;
+        } catch (error) {
+          releaseReservation?.();
+          if (option === ranked[ranked.length - 1]) {
+            throw error;
+          }
+        }
+      }
     }
   }
 
@@ -663,6 +1191,8 @@ export const processVideoJob = async (jobId: string) => {
 
   const jobDir = path.join(config.workingDir, String(videoJob._id));
   await ensureDir(jobDir);
+  const jobStartedAt = Date.now();
+  const phaseTimings: JobPerformanceTimings = {};
 
   await publishJobProgress(String(videoJob._id), {
     status: 'processing',
@@ -671,69 +1201,100 @@ export const processVideoJob = async (jobId: string) => {
     message: 'Writing a conversion-focused script...'
   });
 
+  const scriptStartedAt = Date.now();
   const script = await generateScriptPackage(
     videoJob.description,
     videoJob.style,
     videoJob.productCategory || 'general-product'
   );
+  phaseTimings.scriptMs = Date.now() - scriptStartedAt;
   videoJob.script = script;
-  videoJob.metadata = {
-    ...(videoJob.metadata || {}),
+  videoJob.metadata = mergeJobMetadata(videoJob.metadata, {
     jobFolder: jobDir,
     sceneCount: script.scenes.length,
     startedAt: new Date()
-  };
+  });
   await videoJob.save();
 
   await publishJobProgress(String(videoJob._id), {
     status: 'processing',
     stage: 'generating-voice',
     progress: 34,
-    message: 'Generating Deepgram voiceover and timings...'
+    message: 'Generating voice and sourcing premium media in parallel...'
   });
 
-  const voiceSegments = await generateVoiceSegments({
+  let completedMediaSelections = 0;
+  const estimatedDurations = script.scenes.map((scene) => estimateVoiceDurationSeconds(scene.voiceover));
+
+  const voiceStartedAt = Date.now();
+  const voicePromise = generateVoiceSegments({
     texts: script.scenes.map((scene) => scene.voiceover),
     workingDir: path.join(jobDir, 'voice')
+  }).then((segments) => {
+    phaseTimings.voiceMs = Date.now() - voiceStartedAt;
+    return segments;
   });
 
-  await publishJobProgress(String(videoJob._id), {
-    status: 'processing',
-    stage: 'finding-media',
-    progress: 58,
-    message: 'Selecting stronger media for each scene...'
-  });
+  const mediaStartedAt = Date.now();
+  const mediaPromise = mapWithConcurrency(
+    script.scenes,
+    config.mediaSelectionConcurrency,
+    async (scene, index) => {
+      const sceneDir = path.join(jobDir, `scene-${scene.sceneNumber}`);
+      const prepared = await prepareSceneMedia({
+        scene,
+        productImagePath: videoJob.imagePath,
+        style: videoJob.style,
+        productCategory: videoJob.productCategory || 'general-product',
+        description: videoJob.description,
+        sceneDir,
+        allowStyleTransfer: videoJob.enableStyleTransfer,
+        targetDuration: estimatedDurations[index],
+        sceneIndex: index,
+        sceneCount: script.scenes.length
+      });
 
-  const plans: SceneRenderPlan[] = [];
-  const usedMediaKeys = new Set<string>();
-  for (const [index, scene] of script.scenes.entries()) {
-    const sceneDir = path.join(jobDir, `scene-${scene.sceneNumber}`);
-    const media = await chooseMedia({
-      scene,
-      productImagePath: videoJob.imagePath,
-      style: videoJob.style,
-      productCategory: videoJob.productCategory || 'general-product',
-      description: videoJob.description,
-      sceneDir,
-      allowStyleTransfer: videoJob.enableStyleTransfer,
-      targetDuration: voiceSegments[index].duration,
-      sceneIndex: index,
-      sceneCount: script.scenes.length,
-      usedMediaKeys
-    });
+      completedMediaSelections += 1;
+      await publishJobProgress(String(videoJob._id), {
+        status: 'processing',
+        stage: 'finding-media',
+        progress: Math.min(60, 36 + Math.round((completedMediaSelections / script.scenes.length) * 24)),
+        message: `Scanning premium media options ${completedMediaSelections}/${script.scenes.length} while voice timing finishes...`
+      });
 
-    if (media.externalId || media.url) {
-      usedMediaKeys.add(media.externalId || media.url);
+      return prepared;
+    }
+  ).then(async (preparedScenes) => {
+    const selectionState: MediaSelectionState = {
+      usedMediaKeys: new Set<string>(),
+      usedQuerySignatures: [],
+      usedCreatorKeys: new Map<string, number>()
+    };
+    const orderedPreparedScenes = [...preparedScenes].sort((left, right) => left.sceneIndex - right.sceneIndex);
+    const mediaSelections: MediaCandidate[] = [];
+
+    for (const [index, prepared] of orderedPreparedScenes.entries()) {
+      mediaSelections.push(await finalizePreparedMedia(prepared, selectionState));
+      await publishJobProgress(String(videoJob._id), {
+        status: 'processing',
+        stage: 'finding-media',
+        progress: Math.min(70, 60 + Math.round(((index + 1) / orderedPreparedScenes.length) * 10)),
+        message: `Selecting unique high-quality media ${index + 1}/${orderedPreparedScenes.length} for the final cut...`
+      });
     }
 
-    plans.push({
-      index,
-      scene,
-      media,
-      voice: voiceSegments[index],
-      totalDuration: voiceSegments[index].duration
-    });
-  }
+    phaseTimings.mediaMs = Date.now() - mediaStartedAt;
+    return mediaSelections;
+  });
+
+  const [voiceSegments, mediaSelections] = await Promise.all([voicePromise, mediaPromise]);
+  const plans: SceneRenderPlan[] = script.scenes.map((scene, index) => ({
+    index,
+    scene,
+    media: mediaSelections[index],
+    voice: voiceSegments[index],
+    totalDuration: voiceSegments[index].duration
+  }));
 
   videoJob.script = {
     ...script,
@@ -751,43 +1312,84 @@ export const processVideoJob = async (jobId: string) => {
   await publishJobProgress(String(videoJob._id), {
     status: 'processing',
     stage: 'rendering-video',
-    progress: 78,
-    message: 'Rendering scenes, transitions, and audio mix...'
+    progress: 72,
+    message: 'Rendering scenes in parallel for the final master...'
   });
 
+  const renderStartedAt = Date.now();
   const music = await selectBackgroundMusic();
   const rendered = await renderMarketingVideo({
     plans,
     productImagePath: videoJob.imagePath || '',
     jobDir,
-    musicPath: music.path
+    musicPath: music.path,
+    onSceneRendered: async ({ completedScenes, totalScenes }) => {
+      await publishJobProgress(String(videoJob._id), {
+        status: 'processing',
+        stage: 'rendering-video',
+        progress: Math.min(84, 72 + Math.round((completedScenes / totalScenes) * 12)),
+        message: `Rendering scene stack ${completedScenes}/${totalScenes}...`
+      });
+    },
+    onPhaseChange: async ({ phase }) => {
+      if (phase === 'concatenating-scenes') {
+        await publishJobProgress(String(videoJob._id), {
+          status: 'processing',
+          stage: 'rendering-video',
+          progress: 87,
+          message: 'Assembling the rendered scene sequence...'
+        });
+        return;
+      }
+
+      if (phase === 'mixing-audio') {
+        await publishJobProgress(String(videoJob._id), {
+          status: 'processing',
+          stage: 'rendering-video',
+          progress: 91,
+          message: 'Mixing voiceover and soundtrack...'
+        });
+        return;
+      }
+
+      await publishJobProgress(String(videoJob._id), {
+        status: 'processing',
+        stage: 'rendering-video',
+        progress: 95,
+        message: 'Finalizing the master export...'
+      });
+    }
   });
+  phaseTimings.renderMs = Date.now() - renderStartedAt;
 
   await publishJobProgress(String(videoJob._id), {
     status: 'processing',
     stage: 'uploading-assets',
-    progress: 92,
+    progress: 97,
     message: 'Uploading final assets...'
   });
 
-  const videoAsset = await uploadAsset(
-    rendered.outputPath,
-    `${videoJob._id}/final/${path.basename(rendered.outputPath)}`
-  );
+  const uploadStartedAt = Date.now();
+  const [videoAsset, voiceAsset, sceneAssets] = await Promise.all([
+    uploadAsset(
+      rendered.outputPath,
+      `${videoJob._id}/final/${path.basename(rendered.outputPath)}`
+    ),
+    uploadAsset(
+      rendered.voicePath,
+      `${videoJob._id}/audio/${path.basename(rendered.voicePath)}`
+    ),
+    Promise.all(
+      rendered.scenePaths.map((scenePath, index) =>
+        uploadAsset(scenePath, `${videoJob._id}/scenes/scene-${index + 1}.mp4`)
+      )
+    )
+  ]);
+  phaseTimings.uploadMs = Date.now() - uploadStartedAt;
   const videoAssetWithLocalPath = {
     ...videoAsset,
     localPath: videoAsset.localPath || rendered.outputPath
   };
-  const voiceAsset = await uploadAsset(
-    rendered.voicePath,
-    `${videoJob._id}/audio/${path.basename(rendered.voicePath)}`
-  );
-
-  const sceneAssets = await Promise.all(
-    rendered.scenePaths.map((scenePath, index) =>
-      uploadAsset(scenePath, `${videoJob._id}/scenes/scene-${index + 1}.mp4`)
-    )
-  );
 
   videoJob.output = {
     video: videoAssetWithLocalPath,
@@ -796,12 +1398,21 @@ export const processVideoJob = async (jobId: string) => {
     sceneFiles: sceneAssets,
     trim: videoJob.output?.trim
   };
-  videoJob.metadata = {
-    ...(videoJob.metadata || {}),
+  videoJob.metadata = mergeJobMetadata(videoJob.metadata, {
     durationSeconds: rendered.durationSeconds,
     musicSource: music.source,
+    performance: {
+      totalElapsedMs: Date.now() - jobStartedAt,
+      targetElapsedMs: 120_000,
+      phaseDurations: phaseTimings,
+      concurrency: {
+        voiceGeneration: config.voiceGenerationConcurrency,
+        mediaSelection: config.mediaSelectionConcurrency,
+        sceneRendering: config.renderSceneConcurrency
+      }
+    },
     completedAt: new Date()
-  };
+  });
   videoJob.status = 'completed';
   videoJob.stage = 'completed';
   videoJob.progress = 100;
@@ -824,7 +1435,8 @@ export const processVideoJob = async (jobId: string) => {
       {
         videoUrl: videoAsset.url,
         voiceUrl: voiceAsset.url,
-        localVideoPath: relativeFrom(config.rootDir, rendered.outputPath)
+        localVideoPath: relativeFrom(config.rootDir, rendered.outputPath),
+        performance: videoJob.metadata?.performance
       },
       null,
       2

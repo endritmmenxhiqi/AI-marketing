@@ -1,9 +1,11 @@
+import os from 'node:os';
 import path from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const rootDir = path.resolve(__dirname, '..');
+const logicalCpuCount = Math.max(os.cpus()?.length || 1, 1);
 const defaultFontPath =
   process.platform === 'win32'
     ? 'C:/Windows/Fonts/ARIALBD.TTF'
@@ -47,8 +49,18 @@ export const config = {
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
   ffmpegFontPath: process.env.FFMPEG_FONT_PATH || defaultFontPath,
+  ffmpegOutputFps: Number(process.env.FFMPEG_OUTPUT_FPS || 24),
+  ffmpegThreads: Number(process.env.FFMPEG_THREADS || 1),
+  sceneTailSeconds: Number(process.env.SCENE_TAIL_SECONDS || 0.22),
   cacheTtlHours: Number(process.env.CACHE_TTL_HOURS || 24),
   jobConcurrency: Number(process.env.JOB_CONCURRENCY || 2),
+  voiceGenerationConcurrency: Number(process.env.VOICE_GENERATION_CONCURRENCY || 4),
+  mediaSelectionConcurrency: Number(process.env.MEDIA_SELECTION_CONCURRENCY || 3),
+  mediaSearchBatchSize: Number(process.env.MEDIA_SEARCH_BATCH_SIZE || 3),
+  maxMediaQueriesPerScene: Number(process.env.MAX_MEDIA_QUERIES_PER_SCENE || 8),
+  renderSceneConcurrency: Number(
+    process.env.RENDER_SCENE_CONCURRENCY || Math.max(2, Math.min(logicalCpuCount - 1, 4))
+  ),
   email: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 587),
@@ -64,8 +76,3 @@ export const config = {
 };
 
 export const requiredAtBoot = ['MONGODB_URI', 'REDIS_URL'] as const;
-
-module.exports = Object.assign(config, {
-  config,
-  requiredAtBoot,
-});

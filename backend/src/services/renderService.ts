@@ -3,14 +3,21 @@ import path from 'node:path';
 import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
 import { config } from '../config';
 import { CaptionCue, SceneRenderPlan } from '../types';
+import { mapWithConcurrency } from '../utils/async';
 import { ensureDir } from '../utils/files';
 
 ffmpeg.setFfmpegPath(config.ffmpegPath);
 ffmpeg.setFfprobePath(config.ffprobePath);
 
 const CAPTION_TEXT_Y = 1418;
+const CAPTION_TEXT_COLOR = '0x0f172a';
+const CAPTION_BOX_COLOR = 'white@0.74';
+const CAPTION_BORDER_COLOR = 'white@0.86';
+const CAPTION_SHADOW_COLOR = 'black@0.18';
 const TARGET_ASPECT_RATIO = 9 / 16;
-const SCENE_TAIL_SECONDS = 0.45;
+const OUTPUT_FPS = Math.max(12, Math.min(config.ffmpegOutputFps, 30));
+const SCENE_TAIL_SECONDS = Math.max(0.08, Math.min(config.sceneTailSeconds, 0.45));
+const ENCODE_THREADS = Math.max(1, config.ffmpegThreads);
 
 const probeDuration = (filePath: string) =>
   new Promise<number>((resolve, reject) => {
@@ -41,6 +48,11 @@ const runCommand = (command: FfmpegCommand, outputPath: string) =>
       })
       .save(outputPath);
   });
+
+const writeConcatListFile = async (paths: string[], outputPath: string) => {
+  const fileBody = paths.map((filePath) => `file '${filePath.replace(/'/g, "'\\''")}'`).join('\n');
+  await fs.writeFile(outputPath, fileBody, 'utf8');
+};
 
 const escapeText = (value: string) =>
   value.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'").replace(/,/g, '\\,');
@@ -93,7 +105,7 @@ const buildCaptionFilters = async ({
     filters.push(
       `[${previousLabel}]drawtext=fontfile='${escapeFilterPath(
         config.ffmpegFontPath
-      )}':textfile='${captionFile}':reload=0:fontsize=54:fontcolor=white:line_spacing=12:shadowcolor=black@0.78:shadowx=0:shadowy=10:x=(w-text_w)/2:y=${CAPTION_TEXT_Y}:enable='${enableExpression}'[${textLabel}]`
+      )}':textfile='${captionFile}':reload=0:fontsize=54:fontcolor=${CAPTION_TEXT_COLOR}:line_spacing=12:borderw=2:bordercolor=${CAPTION_BORDER_COLOR}:box=1:boxcolor=${CAPTION_BOX_COLOR}:boxborderw=22:shadowcolor=${CAPTION_SHADOW_COLOR}:shadowx=0:shadowy=6:x=(w-text_w)/2:y=${CAPTION_TEXT_Y}:enable='${enableExpression}'[${textLabel}]`
     );
   }
 
@@ -120,25 +132,25 @@ const createSceneClip = async ({
       : 0;
 
   if (plan.media.kind === 'video') {
-    command.input(plan.media.localPath!);
+    command.input(plan.media.localPath!).inputOptions(['-stream_loop -1']);
   } else {
     command.input(plan.media.localPath!).inputOptions(['-loop 1']);
   }
 
   const sourcePrep = (() => {
     if (plan.media.kind !== 'video') {
-      const frameCount = Math.ceil(sceneDuration * 30);
+      const frameCount = Math.ceil(sceneDuration * OUTPUT_FPS);
       const variants = [
-        `scale=1300:2300:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0009,1.14)':d=${frameCount}:s=1080x1920,fps=30`,
-        `scale=1360:2360:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.10)':x='(iw-iw/zoom)*min(on/${Math.max(
+        `scale=1220:2180:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.00075,1.12)':d=${frameCount}:s=1080x1920,fps=${OUTPUT_FPS}`,
+        `scale=1260:2240:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.00055,1.08)':x='(iw-iw/zoom)*min(on/${Math.max(
           frameCount,
           1
-        )},1)':y='(ih-ih/zoom)*0.18':d=${frameCount}:s=1080x1920,fps=30`,
-        `scale=1360:2360:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.11)':x='(iw-iw/zoom)*0.12':y='(ih-ih/zoom)*min(on/${Math.max(
+        )},1)':y='(ih-ih/zoom)*0.18':d=${frameCount}:s=1080x1920,fps=${OUTPUT_FPS}`,
+        `scale=1260:2240:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.00055,1.09)':x='(iw-iw/zoom)*0.12':y='(ih-ih/zoom)*min(on/${Math.max(
           frameCount,
           1
-        )},1)':d=${frameCount}:s=1080x1920,fps=30`,
-        `scale=1300:2300:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='if(lte(on,1),1.02,max(1.02,zoom-0.00025))':d=${frameCount}:s=1080x1920,fps=30`
+        )},1)':d=${frameCount}:s=1080x1920,fps=${OUTPUT_FPS}`,
+        `scale=1220:2180:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='if(lte(on,1),1.02,max(1.02,zoom-0.00018))':d=${frameCount}:s=1080x1920,fps=${OUTPUT_FPS}`
       ];
 
       return `[0:v]${variants[plan.index % variants.length]}[bg0]`;
@@ -146,21 +158,15 @@ const createSceneClip = async ({
 
     const trimStart =
       mediaDuration > sceneDuration + 1 ? Math.max((mediaDuration - sceneDuration) * 0.35, 0) : 0;
-    const playableDuration = mediaDuration > trimStart ? mediaDuration - trimStart : 0;
-    const trimmedDuration =
-      playableDuration > 0 ? Math.min(playableDuration, sceneDuration) : sceneDuration;
-    const holdDuration = Math.max(sceneDuration - trimmedDuration, 0.05);
     const mediaAspect = (plan.media.width || 1080) / Math.max(plan.media.height || 1920, 1);
     const isWideClip = mediaAspect > TARGET_ASPECT_RATIO + 0.12;
 
-    const preparedInput = `[0:v]trim=start=${trimStart.toFixed(2)}:duration=${trimmedDuration.toFixed(
+    const preparedInput = `[0:v]trim=start=${trimStart.toFixed(2)}:duration=${sceneDuration.toFixed(
       2
-    )},setpts=PTS-STARTPTS,fps=30,tpad=stop_mode=clone:stop_duration=${holdDuration.toFixed(
-      2
-    )},trim=duration=${sceneDuration.toFixed(2)},setpts=PTS-STARTPTS`;
+    )},setpts=PTS-STARTPTS,fps=${OUTPUT_FPS}`;
 
     if (isWideClip) {
-      return `${preparedInput},split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=18:8,eq=contrast=1.02:saturation=0.90[widebgfill];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease,setsar=1,eq=contrast=1.08:saturation=1.05[widefgfit];[widebgfill][widefgfit]overlay=(W-w)/2:(H-h)/2[bg0]`;
+      return `${preparedInput},split=2[widebg][widefg];[widebg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=10:4,eq=contrast=1.02:saturation=0.90[widebgfill];[widefg]scale=1080:1920:force_original_aspect_ratio=decrease,setsar=1,eq=contrast=1.08:saturation=1.05[widefgfit];[widebgfill][widefgfit]overlay=(W-w)/2:(H-h)/2[bg0]`;
     }
 
     return `${preparedInput},scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=contrast=1.08:saturation=1.08[bg0]`;
@@ -179,10 +185,12 @@ const createSceneClip = async ({
 
   const contentLabel = plan.voice.captions.length ? `captext${plan.voice.captions.length - 1}` : 'bg0';
   const finalLabel = `sceneout${plan.index}`;
-  const fadeOutStart = Math.max(sceneDuration - 0.3, 0).toFixed(2);
+  const fadeInDuration = 0.16;
+  const fadeOutDuration = 0.22;
+  const fadeOutStart = Math.max(sceneDuration - fadeOutDuration, 0).toFixed(2);
 
   filters.push(
-    `[${contentLabel}]fade=t=in:st=0:d=0.2,fade=t=out:st=${fadeOutStart}:d=0.3[${finalLabel}]`
+    `[${contentLabel}]fade=t=in:st=0:d=${fadeInDuration},fade=t=out:st=${fadeOutStart}:d=${fadeOutDuration}[${finalLabel}]`
   );
 
   command
@@ -194,13 +202,15 @@ const createSceneClip = async ({
       '-t',
       sceneDuration.toFixed(2),
       '-r',
-      '30',
+      String(OUTPUT_FPS),
       '-pix_fmt',
       'yuv420p',
+      '-threads',
+      String(ENCODE_THREADS),
       '-movflags',
       '+faststart',
       '-preset',
-      'veryfast',
+      'ultrafast',
       '-crf',
       '23'
     ])
@@ -212,8 +222,7 @@ const createSceneClip = async ({
 const concatVoiceSegments = async (voicePaths: string[], jobDir: string) => {
   const listPath = path.join(jobDir, 'voice-concat.txt');
   const outputPath = path.join(jobDir, 'voiceover.mp3');
-  const fileBody = voicePaths.map((voicePath) => `file '${voicePath.replace(/'/g, "'\\''")}'`).join('\n');
-  await fs.writeFile(listPath, fileBody);
+  await writeConcatListFile(voicePaths, listPath);
 
   const command = ffmpeg()
     .input(listPath)
@@ -223,38 +232,48 @@ const concatVoiceSegments = async (voicePaths: string[], jobDir: string) => {
   return runCommand(command, outputPath);
 };
 
-const assembleFinalVideo = async ({
+const concatSceneClips = async ({
   scenePaths,
+  jobDir
+}: {
+  scenePaths: string[];
+  jobDir: string;
+}) => {
+  const listPath = path.join(jobDir, 'scene-concat.txt');
+  const outputPath = path.join(jobDir, 'scene-stack.mp4');
+  await writeConcatListFile(scenePaths, listPath);
+
+  const command = ffmpeg()
+    .input(listPath)
+    .inputOptions(['-f concat', '-safe 0'])
+    .outputOptions(['-c copy', '-movflags +faststart']);
+
+  return runCommand(command, outputPath);
+};
+
+const mixFinalAudio = async ({
   voicePath,
   musicPath,
   durationSeconds,
   outputPath
 }: {
-  scenePaths: string[];
   voicePath: string;
   musicPath: string;
   durationSeconds: number;
   outputPath: string;
 }) => {
   const command = ffmpeg();
-  scenePaths.forEach((scenePath) => command.input(scenePath));
   command.input(voicePath);
   if (musicPath) {
     command.input(musicPath).inputOptions(['-stream_loop -1']);
   }
 
   const filters: string[] = [];
-  scenePaths.forEach((_, index) => {
-    filters.push(`[${index}:v]setpts=PTS-STARTPTS,format=yuv420p[v${index}]`);
-  });
-  const currentLabel = 'vcat';
-  filters.push(`${scenePaths.map((_, index) => `[v${index}]`).join('')}concat=n=${scenePaths.length}:v=1:a=0[${currentLabel}]`);
-
-  const voiceInputIndex = scenePaths.length;
+  const voiceInputIndex = 0;
   filters.push(`[${voiceInputIndex}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1[voice]`);
 
   if (musicPath) {
-    const musicInputIndex = scenePaths.length + 1;
+    const musicInputIndex = 1;
     filters.push(
       `[${musicInputIndex}:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:${durationSeconds.toFixed(
         2
@@ -273,22 +292,44 @@ const assembleFinalVideo = async ({
     .complexFilter(filters)
     .outputOptions([
       '-map',
-      `[${currentLabel}]`,
-      '-map',
       musicPath ? '[aout]' : '[voice]',
+      '-t',
+      durationSeconds.toFixed(2),
       '-movflags',
       '+faststart',
-      '-preset',
-      'veryfast',
-      '-crf',
-      '23',
-      '-pix_fmt',
-      'yuv420p',
-      '-r',
-      '30'
+      '-b:a',
+      '192k'
     ])
-    .videoCodec('libx264')
     .audioCodec('aac');
+
+  return runCommand(command, outputPath);
+};
+
+const muxFinalVideo = async ({
+  stackedVideoPath,
+  audioPath,
+  outputPath
+}: {
+  stackedVideoPath: string;
+  audioPath: string;
+  outputPath: string;
+}) => {
+  const command = ffmpeg()
+    .input(stackedVideoPath)
+    .input(audioPath)
+    .outputOptions([
+      '-map',
+      '0:v:0',
+      '-map',
+      '1:a:0',
+      '-c:v',
+      'copy',
+      '-c:a',
+      'copy',
+      '-shortest',
+      '-movflags',
+      '+faststart'
+    ]);
 
   return runCommand(command, outputPath);
 };
@@ -327,9 +368,11 @@ export const trimVideo = async ({
     '-c:v',
     'libx264',
     '-preset',
-    'veryfast',
+    'ultrafast',
     '-crf',
     '23',
+    '-threads',
+    String(ENCODE_THREADS),
     '-c:a',
     'aac',
     '-movflags',
@@ -344,26 +387,51 @@ export const renderMarketingVideo = async ({
   plans,
   productImagePath,
   jobDir,
-  musicPath
+  musicPath,
+  onSceneRendered,
+  onPhaseChange
 }: {
   plans: SceneRenderPlan[];
   productImagePath: string;
   jobDir: string;
   musicPath: string;
+  onSceneRendered?: (payload: { completedScenes: number; totalScenes: number }) => Promise<void> | void;
+  onPhaseChange?: (
+    payload: { phase: 'concatenating-scenes' | 'mixing-audio' | 'muxing-master' }
+  ) => Promise<void> | void;
 }) => {
   await ensureDir(jobDir);
 
-  const scenePaths: string[] = [];
-  for (const [index, plan] of plans.entries()) {
-    scenePaths.push(
-      await createSceneClip({
+  let completedScenes = 0;
+  const scenePathEntries = await mapWithConcurrency(
+    plans,
+    config.renderSceneConcurrency,
+    async (plan, index) => {
+      const scenePath = await createSceneClip({
         plan,
         jobDir,
         productImagePath,
         isLast: index === plans.length - 1
-      })
-    );
-  }
+      });
+
+      completedScenes += 1;
+      await onSceneRendered?.({
+        completedScenes,
+        totalScenes: plans.length
+      });
+
+      return { index, scenePath };
+    }
+  );
+  const scenePaths = scenePathEntries
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.scenePath);
+
+  await onPhaseChange?.({ phase: 'concatenating-scenes' });
+  const stackedVideoPath = await concatSceneClips({
+    scenePaths,
+    jobDir
+  });
 
   const voicePath = await concatVoiceSegments(
     plans.map((plan) => plan.voice.path),
@@ -371,13 +439,22 @@ export const renderMarketingVideo = async ({
   );
 
   const durationSeconds = plans.reduce((sum, plan) => sum + getSceneDuration(plan), 0);
-  const outputPath = path.join(jobDir, 'final-video.mp4');
+  const mixedAudioPath = path.join(jobDir, 'final-audio.m4a');
 
-  await assembleFinalVideo({
-    scenePaths,
+  await onPhaseChange?.({ phase: 'mixing-audio' });
+  await mixFinalAudio({
     voicePath,
     musicPath,
     durationSeconds,
+    outputPath: mixedAudioPath
+  });
+
+  const outputPath = path.join(jobDir, 'final-video.mp4');
+
+  await onPhaseChange?.({ phase: 'muxing-master' });
+  await muxFinalVideo({
+    stackedVideoPath,
+    audioPath: mixedAudioPath,
     outputPath
   });
 

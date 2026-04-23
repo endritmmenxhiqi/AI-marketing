@@ -24,7 +24,7 @@ const blockedKeywordTokens = new Set([
   'viral'
 ]);
 
-const SCRIPT_PROMPT_VERSION = 'v4';
+const SCRIPT_PROMPT_VERSION = 'v5';
 const esportsBriefTokens = [
   'counter strike',
   'counter-strike',
@@ -194,7 +194,15 @@ export const generateScriptPackage = async (
 
   const esportsBrief = isEsportsBrief(description, productCategory);
   const categoryGuidance =
-    productCategory === 'food-dessert'
+    productCategory === 'beverages-energy-drinks'
+      ? [
+          'For beverages and energy drink ads, prioritize ice-cold refreshment, can or bottle hero shots, condensation, pouring, fizz, flavor cues, nightlife energy, gym momentum, driving focus, and social lifestyle moments.',
+          'The drink package must stay central: use closeups of the can or bottle, hand-held product moments, cracked-open pours, glass serves, and cold texture details before drifting into generic lifestyle filler.',
+          'Prefer visible drink-adjacent visuals that stock sites can actually return: energy drink can, cold beverage can, iced drink close up, pouring drink, bar counter drink, party lighting, driving at night, gym energy, and friend hangout scenes.',
+          'Avoid unrelated food prep, coffee shop filler, cocktails with the wrong product focus, office stock, abstract party lights without the product, and random lifestyle shots that do not support refreshment or energy.',
+          'If the user uploads a specific can or bottle, treat that package as the hero product and build supporting scenes around it rather than replacing it with a different drink brand.'
+        ].join(' ')
+      : productCategory === 'food-dessert'
       ? [
           'For food and dessert ads, prioritize appetite appeal, texture, ingredients, authenticity, and craving.',
           'If the product is a specific named dessert, keep every scene visually and verbally loyal to that exact dessert.',
@@ -209,12 +217,28 @@ export const generateScriptPackage = async (
             'Avoid drifting into generic beauty tutorial footage, makeup-only scenes, spa filler, random skincare application, office scenes, tech product shots, or unrelated lifestyle clips unless the brief explicitly asks for them.',
             'The fragrance bottle, packaging, ritual, and premium identity should stay central to the story.'
           ].join(' ')
+      : productCategory === 'home-lifestyle'
+        ? [
+            'For home and lifestyle ads, treat the offer like a premium real-estate, architecture, interior-design, or luxury-home campaign.',
+            'Prioritize mansion or villa exteriors, estate grounds, aerial property reveals, architectural details, premium interiors, landscaped amenities, luxury home gym scenes, and visible football or soccer field visuals when mentioned.',
+            'Every premium amenity named in the voiceover must also be visibly present in that same scene through the visualBrief and Pexels keywords.',
+            'Prefer stock-searchable visuals such as luxury villa exterior, modern mansion aerial, private home gym luxury, football field behind house, estate garden, premium living room, and architectural closeups.',
+            'Avoid generic rich lifestyle filler, supercars, hotel lobbies, office footage, cheap apartment interiors, basement gyms, construction worker footage, or random people-only scenes unless the brief explicitly asks for them.'
+          ].join(' ')
       : productCategory === 'fitness-wellness'
         ? [
             'For fitness and wellness ads, prioritize visible movement, training, progress, energy, confidence, and action.',
             'Prefer scenes of people actively working out, training at home, tracking progress, or feeling stronger.',
             'Avoid passive talking-head scenes, generic socializing, meetings, interviews, or equipment-only footage unless the brief explicitly asks for it.',
             'If the offer is a program or membership, the visuals should still show the transformation journey, not abstract community filler.'
+          ].join(' ')
+      : productCategory === 'fashion-accessories'
+        ? [
+            'For fashion and accessories ads, prioritize the wearable product itself, styling detail, texture, movement, confidence, and premium editorial framing.',
+            'For sneaker and shoe briefs, keep the footwear central in every scene through visible laces, sole, side profile, walking, running, footwork, or hands adjusting the shoes.',
+            'Prefer stock-searchable fashion visuals such as sneaker close up, tying sneakers, walking in sneakers, street style shoes, running shoes city, fashion detail close up, and athlete footwear motion.',
+            'Avoid drifting into generic luxury lifestyle filler, cars, balloons, romance scenes, weddings, office footage, random interiors, or people-only footage where the accessory is not clearly visible.',
+            'If the product is footwear, do not let the story become about the car, the building, or the model alone. The shoe must stay visually obvious.'
           ].join(' ')
         : productCategory === 'sports-football'
           ? [
@@ -279,9 +303,12 @@ export const generateScriptPackage = async (
             'On-screen text should highlight claims, benefits, urgency, or offer language that fits a real ad.',
             'Pexels keywords must describe visible subjects, actions, locations, or product-adjacent moments someone could actually search for.',
             'Prefer product-adjacent lifestyle, hands using product, routines, closeups, textures, packaging moments, and outcome visuals.',
+            'Any named amenity, room, object, or feature in the voiceover must also appear in that scene visualBrief and Pexels keywords.',
+            'Do not mention football fields, private gyms, pools, cars, skyline views, or other hero amenities unless the scene is clearly designed to show them.',
             'Avoid abstract stock terms and avoid unrelated objects, animals, scenery, or random tech footage.',
             'Spread the story across all scenes — do not cram everything into scene 1 and phone in the rest.',
             'Treat wrong-product visuals as a failure. If the product is baklava, do not suggest cake, frosting, whipped cream, cupcakes, or unrelated dessert prep.',
+            'For beverage products, prioritize condensation, pours, cold texture, can or bottle closeups, hand-held drink moments, nightlife or active lifestyle usage, and crisp refreshment visuals.',
             'For food products, prioritize closeups, serving, slicing, plating, ingredients, and authentic product textures before secondary lifestyle context.',
             'For fitness products, favor workout, home training, stretching, sweating, coaching, progress checks, and strong post-workout confidence over talking or standing around.',
             'imagePrompt must stay truthful to the product category and should never invent irrelevant content.'

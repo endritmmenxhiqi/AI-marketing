@@ -4,6 +4,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { config } from '../config';
 import { CaptionCue, VoiceSegmentResult, WordAlignment } from '../types';
 import { getCache, setCache } from './cacheService';
+import { mapWithConcurrency } from '../utils/async';
 import { ensureDir, fileExists, sha256 } from '../utils/files';
 
 ffmpeg.setFfmpegPath(config.ffmpegPath);
@@ -105,10 +106,10 @@ export const generateVoiceSegments = async ({
   }
 
   await ensureDir(workingDir);
-
-  const segments: VoiceSegmentResult[] = [];
-
-  for (const [index, text] of texts.entries()) {
+  return mapWithConcurrency(
+    texts,
+    config.voiceGenerationConcurrency,
+    async (text, index): Promise<VoiceSegmentResult> => {
     const hash = sha256(`${config.deepgramTtsModel}:${text}`);
     const cachedAudioPath = path.join(config.cacheDir, 'voice', `${hash}.mp3`);
     const cacheKey = `voice:${hash}`;
@@ -134,14 +135,13 @@ export const generateVoiceSegments = async ({
       await setCache(cacheKey, { alignment, duration });
     }
 
-    segments.push({
+      return {
       text,
       path: outputPath,
       duration,
       alignment,
       captions: groupWordsIntoCaptions(alignment)
-    });
-  }
-
-  return segments;
+      };
+    }
+  );
 };

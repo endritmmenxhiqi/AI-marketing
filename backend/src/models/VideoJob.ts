@@ -112,6 +112,22 @@ const videoJobSchema = new Schema(
       durationSeconds: Number,
       sceneCount: Number,
       musicSource: String,
+      performance: {
+        totalElapsedMs: Number,
+        targetElapsedMs: Number,
+        phaseDurations: {
+          scriptMs: Number,
+          voiceMs: Number,
+          mediaMs: Number,
+          renderMs: Number,
+          uploadMs: Number,
+        },
+        concurrency: {
+          voiceGeneration: Number,
+          mediaSelection: Number,
+          sceneRendering: Number,
+        },
+      },
       queueJobId: String,
       startedAt: Date,
       completedAt: Date,
