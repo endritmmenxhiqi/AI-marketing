@@ -1,14 +1,16 @@
-import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  AlertTriangle,
   ArrowRight,
   Activity,
+  Camera,
   CheckCircle2,
   ChevronRight,
   Clapperboard,
-  Copy,
   Download,
+  ExternalLink,
   Eye,
   EyeOff,
   FileImage,
@@ -27,9 +29,23 @@ import {
   Sun,
   Target,
   Trash2,
+  X,
   Zap,
 } from 'lucide-react';
-import { createJob, fetchJobs, loginUser, registerUser, forgotPassword, trimJob, VideoJob } from './lib/api';
+import {
+  createJob,
+  fetchJob,
+  createPhotoAd,
+  fetchJobs,
+  fetchPhotoAds,
+  forgotPassword,
+  loginUser,
+  PhotoAd,
+  registerUser,
+  trimJob,
+  VideoJob
+} from './lib/api';
+import { ensurePuter, generatePhotoAdSet, type PhotoAspectRatio } from './lib/puter';
 import { useJobEvents } from './hooks/useJobEvents';
 import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
@@ -44,6 +60,7 @@ const styles = [
 
 const categories = [
   { value: 'beauty-skincare', label: 'Beauty & Skincare' },
+  { value: 'beverages-energy-drinks', label: 'Beverages & Energy Drinks' },
   { value: 'perfume-fragrance', label: 'Perfume & Fragrance' },
   { value: 'food-dessert', label: 'Food & Dessert' },
   { value: 'fashion-accessories', label: 'Fashion & Accessories' },
@@ -56,7 +73,25 @@ const categories = [
   { value: 'pet-products', label: 'Pet Products' },
 ];
 
+const categoryLabelMap = new Map(categories.map((item) => [item.value, item.label]));
+
+const formatCategoryLabel = (value: string) =>
+  categoryLabelMap.get(value) ||
+  value
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
 const quickBriefs = [
+  {
+    id: 'sneakers',
+    label: 'Sneaker drop',
+    category: 'fashion-accessories',
+    style: 'cinematic',
+    description:
+      'Premium black sneakers for stylish young athletes. Show 5 scenes: shoe close-up, lacing up, city walk, fast footwork or running, final product shot with CTA. Keep the shoes visible in every scene and avoid generic luxury lifestyle filler.',
+  },
   {
     id: 'beauty',
     label: 'Beauty launch',
@@ -64,6 +99,14 @@ const quickBriefs = [
     style: 'luxury',
     description:
       'A brightening serum for women 28+ who want smoother, more even skin without a long routine. Show texture, glow, before-and-after feeling, and end with a subscribe-and-save CTA.',
+  },
+  {
+    id: 'energy',
+    label: 'Energy launch',
+    category: 'beverages-energy-drinks',
+    style: 'energetic',
+    description:
+      'A bold energy drink for young adults who want cold refreshment, nightlife energy, and instant momentum. Focus on the can, condensation, ice, nightlife lifestyle, and a strong grab-it-now CTA.',
   },
   {
     id: 'dessert',
@@ -99,6 +142,41 @@ const quickBriefs = [
   },
 ];
 
+const photoPromptPresets = [
+  {
+    id: 'luxury-product',
+    label: 'Luxury product',
+    title: 'Midnight Elixir',
+    category: 'beauty-skincare',
+    style: 'luxury',
+    prompt: 'Create a premium skincare campaign around a black glass serum bottle with gold details, moody reflections, soft haze, and elevated luxury beauty direction.',
+  },
+  {
+    id: 'dessert-editorial',
+    label: 'Dessert editorial',
+    title: 'Pistachio Velvet',
+    category: 'food-dessert',
+    style: 'energetic',
+    prompt: 'Generate a refined dessert campaign with pistachio textures, elegant plating, creamy layers, and rich editorial food photography for a premium launch.',
+  },
+  {
+    id: 'tech-launch',
+    label: 'Tech launch',
+    title: 'Orbit Charge',
+    category: 'tech-gadgets',
+    style: 'minimal',
+    prompt: 'Design a high-end product ad for a compact wireless charger with sculpted shadows, brushed materials, clean surfaces, and crisp modern lighting.',
+  },
+];
+
+const photoAspectRatios: Array<{ value: PhotoAspectRatio; label: string }> = [
+  { value: '1:1', label: 'Square' },
+  { value: '4:5', label: 'Portrait' },
+  { value: '16:9', label: 'Landscape' },
+];
+
+type CreatorMode = 'video' | 'photo';
+
 const stageLabels: Record<string, string> = {
   'queued': 'Queued',
   'writing-script': 'Writing script...',
@@ -108,6 +186,15 @@ const stageLabels: Record<string, string> = {
   'uploading-assets': 'Uploading assets...',
   'completed': 'Ready',
   'failed': 'Failed',
+};
+const stageSequence = ['writing-script', 'generating-voice', 'finding-media', 'rendering-video', 'uploading-assets', 'completed'];
+const stageDescriptions: Record<string, string> = {
+  'writing-script': 'OpenAI script package and scene story are being assembled.',
+  'generating-voice': 'Voice timing is generated while the pipeline prepares scene assets.',
+  'finding-media': 'Pexels and fallbacks are sourcing stronger visuals scene by scene.',
+  'rendering-video': 'FFmpeg is rendering scene clips in parallel before the final master.',
+  'uploading-assets': 'The master video, voice track, and scene exports are being published.',
+  'completed': 'Everything is ready for preview, export, and trimming.',
 };
 
 const DESCRIPTION_MAX_LENGTH = 2000;
@@ -120,6 +207,57 @@ const formatFileSize = (bytes: number) => {
 
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
+
+const formatPhotoErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message) {
+    const message = error.message.trim();
+
+    if (/popup|sign-?in|permission/i.test(message)) {
+      return 'Puter needs a popup sign-in first. Allow the popup, complete the Puter connect step, and try again.';
+    }
+
+    if (/load puter|connection/i.test(message)) {
+      return 'Puter could not load in the browser. Check your connection, disable strict blockers for this page, and try again.';
+    }
+
+    return message;
+  }
+
+  return 'Unable to generate photo ads right now. If Puter opened or tried to open a popup, allow it and try again.';
+};
+
+const buildPhotoDownloadName = (title: string, index: number) =>
+  `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'photo-ad'}-${index + 1}.png`;
+
+const mergeJobProgress = (job: VideoJob, payload: Partial<VideoJob> & { videoUrl?: string; previewUrl?: string; trimUrl?: string }) => ({
+  ...job,
+  ...payload,
+  output: {
+    ...job.output,
+    ...(payload.output || {}),
+    video: payload.videoUrl
+      ? {
+          ...job.output?.video,
+          url: payload.videoUrl
+        }
+      : job.output?.video,
+    preview: payload.previewUrl
+      ? {
+          ...job.output?.preview,
+          url: payload.previewUrl
+        }
+      : job.output?.preview,
+    trim: payload.trimUrl
+      ? {
+          ...job.output?.trim,
+          asset: {
+            ...job.output?.trim?.asset,
+            url: payload.trimUrl
+          }
+        }
+      : job.output?.trim
+  }
+});
 
 function AuthScreen({
   onAuthenticated,
@@ -152,9 +290,7 @@ function AuthScreen({
   };
   const strength = calcStrength(password);
   const strengthColors = ['#ef4444', '#f59e0b', '#22c55e', '#22c55e'];
-  const strengthLabels = lang === 'sq'
-    ? ['Dobët', 'Mesatar', 'Mirë', 'Fortë']
-    : ['Weak', 'Fair', 'Good', 'Strong'];
+  const strengthLabels = lang === 'sq' ? ['Dobët', 'Mesatar', 'Mirë', 'Fortë'] : ['Weak', 'Fair', 'Good', 'Strong'];
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -482,6 +618,7 @@ function AuthScreen({
 function App() {
   const { theme, toggleTheme } = useTheme();
   const { lang, toggleLanguage } = useLanguage();
+  const [creatorMode, setCreatorMode] = useState<CreatorMode>('video');
   const [auth, setAuth] = useState(() => ({
     token: localStorage.getItem('token') || '',
     email: localStorage.getItem('user_email') || '',
@@ -502,8 +639,69 @@ function App() {
   const [trimLoading, setTrimLoading] = useState(false);
   const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'overview' | 'preview' | 'history'>('overview');
+  const [photoTitle, setPhotoTitle] = useState('');
+  const [photoPrompt, setPhotoPrompt] = useState('');
+  const [photoAspectRatio, setPhotoAspectRatio] = useState<PhotoAspectRatio>('1:1');
+  const [photoGenerating, setPhotoGenerating] = useState(false);
+  const [photoProgressLabel, setPhotoProgressLabel] = useState('');
+  const [photoAds, setPhotoAds] = useState<PhotoAd[]>([]);
+  const [selectedPhotoAdId, setSelectedPhotoAdId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const descriptionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const photoPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const insertTextAtCursor = (
+    textarea: HTMLTextAreaElement,
+    nextText: string,
+    setter: (value: string) => void
+  ) => {
+    const { selectionStart, selectionEnd, value } = textarea;
+    const updatedValue = `${value.slice(0, selectionStart)}${nextText}${value.slice(selectionEnd)}`;
+    const nextCursor = selectionStart + nextText.length;
+    setter(updatedValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handleTextareaPaste = (
+    event: ClipboardEvent<HTMLTextAreaElement>,
+    setter: (value: string) => void
+  ) => {
+    const text = event.clipboardData.getData('text/plain');
+    if (!text) {
+      return;
+    }
+
+    event.preventDefault();
+    insertTextAtCursor(event.currentTarget, text, setter);
+  };
+
+  const pasteFromClipboard = async (
+    textarea: HTMLTextAreaElement | null,
+    setter: (value: string) => void
+  ) => {
+    if (!textarea) {
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) {
+        setError('Clipboard is empty or does not contain text.');
+        return;
+      }
+
+      setError('');
+      insertTextAtCursor(textarea, text, setter);
+    } catch (nextError) {
+      console.error('Clipboard paste failed:', nextError);
+      setError('Clipboard access was blocked. Click into the field and try Ctrl+V or Cmd+V again.');
+    }
+  };
 
   const clearAuthSession = (message = '') => {
     localStorage.removeItem('token');
@@ -511,6 +709,8 @@ function App() {
     setAuth({ token: '', email: '' });
     setJobs([]);
     setSelectedJobId(null);
+    setPhotoAds([]);
+    setSelectedPhotoAdId(null);
     setError(message);
   };
 
@@ -520,20 +720,26 @@ function App() {
     if (!auth.token) {
       setJobs([]);
       setSelectedJobId(null);
+      setPhotoAds([]);
+      setSelectedPhotoAdId(null);
       return () => {
         isActive = false;
       };
     }
 
-    fetchJobs()
-      .then((data) => {
+    Promise.all([fetchJobs(), fetchPhotoAds()])
+      .then(([jobsData, photoAdsData]) => {
         if (!isActive) {
           return;
         }
 
-        setJobs(data);
+        setJobs(jobsData);
         setSelectedJobId((current) =>
-          current && data.some((job) => job._id === current) ? current : data[0]?._id || null
+          current && jobsData.some((job) => job._id === current) ? current : jobsData[0]?._id || null
+        );
+        setPhotoAds(photoAdsData);
+        setSelectedPhotoAdId((current) =>
+          current && photoAdsData.some((item) => item._id === current) ? current : photoAdsData[0]?._id || null
         );
       })
       .catch((nextError: any) => {
@@ -548,7 +754,9 @@ function App() {
 
         setJobs([]);
         setSelectedJobId(null);
-        setError(nextError.message || 'Unable to load your video jobs.');
+        setPhotoAds([]);
+        setSelectedPhotoAdId(null);
+        setError(nextError.message || 'Unable to load your studio data.');
       });
 
     return () => {
@@ -556,13 +764,27 @@ function App() {
     };
   }, [auth.token]);
 
+  useEffect(() => {
+    setSelectedPhotoAdId((current) =>
+      current && photoAds.some((item) => item._id === current) ? current : photoAds[0]?._id || null
+    );
+  }, [photoAds]);
+
+  useEffect(() => {
+    if (creatorMode === 'video') {
+      setPhotoProgressLabel('');
+    }
+  }, [creatorMode]);
+
   const selectedJob = useMemo(
     () => jobs.find((job) => job._id === selectedJobId) || null,
     [jobs, selectedJobId]
   );
+  const selectedPhotoAd = useMemo(
+    () => photoAds.find((item) => item._id === selectedPhotoAdId) || null,
+    [photoAds, selectedPhotoAdId]
+  );
   const firstName = auth.email.split('@')[0] || 'creator';
-  const categoryLabel =
-    categories.find((item) => item.value === productCategory)?.label || 'General product';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
   const workspaceTabs = [
     { id: 'overview' as const, label: 'Campaign' },
@@ -570,19 +792,78 @@ function App() {
     { id: 'history' as const, label: `History${jobs.length > 0 ? ` (${jobs.length})` : ''}` },
   ];
   const jobsProcessing = jobs.filter((job) => job.status === 'processing').length;
-  const dashboardStats = [
-    {
-      label: 'Jobs created',
-      value: jobs.length,
-    },
-    {
-      label: 'Ready exports',
-      value: jobsReady,
-    },
-    {
-      label: jobsProcessing > 0 ? 'In production' : 'Current style',
-      value: jobsProcessing > 0 ? jobsProcessing : (styles.find((item) => item.value === style)?.label || style),
-    },
+  const dashboardStats =
+    creatorMode === 'video'
+      ? [
+          {
+            label: 'Jobs created',
+            value: jobs.length,
+          },
+          {
+            label: 'Ready exports',
+            value: jobsReady,
+          },
+          {
+            label: jobsProcessing > 0 ? 'In production' : 'Current style',
+            value: jobsProcessing > 0 ? jobsProcessing : (styles.find((item) => item.value === style)?.label || style),
+          },
+        ]
+      : [
+          {
+            label: 'Photo sets',
+            value: photoAds.length,
+          },
+          {
+            label: 'Images generated',
+            value: photoAds.reduce((total, item) => total + item.images.length, 0),
+          },
+          {
+            label: 'Current mode',
+            value: 'Photo ads',
+          },
+        ];
+  const sceneReadiness = useMemo(
+    () =>
+      (selectedJob?.script?.scenes || []).map((scene, index) => ({
+        id: `${scene.sceneNumber}-${scene.headline}`,
+        title: scene.headline || `Scene ${scene.sceneNumber}`,
+        media: scene.media?.source ? `${scene.media.source}${scene.media?.kind ? ` • ${scene.media.kind}` : ''}` : 'Queued',
+        duration: scene.voiceDuration ? formatSeconds(scene.voiceDuration) : 'Syncing',
+        reason: scene.media?.selectionReason || stageDescriptions[selectedJob?.stage || 'finding-media'],
+        visualQuery: scene.media?.query || scene.pexelsKeywords?.[0] || 'creative brief',
+        index,
+      })),
+    [selectedJob]
+  );
+  const stageTimeline = useMemo(
+    () =>
+      stageSequence.map((stageId, index) => {
+        const currentIndex = stageSequence.indexOf(selectedJob?.stage || 'queued');
+        const state =
+          selectedJob?.status === 'completed' || currentIndex > index
+            ? 'done'
+            : currentIndex === index || (selectedJob?.stage === 'queued' && index === 0)
+              ? 'active'
+              : 'pending';
+
+        return {
+          id: stageId,
+          label: stageLabels[stageId] || stageId,
+          description: stageDescriptions[stageId] || 'Processing step',
+          state,
+        };
+      }),
+    [selectedJob?.stage, selectedJob?.status]
+  );
+  const briefChecklist = [
+    'Problem and audience: who should care and what pain is urgent?',
+    'Offer and CTA: discount, drop, bundle, waitlist, or conversion moment.',
+    'Visual anchors: what must appear on screen so stock media stays on-brief?',
+  ];
+  const marketingHighlights = [
+    'OpenAI script, Deepgram voice, and media sourcing now run with less idle waiting.',
+    'Scene renders are processed in parallel before final assembly to cut long render stalls.',
+    'The workspace now surfaces timing, stage health, and scene-level readiness instead of only a percent bar.',
   ];
 
   useEffect(() => {
@@ -597,6 +878,10 @@ function App() {
     if (!previewDurationSeconds) return;
     setTrimEnd((current) => (current > 0 ? current : previewDurationSeconds));
   }, [previewDurationSeconds]);
+
+  useEffect(() => {
+    void ensurePuter().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setPreviewDurationSeconds(0);
@@ -615,8 +900,14 @@ function App() {
     auth.token,
     (payload) => {
       setJobs((current) =>
-        current.map((job) => (job._id === selectedJobId ? { ...job, ...payload } : job))
+        current.map((job) => (job._id === selectedJobId ? mergeJobProgress(job, payload) : job))
       );
+
+      if (payload?.status === 'completed' || payload?.status === 'failed') {
+        void fetchJob(selectedJobId!).then((freshJob) => {
+          setJobs((current) => current.map((job) => (job._id === freshJob._id ? freshJob : job)));
+        }).catch(() => undefined);
+      }
     },
     Boolean(selectedJobId)
   );
@@ -738,13 +1029,101 @@ function App() {
   };
 
   const applyQuickBrief = (preset: (typeof quickBriefs)[number]) => {
+    setCreatorMode('video');
     setDescription(preset.description);
     setProductCategory(preset.category);
     setStyle(preset.style);
     setError('');
   };
 
+  const applyPhotoPromptPreset = (preset: (typeof photoPromptPresets)[number]) => {
+    setCreatorMode('photo');
+    setPhotoTitle(preset.title);
+    setPhotoPrompt(preset.prompt);
+    setProductCategory(preset.category);
+    setStyle(preset.style);
+    setError('');
+  };
+
+  const handleDownloadPhoto = async (imageUrl: string, fileName: string) => {
+    try {
+      setError('');
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error('Unable to download this image right now.');
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (nextError: any) {
+      setError(nextError?.message || 'Unable to download this image right now.');
+    }
+  };
+
+  const handlePhotoGenerate = async () => {
+    if (!photoTitle.trim()) {
+      setError('Add a photo campaign name first.');
+      return;
+    }
+
+    if (!photoPrompt.trim()) {
+      setError('Describe the photo ad you want to generate.');
+      return;
+    }
+
+    try {
+      setPhotoGenerating(true);
+      setPhotoProgressLabel('Connecting to Puter...');
+      setError('');
+
+      const imageDataUrls = await generatePhotoAdSet(
+        {
+          title: photoTitle.trim(),
+          prompt: photoPrompt.trim(),
+          aspectRatio: photoAspectRatio,
+        },
+        setPhotoProgressLabel
+      );
+
+      setPhotoProgressLabel('Saving photo set to your studio...');
+
+      const nextSet = await createPhotoAd({
+        title: photoTitle.trim(),
+        prompt: photoPrompt.trim(),
+        aspectRatio: photoAspectRatio,
+        productCategory,
+        style,
+        source: 'puter',
+        imageDataUrls,
+      });
+
+      setPhotoAds((current) => [nextSet, ...current]);
+      setSelectedPhotoAdId(nextSet._id);
+      setPhotoProgressLabel('Photo set saved and ready.');
+      setPhotoTitle('');
+      setPhotoPrompt('');
+    } catch (nextError: any) {
+      console.error('Photo ad generation failed:', nextError);
+      if (nextError?.status === 401) {
+        clearAuthSession('Your session expired. Please sign in again.');
+        return;
+      }
+      setError(formatPhotoErrorMessage(nextError));
+      setPhotoProgressLabel('');
+    } finally {
+      setPhotoGenerating(false);
+    }
+  };
+
   const handleRegenerate = (job: typeof jobs[number]) => {
+    setCreatorMode('video');
     setDescription(job.description || '');
     setProductCategory(job.productCategory || 'food-dessert');
     setStyle(job.style || 'energetic');
@@ -778,21 +1157,21 @@ function App() {
           !auth.token ? (
             <AuthScreen onAuthenticated={setAuth} />
           ) : (
-            <div className="studio-dashboard min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_85%_15%,rgba(236,72,153,0.10),transparent_24%),linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fbff_100%)] text-slate-900 transition-colors dark:bg-mesh dark:text-white">
-              <div className="studio-dashboard__inner mx-auto flex min-h-screen max-w-7xl flex-col gap-8 px-4 py-6 lg:px-8">
-                <header className="studio-dashboard__header grid gap-6 xl:grid-cols-[1fr,400px]">
+            <div className="studio-dashboard min-h-screen text-slate-900 transition-colors dark:text-white">
+              <div className="studio-dashboard__inner mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-4 py-4 lg:px-5">
+                <header className="studio-dashboard__header grid gap-4 xl:grid-cols-[minmax(0,1fr),340px]">
                   <div className={`${shellCard} dashboard-hero-card relative overflow-hidden bg-gradient-to-br from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/90`}>
-                    <div className="relative space-y-6">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="relative space-y-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2.5">
                         <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-flare/10 dark:text-flare">
-                            <Sparkles size={22} />
+                          <div className="rounded-2xl bg-cyan-500/12 p-2 text-cyan-700 dark:bg-cyan-400/12 dark:text-cyan-300">
+                            <Sparkles size={18} />
                           </div>
                           <div>
-                            <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
+                            <h1 className="text-[1.75rem] font-bold tracking-tight text-slate-900 dark:text-white md:text-[2.15rem]">
                               AI Marketing Studio
                             </h1>
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400">
                               Create high-conversion short-form ads in seconds.
                             </p>
                           </div>
@@ -818,65 +1197,104 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-3">
+                      <div className="grid gap-2.5 md:grid-cols-3">
                         {dashboardStats.map((item) => (
                           <div key={item.label} className={`${shellMutedCard} dashboard-stat-card group transition-all hover:bg-white/95 dark:hover:bg-white/10`}>
                             <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500">
                               {item.label}
                             </div>
-                            <div className="mt-2 text-3xl font-bold tracking-tight">{item.value}</div>
+                            <div className="mt-1 text-[1.9rem] font-bold tracking-tight leading-none">{item.value}</div>
                           </div>
                         ))}
                       </div>
+
                     </div>
                   </div>
 
                   <div className={`${shellCard} dashboard-account-card relative flex flex-col justify-between overflow-hidden text-slate-900 dark:text-white`}>
                     {/* Light mode beautiful frosted gradient backdrop */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/95 to-fuchsia-50/95 backdrop-blur-xl dark:hidden pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-50/95 to-amber-50/95 backdrop-blur-xl pointer-events-none dark:hidden" />
                     
                     {/* Light mode top-right glow */}
-                    <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-gradient-to-br from-indigo-400/20 to-purple-400/20 blur-3xl dark:hidden pointer-events-none" />
+                    <div className="pointer-events-none absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-gradient-to-br from-cyan-400/20 to-amber-300/20 blur-3xl dark:hidden" />
 
-                    <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
+                    <div className="relative z-10 flex flex-wrap items-start justify-between gap-2.5">
                       <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.15em] text-indigo-500 dark:text-slate-400">Account</div>
-                        <h2 className="mt-1 text-2xl font-black capitalize tracking-tight text-slate-900 dark:text-white">{firstName}</h2>
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
+                        <div className="text-[10px] font-black uppercase tracking-[0.15em] text-cyan-700 dark:text-cyan-300">Account</div>
+                        <h2 className="mt-1 text-[1.55rem] font-black capitalize tracking-tight text-slate-900 dark:text-white">{firstName}</h2>
+                        <p className="text-[13px] font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
                       </div>
                       <button type="button" onClick={handleLogout} className="dashboard-logout-btn group flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/50 transition-all hover:bg-rose-50 hover:text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white dark:ring-0">
                         <LogOut size={16} className="text-slate-400 group-hover:text-rose-500 transition-colors dark:text-inherit" />
                       </button>
                     </div>
 
-                    <div className="relative z-10 grid grid-cols-2 gap-3 mt-6">
-                       <div className="dashboard-account-meta flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                    <div className="relative z-10 mt-3.5 grid grid-cols-2 gap-2.5">
+                       <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
                           <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Active Style</span>
                           <span className="text-sm font-bold text-slate-800 dark:text-white">{styles.find(s => s.value === style)?.label || style}</span>
                        </div>
-                       <div className="dashboard-account-meta flex flex-col gap-1 p-3.5 rounded-2xl bg-white/70 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                       <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
                           <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Category</span>
-                          <span className="text-sm font-bold truncate text-slate-800 dark:text-white">{categories.find(c => c.value === productCategory)?.label || productCategory}</span>
+                          <span className="text-sm font-bold truncate text-slate-800 dark:text-white">{formatCategoryLabel(productCategory)}</span>
                        </div>
                     </div>
+
                   </div>
                 </header>
 
-                <main className="studio-dashboard__main grid gap-8 xl:grid-cols-[1fr,1.15fr]">
+                <main className="studio-dashboard__main grid gap-4 xl:grid-cols-[0.96fr,1.04fr]">
                   {/* LEFT COLUMN: Creation Section */}
-                  <section className={`${shellCard} dashboard-builder-card flex flex-col gap-8`}>
+                  <section className={`${shellCard} dashboard-builder-card flex flex-col gap-[1.125rem]`}>
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
-                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">New Campaign</h2>
+                        <h2 className="text-[1.6rem] font-bold tracking-tight text-slate-900 dark:text-white">New Campaign</h2>
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select a template or start from scratch</p>
                       </div>
                       <div className="flex -space-x-2">
                         {[1, 2, 3].map(i => (
-                          <div key={i} className="dashboard-step-dot flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[8px] font-bold text-slate-400 dark:border-slate-900 dark:bg-slate-800">
+                          <div key={i} className="dashboard-step-dot flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[7px] font-bold text-slate-400 dark:border-slate-900 dark:bg-slate-800">
                             {i}
                           </div>
                         ))}
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCreatorMode('video')}
+                        className={`dashboard-tab rounded-2xl border px-4 py-3 text-left transition-all ${
+                          creatorMode === 'video'
+                            ? 'border-cyan-300/80 bg-cyan-500/10 text-slate-900 dark:border-cyan-300/30 dark:bg-cyan-300/10 dark:text-white'
+                            : 'border-slate-200 bg-white/60 text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-black">
+                          <Clapperboard size={16} />
+                          Video Ads
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] opacity-60">
+                          Script, media, voice, export
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreatorMode('photo')}
+                        className={`dashboard-tab rounded-2xl border px-4 py-3 text-left transition-all ${
+                          creatorMode === 'photo'
+                            ? 'border-cyan-300/80 bg-cyan-500/10 text-slate-900 dark:border-cyan-300/30 dark:bg-cyan-300/10 dark:text-white'
+                            : 'border-slate-200 bg-white/60 text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-black">
+                          <Camera size={16} />
+                          Photo Ads
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] opacity-60">
+                          Title, prompt, three premium shots
+                        </div>
+                      </button>
                     </div>
 
                     {/* Error Banner */}
@@ -891,35 +1309,42 @@ function App() {
                       </div>
                     )}
 
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    {creatorMode === 'video' ? (
+                      <>
+                    <div className="dashboard-preset-grid grid gap-2.5 sm:grid-cols-3">
                       {quickBriefs.map((preset) => (
                         <button
                           key={preset.id}
                           type="button"
                           onClick={() => applyQuickBrief(preset)}
-                          className="quick-brief-btn dashboard-quick-brief group relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border border-slate-200 bg-white/40 text-left transition-all hover:border-indigo-500/50 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-flare/40"
+                          className="dashboard-preset-card group relative flex min-h-[7.25rem] flex-col items-start justify-between rounded-2xl border border-slate-200 bg-white/40 p-4 text-left transition-all hover:border-cyan-500/40 hover:bg-white hover:shadow-xl hover:shadow-cyan-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-cyan-300/30"
                         >
-                          <div className="text-xs font-bold text-slate-900 dark:text-white">{preset.label}</div>
-                          <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{preset.category.split('-').join(' ')}</div>
-                          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Zap size={10} className="text-indigo-500 dark:text-flare" />
+                          <div className="dashboard-preset-copy">
+                            <div className="dashboard-preset-title">{preset.label}</div>
+                            <div className="dashboard-preset-category">{formatCategoryLabel(preset.category)}</div>
+                            <div className="dashboard-preset-style">
+                                {styles.find((item) => item.value === preset.style)?.label || preset.style}
+                            </div>
+                          </div>
+                          <div className="dashboard-preset-icon" aria-hidden="true">
+                            <Zap size={12} />
                           </div>
                         </button>
                       ))}
                     </div>
 
-                    <div className="space-y-8">
+                    <div className="space-y-4">
                       <div className="group relative">
                         <div
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={onDrop}
-                          className="dashboard-upload-zone flex flex-col items-center justify-center gap-4 p-10 rounded-[32px] border-2 border-dashed border-slate-200 bg-slate-50/50 backdrop-blur-sm transition-all hover:border-indigo-500/40 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-flare/30 dark:hover:bg-white/[0.03]"
+                          className="dashboard-upload-zone flex flex-col items-center justify-center gap-3 rounded-[26px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 backdrop-blur-sm transition-all hover:border-cyan-500/35 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-cyan-300/30 dark:hover:bg-white/[0.03]"
                         >
                           {file ? (
                             <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
                               <div className="flex items-center gap-4">
-                                <div className="p-4 rounded-2xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 dark:bg-flare dark:text-slate-900 dark:shadow-flare/10">
-                                  <FileImage size={24} />
+                                <div className="rounded-2xl bg-cyan-600 p-3 text-white shadow-lg shadow-cyan-500/20 dark:bg-cyan-300 dark:text-slate-950 dark:shadow-cyan-300/10">
+                                  <FileImage size={20} />
                                 </div>
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{file.name}</div>
@@ -932,14 +1357,14 @@ function App() {
                             </div>
                           ) : (
                             <>
-                              <div className="p-5 rounded-3xl bg-white text-slate-300 shadow-sm dark:bg-white/5 dark:text-slate-600">
-                                <ImagePlus size={36} />
+                              <div className="rounded-3xl bg-white p-3.5 text-slate-300 shadow-sm dark:bg-white/5 dark:text-slate-600">
+                                <ImagePlus size={26} />
                               </div>
                               <div className="text-center space-y-1">
-                                <div className="text-base font-bold text-slate-900 dark:text-white">Product Asset</div>
+                                <div className="text-[15px] font-bold text-slate-900 dark:text-white">Product Asset</div>
                                 <p className="text-xs font-medium text-slate-400">Drag & drop or Click to upload</p>
                               </div>
-                              <button type="button" onClick={openFilePicker} className="mt-2 px-6 py-2.5 rounded-full bg-slate-900 text-white text-xs font-black uppercase tracking-widest transition-all hover:bg-slate-700 hover:scale-105 active:scale-95 dark:bg-white dark:text-slate-900">
+                              <button type="button" onClick={openFilePicker} className="mt-1 rounded-full bg-slate-900 px-[1.125rem] py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:bg-slate-700 active:scale-95 dark:bg-white dark:text-slate-900">
                                 Select File
                               </button>
                             </>
@@ -948,8 +1373,8 @@ function App() {
                         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onSelectFile} />
                       </div>
 
-                      <div className="grid gap-6 md:grid-cols-2">
-                        <div className="space-y-3">
+                      <div className="grid gap-3.5 md:grid-cols-2">
+                        <div className="space-y-2.5">
                           <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
                             <Target size={12} />
                             Product Category
@@ -957,7 +1382,7 @@ function App() {
                           <select
                             value={productCategory}
                             onChange={(event) => setProductCategory(event.target.value)}
-                            className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-5 py-4 text-sm font-bold text-slate-900 outline-none transition-all focus:border-indigo-500/50 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-flare/40"
+                            className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-cyan-500/45 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-cyan-300/35"
                           >
                             {categories.map((item) => (
                               <option
@@ -971,7 +1396,7 @@ function App() {
                           </select>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
                             <Palette size={12} />
                             Visual Style
@@ -984,7 +1409,7 @@ function App() {
                                 onClick={() => setStyle(item.value)}
                                 aria-pressed={style === item.value}
                                 title={item.tone}
-                                className={`style-btn rounded-xl border p-3 text-center transition-all ${style === item.value ? 'selected' : ''}`}
+                                className={`style-btn rounded-xl border p-2 text-center transition-all ${style === item.value ? 'selected' : ''}`}
                               >
                                 <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
                               </button>
@@ -993,75 +1418,255 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="space-y-3">
+                      <div className="space-y-2.5">
                         <label className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
                           <div className="flex items-center gap-2">
                             <PenTool size={12} />
                             Proprietary Brief
                           </div>
-                          <span className={`${description.length > DESCRIPTION_MAX_LENGTH - 250 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/{DESCRIPTION_MAX_LENGTH}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void pasteFromClipboard(descriptionTextareaRef.current, setDescription)}
+                              className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 transition-all hover:border-cyan-400 hover:text-cyan-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-cyan-300/40 dark:hover:text-cyan-200"
+                            >
+                              Paste
+                            </button>
+                            <span className={`${description.length > DESCRIPTION_MAX_LENGTH - 250 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/{DESCRIPTION_MAX_LENGTH}</span>
+                          </div>
                         </label>
                         <textarea
+                          ref={descriptionTextareaRef}
                           value={description}
                           onChange={(event) => setDescription(event.target.value)}
-                          rows={6}
+                          onPaste={(event) => handleTextareaPaste(event, setDescription)}
+                          rows={4}
                           maxLength={DESCRIPTION_MAX_LENGTH}
-                          className="dashboard-field campaign-textarea w-full rounded-[28px] border border-slate-200 bg-white/50 px-6 py-5 text-sm font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500/50 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-flare/40 dark:placeholder:text-slate-600"
+                          className="dashboard-field campaign-textarea w-full rounded-[24px] border border-slate-200 bg-white/50 px-4 py-3.5 text-[13px] font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-cyan-500/45 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-cyan-300/35 dark:placeholder:text-slate-600"
                           placeholder="Describe the product, target audience, and the problem you solve..."
                         />
                       </div>
 
-                      <div className="pt-2">
-                        <button type="button" onClick={handleSubmit} disabled={submitting} className="dashboard-submit dashboard-action-btn dashboard-action-btn--primary group relative w-full overflow-hidden rounded-[24px] bg-slate-900 py-6 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+                      <div className="pt-1">
+                        <button type="button" onClick={handleSubmit} disabled={submitting} className="dashboard-submit dashboard-action-btn dashboard-action-btn--primary group relative w-full overflow-hidden rounded-[22px] bg-slate-900 py-4 text-[12px] font-black uppercase tracking-[0.18em] text-white transition-all hover:scale-[1.01] hover:bg-slate-800 active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
                           <div className="relative z-10 flex items-center justify-center gap-3">
                             {submitting ? <LoaderCircle className="animate-spin" size={20} /> : <Sparkles size={20} />}
                             <span>{submitting ? 'Creating Studio Magic...' : 'Generate Campaign'}</span>
                           </div>
-                          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-flare dark:to-coral" />
+                          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-600 dark:from-cyan-300 dark:to-blue-300" />
                         </button>
                       </div>
                     </div>
+                      </>
+                    ) : (
+                      <div className="space-y-4">
+                              <div className="grid gap-2.5 sm:grid-cols-3">
+                          {photoPromptPresets.map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => applyPhotoPromptPreset(preset)}
+                              className="dashboard-preset-card group relative flex min-h-[7.25rem] flex-col items-start justify-between rounded-2xl border border-slate-200 bg-white/40 p-4 text-left transition-all hover:border-cyan-500/40 hover:bg-white hover:shadow-xl hover:shadow-cyan-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-cyan-300/30"
+                            >
+                              <div className="dashboard-preset-copy">
+                                <div className="dashboard-preset-title">{preset.label}</div>
+                                <div className="dashboard-preset-category">{preset.title}</div>
+                                <div className="dashboard-preset-style">
+                                  {formatCategoryLabel(preset.category)} • {styles.find((item) => item.value === preset.style)?.label || preset.style}
+                                </div>
+                              </div>
+                              <div className="dashboard-preset-icon" aria-hidden="true">
+                                <Camera size={12} />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="grid gap-3.5 md:grid-cols-2">
+                          <div className="space-y-2.5">
+                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                              <Sparkles size={12} />
+                              Campaign Name
+                            </label>
+                            <input
+                              value={photoTitle}
+                              onChange={(event) => setPhotoTitle(event.target.value)}
+                              className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-cyan-500/45 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-cyan-300/35"
+                              placeholder="Ex: Midnight Elixir launch"
+                            />
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                              <Target size={12} />
+                              Product Category
+                            </label>
+                            <select
+                              value={productCategory}
+                              onChange={(event) => setProductCategory(event.target.value)}
+                              className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-cyan-500/45 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-cyan-300/35"
+                            >
+                              {categories.map((item) => (
+                                <option
+                                  key={item.value}
+                                  value={item.value}
+                                  className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
+                                >
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3.5 md:grid-cols-2">
+                          <div className="space-y-2.5">
+                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                              <Palette size={12} />
+                              Visual Style
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {styles.map((item) => (
+                                <button
+                                  key={item.value}
+                                  type="button"
+                                  onClick={() => setStyle(item.value)}
+                                  aria-pressed={style === item.value}
+                                  title={item.tone}
+                                  className={`style-btn rounded-xl border p-2 text-center transition-all ${style === item.value ? 'selected' : ''}`}
+                                >
+                                  <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                              <Layout size={12} />
+                              Aspect Ratio
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {photoAspectRatios.map((item) => (
+                                <button
+                                  key={item.value}
+                                  type="button"
+                                  onClick={() => setPhotoAspectRatio(item.value)}
+                                  aria-pressed={photoAspectRatio === item.value}
+                                  className={`style-btn rounded-xl border p-2 text-center transition-all ${photoAspectRatio === item.value ? 'selected' : ''}`}
+                                >
+                                  <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2.5">
+                          <label className="ml-1 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                            <div className="flex items-center gap-2">
+                              <PenTool size={12} />
+                              Photo Prompt
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void pasteFromClipboard(photoPromptTextareaRef.current, setPhotoPrompt)}
+                                className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 transition-all hover:border-cyan-400 hover:text-cyan-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-cyan-300/40 dark:hover:text-cyan-200"
+                              >
+                                Paste
+                              </button>
+                              <span className={`${photoPrompt.length > DESCRIPTION_MAX_LENGTH - 250 ? 'text-amber-500' : 'opacity-40'}`}>{photoPrompt.length}/{DESCRIPTION_MAX_LENGTH}</span>
+                            </div>
+                          </label>
+                          <textarea
+                            ref={photoPromptTextareaRef}
+                            value={photoPrompt}
+                            onChange={(event) => setPhotoPrompt(event.target.value)}
+                            onPaste={(event) => handleTextareaPaste(event, setPhotoPrompt)}
+                            rows={5}
+                            maxLength={DESCRIPTION_MAX_LENGTH}
+                            className="dashboard-field campaign-textarea w-full rounded-[24px] border border-slate-200 bg-white/50 px-4 py-3.5 text-[13px] font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-cyan-500/45 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-cyan-300/35 dark:placeholder:text-slate-600"
+                            placeholder="Describe the scene, mood, materials, camera angle, lighting, and luxury ad feel you want across the photos..."
+                          />
+                        </div>
+
+                        <div className="rounded-[24px] border border-slate-200/80 bg-white/60 px-4 py-3 text-[12px] font-medium text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
+                          Puter runs this feature in the browser. The first time you use it, Puter may ask you to connect or sign in before it generates the images.
+                        </div>
+
+                        <div className="space-y-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handlePhotoGenerate}
+                            disabled={photoGenerating}
+                            className="dashboard-submit dashboard-action-btn dashboard-action-btn--primary group relative w-full overflow-hidden rounded-[22px] bg-slate-900 py-4 text-[12px] font-black uppercase tracking-[0.18em] text-white transition-all hover:scale-[1.01] hover:bg-slate-800 active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                          >
+                            <div className="relative z-10 flex items-center justify-center gap-3">
+                              {photoGenerating ? <LoaderCircle className="animate-spin" size={20} /> : <Camera size={20} />}
+                              <span>{photoGenerating ? (photoProgressLabel || 'Generating premium photos...') : 'Generate 3 Photo Ads'}</span>
+                            </div>
+                            <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-amber-400 via-cyan-500 to-blue-600 dark:from-amber-300 dark:to-blue-300" />
+                          </button>
+                          {photoProgressLabel ? (
+                            <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                              {photoProgressLabel}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
                   </section>
 
                   {/* RIGHT COLUMN: Studio Workspace */}
-                  <section className={`${shellCard} dashboard-workspace-card flex flex-col gap-8 bg-white/60 dark:bg-slate-950/40 backdrop-blur-2xl border-l border-slate-200 dark:border-white/5`}>
-                    <div className="flex flex-col gap-6">
-                      <div className="dashboard-workspace-head flex items-center justify-between border-b border-slate-100 pb-6 dark:border-white/5">
-                        <div className="space-y-1.5">
-                          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                            Studio Workspace
+                  <section className={`${shellCard} dashboard-workspace-card flex flex-col gap-4 bg-white/60 dark:bg-slate-950/40 backdrop-blur-2xl border-l border-slate-200 dark:border-white/5`}>
+                    <div className="flex flex-col gap-3.5">
+                      <div className="dashboard-workspace-head flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
+                        <div className="space-y-1">
+                          <h2 className="text-[1.6rem] font-black tracking-tight text-slate-900 dark:text-white">
+                            {creatorMode === 'video' ? 'Studio Workspace' : 'Photo Studio'}
                           </h2>
                           <div className="flex items-center gap-2">
-                            {selectedJob ? (
+                            {creatorMode === 'video' && selectedJob ? (
                               <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadgeClass(selectedJob.status)}`}>
                                 {selectedJob.status}
                               </div>
                             ) : null}
+                            {creatorMode === 'photo' ? (
+                              <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-700 shadow-sm dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-200">
+                                {photoGenerating ? 'Generating' : 'Photo mode'}
+                              </div>
+                            ) : null}
                             <span className="text-xs font-bold text-slate-400 truncate max-w-[200px]">
-                              {selectedJob?.script?.title || 'No active workspace'}
+                              {creatorMode === 'video'
+                                ? selectedJob?.script?.title || 'No active workspace'
+                                : selectedPhotoAd?.title || 'No photo set selected'}
                             </span>
                           </div>
                         </div>
-                        <div className="dashboard-workspace-icon flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-400 dark:bg-white/5">
-                          <Layout size={20} />
+                        <div className="dashboard-workspace-icon flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-400 dark:bg-white/5">
+                          {creatorMode === 'video' ? <Layout size={18} /> : <Camera size={18} />}
                         </div>
                       </div>
 
-                      <div className="dashboard-tabs flex gap-1.5 rounded-2xl bg-slate-100/50 p-1.5 dark:bg-white/5">
-                        {workspaceTabs.map((tab) => (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setActiveWorkspaceTab(tab.id)}
-                            className={`dashboard-tab ${activeWorkspaceTab === tab.id ? 'active' : ''} flex-1 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
-                      </div>
+                      {creatorMode === 'video' ? (
+                        <div className="dashboard-tabs flex gap-1 rounded-2xl bg-slate-100/50 p-1 dark:bg-white/5">
+                          {workspaceTabs.map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setActiveWorkspaceTab(tab.id)}
+                              className={`dashboard-tab ${activeWorkspaceTab === tab.id ? 'active' : ''} flex-1 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="flex-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar">
+                      {creatorMode === 'video' ? (
                       <AnimatePresence mode="wait">
                         {activeWorkspaceTab === 'overview' && (
                           <motion.div
@@ -1069,32 +1674,32 @@ function App() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
-                            className="space-y-8 pb-4"
+                            className="space-y-4 pb-3"
                           >
                             {selectedJob ? (
                               <>
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                  <div className="dashboard-insight-card dashboard-insight-card--stage p-6 rounded-[32px] bg-indigo-500/[0.03] border border-indigo-500/10 dark:bg-flare/[0.03] dark:border-flare/10">
-                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-indigo-500 dark:text-flare opacity-60">
+                                <div className="grid gap-3.5 sm:grid-cols-2">
+                                  <div className="dashboard-insight-card dashboard-insight-card--stage rounded-[24px] border border-amber-500/15 bg-amber-500/[0.04] p-[1.125rem] dark:border-amber-300/10 dark:bg-amber-300/[0.04]">
+                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-amber-600 opacity-70 dark:text-amber-300">
                                       <Activity size={14} />
                                       Production Stage
                                     </div>
-                                    <div className="mt-4 text-2xl font-black text-slate-900 dark:text-white leading-none">
+                                    <div className="mt-2.5 text-[1.55rem] font-black leading-none text-slate-900 dark:text-white">
                                       {stageLabels[selectedJob.stage] || selectedJob.stage}
                                     </div>
                                   </div>
 
-                                  <div className="dashboard-insight-card dashboard-insight-card--progress p-6 rounded-[32px] bg-emerald-500/[0.03] border border-emerald-500/10 dark:bg-emerald-500/[0.06]">
-                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-emerald-500 opacity-60">
+                                  <div className="dashboard-insight-card dashboard-insight-card--progress rounded-[24px] border border-emerald-500/10 bg-emerald-500/[0.03] p-[1.125rem] dark:bg-emerald-500/[0.06]">
+                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-cyan-600 opacity-70 dark:text-cyan-300">
                                       <Zap size={14} />
                                       Live Progress
                                     </div>
                                     <div className="mt-2 flex items-end gap-2">
-                                      <div className="text-3xl font-black text-slate-900 dark:text-white leading-none">{selectedJob.progress}%</div>
+                                      <div className="text-[1.9rem] font-black leading-none text-slate-900 dark:text-white">{selectedJob.progress}%</div>
                                     </div>
-                                    <div className="mt-4 h-1.5 rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden">
+                                    <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/5">
                                       <motion.div
-                                        className="h-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]"
+                                        className="h-full bg-cyan-500 shadow-[0_0_12px_rgba(14,165,233,0.35)]"
                                         initial={{ width: 0 }}
                                         animate={{ width: `${selectedJob.progress}%` }}
                                         transition={{ duration: 1, ease: "easeOut" }}
@@ -1103,33 +1708,33 @@ function App() {
                                   </div>
                                 </div>
 
-                                <div className="dashboard-blueprint-card p-8 rounded-[40px] bg-white border border-slate-200 shadow-sm dark:bg-white/[0.02] dark:border-white/5 space-y-6">
-                                  <div className="flex items-center justify-between border-b border-slate-50 pb-5 dark:border-white/5">
+                                <div className="dashboard-blueprint-card space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-white/[0.02]">
+                                  <div className="flex items-center justify-between border-b border-slate-50 pb-3 dark:border-white/5">
                                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content Blueprint</div>
-                                    <div className="h-2 w-2 rounded-full bg-indigo-500 dark:bg-flare animate-pulse" />
+                                    <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-cyan-300" />
                                   </div>
 
-                                  <div className="space-y-6">
+                                  <div className="space-y-[1.125rem]">
                                     <div>
                                       <span className="inline-block px-3 py-1 rounded-lg bg-slate-50 dark:bg-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
                                         Campaign Title
                                       </span>
-                                      <h3 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                                      <h3 className="text-[1.45rem] font-black tracking-tight text-slate-900 dark:text-white leading-tight">
                                         {selectedJob.script?.title || 'Drafting...'}
                                       </h3>
                                     </div>
 
-                                    <div className="grid gap-6">
+                                    <div className="grid gap-[1.125rem]">
                                       <div className="space-y-2">
                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
-                                        <p className="text-base font-bold leading-relaxed italic text-slate-700 dark:text-slate-300">
+                                        <p className="text-[15px] font-bold italic leading-relaxed text-slate-700 dark:text-slate-300">
                                           "{selectedJob.script?.hook}"
                                         </p>
                                       </div>
                                       <div className="h-px bg-slate-50 dark:bg-white/5" />
                                       <div className="space-y-2">
                                         <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
-                                        <p className="text-lg font-black text-indigo-600 dark:text-flare tracking-tight">
+                                        <p className="text-[1.05rem] font-black tracking-tight text-cyan-700 dark:text-cyan-300">
                                           {selectedJob.script?.cta}
                                         </p>
                                       </div>
@@ -1138,15 +1743,15 @@ function App() {
                                 </div>
                               </>
                             ) : (
-                              <div className="dashboard-empty-state flex flex-col items-center justify-center py-24 text-center">
-                                <div className="relative mb-8">
-                                  <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full animate-pulse dark:bg-flare/10" />
-                                  <div className="relative p-8 rounded-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-200 dark:text-white/5">
-                                    <Sparkles size={48} />
+                              <div className="dashboard-empty-state flex flex-col items-center justify-center py-16 text-center">
+                                <div className="relative mb-6">
+                                  <div className="absolute inset-0 rounded-full bg-cyan-500/15 blur-3xl animate-pulse dark:bg-cyan-300/10" />
+                                  <div className="relative rounded-full border border-slate-200 bg-white p-6 text-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-white/5">
+                                    <Sparkles size={36} />
                                   </div>
                                 </div>
-                                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">System Ready</h3>
-                                <p className="mt-3 text-sm font-bold text-slate-400 max-w-[280px] leading-relaxed">
+                                <h3 className="text-lg font-black uppercase tracking-tight text-slate-900 dark:text-white">System Ready</h3>
+                                <p className="mt-2.5 max-w-[280px] text-sm font-bold leading-relaxed text-slate-400">
                                   Launch your first campaign briefly to activate the high-fidelity studio dashboard.
                                 </p>
                               </div>
@@ -1160,13 +1765,13 @@ function App() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
-                            className="space-y-8 pb-4"
+                            className="space-y-6 pb-3"
                           >
                             {selectedJob?.output?.preview?.url ? (
-                              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                                <div className="dashboard-preview-stage relative group mx-auto w-full max-w-[360px]">
-                                  <div className="absolute -inset-6 bg-indigo-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-flare/10" />
-                                  <div className="dashboard-preview-frame relative overflow-hidden rounded-[48px] border-[12px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
+                              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
+                                <div className="dashboard-preview-stage relative group mx-auto w-full max-w-[320px]">
+                                  <div className="absolute -inset-6 bg-cyan-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-cyan-300/10" />
+                                  <div className="dashboard-preview-frame relative overflow-hidden rounded-[40px] border-[10px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
                                     <video
                                       ref={previewVideoRef}
                                       controls
@@ -1183,24 +1788,24 @@ function App() {
                                   </div>
                                 </div>
 
-                                <div className="dashboard-segment-card p-8 rounded-[40px] bg-white text-slate-900 shadow-[0_20px_60px_rgba(99,102,241,0.12)] border border-slate-200 dark:bg-slate-900/50 dark:border-white/10 dark:shadow-[0_20px_60px_rgba(255,209,102,0.06)] dark:backdrop-blur-xl dark:text-white dark:border">
-                                  <div className="flex items-center justify-between mb-8">
+                                <div className="dashboard-segment-card rounded-[30px] border border-slate-200 bg-white p-6 text-slate-900 shadow-[0_20px_60px_rgba(99,102,241,0.12)] dark:border dark:border-white/10 dark:bg-slate-900/50 dark:text-white dark:shadow-[0_20px_60px_rgba(255,209,102,0.06)] dark:backdrop-blur-xl">
+                                  <div className="mb-6 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                      <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-white/10 dark:border-transparent">
-                                        <Scissors size={20} className="text-indigo-600 dark:text-flare" />
+                                      <div className="rounded-xl border border-cyan-100 bg-cyan-50 p-2 dark:border-transparent dark:bg-cyan-300/10">
+                                        <Scissors size={20} className="text-cyan-700 dark:text-cyan-300" />
                                       </div>
                                       <span className="text-base font-black tracking-tight uppercase">Segment Studio</span>
                                     </div>
-                                    <div className="px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-black uppercase tracking-widest dark:bg-flare/10 dark:border-transparent dark:text-flare">
+                                    <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:border-transparent dark:bg-amber-300/10 dark:text-amber-300">
                                       {formatSeconds(Math.max(0, trimEnd - trimStart))} Segment
                                     </div>
                                   </div>
 
-                                  <div className="space-y-10">
-                                    <div className="space-y-4">
+                                  <div className="space-y-7">
+                                    <div className="space-y-3.5">
                                       <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
                                         <span>In-point</span>
-                                        <span className="text-indigo-600 dark:text-white">{formatSeconds(trimStart)}</span>
+                                        <span className="text-cyan-700 dark:text-cyan-300">{formatSeconds(trimStart)}</span>
                                       </div>
                                       <div className="flex items-center justify-end gap-2">
                                         <button
@@ -1212,7 +1817,7 @@ function App() {
                                             setTrimStart(nextStart);
                                             setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
                                           }}
-                                          className="dashboard-pill-btn px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                          className="dashboard-pill-btn rounded-full border border-slate-200 bg-slate-100 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
                                         >
                                           Set from playhead
                                         </button>
@@ -1228,13 +1833,13 @@ function App() {
                                           setTrimStart(nextStart);
                                           setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
                                         }}
-                                        className="w-full accent-indigo-500 dark:accent-flare"
+                                        className="w-full accent-cyan-600 dark:accent-cyan-300"
                                       />
                                     </div>
-                                    <div className="space-y-4">
+                                    <div className="space-y-3.5">
                                       <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
                                         <span>Out-point</span>
-                                        <span className="text-indigo-600 dark:text-white">{formatSeconds(trimEnd)}</span>
+                                        <span className="text-cyan-700 dark:text-cyan-300">{formatSeconds(trimEnd)}</span>
                                       </div>
                                       <div className="flex items-center justify-end gap-2">
                                         <button
@@ -1246,7 +1851,7 @@ function App() {
                                             const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
                                             setTrimEnd(nextEnd);
                                           }}
-                                          className="dashboard-pill-btn px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                          className="dashboard-pill-btn rounded-full border border-slate-200 bg-slate-100 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
                                         >
                                           Set from playhead
                                         </button>
@@ -1262,23 +1867,23 @@ function App() {
                                           setTrimEnd(nextEnd);
                                           setTrimStart((current) => (nextEnd > current + 0.05 ? current : Math.max(0, nextEnd - 0.5)));
                                         }}
-                                        className="w-full accent-indigo-500 dark:accent-flare"
+                                        className="w-full accent-cyan-600 dark:accent-cyan-300"
                                       />
                                     </div>
                                   </div>
 
-                                  <div className="grid grid-cols-2 gap-4 mt-10">
-                                    <button disabled={trimLoading} onClick={handleTrim} className="dashboard-action-btn dashboard-action-btn--primary py-5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.2em] transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-flare dark:to-coral dark:text-slate-900 shadow-[0_8px_24px_rgba(99,102,241,0.35)] dark:shadow-[0_8px_24px_rgba(255,209,102,0.25)]">
+                                  <div className="mt-8 grid grid-cols-2 gap-3">
+                                    <button disabled={trimLoading} onClick={handleTrim} className="dashboard-action-btn dashboard-action-btn--primary rounded-2xl bg-cyan-600 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-cyan-300 dark:to-blue-300 dark:text-slate-900 shadow-[0_8px_24px_rgba(14,165,233,0.3)] dark:shadow-[0_8px_24px_rgba(103,232,249,0.18)]">
                                       {trimLoading ? 'Processing...' : 'Export Clip'}
                                     </button>
-                                    <a href={selectedJob.output.video?.url} target="_blank" className="dashboard-action-btn dashboard-action-btn--secondary flex items-center justify-center gap-2 py-5 rounded-2xl bg-white border border-slate-300 text-slate-700 text-[11px] font-black uppercase tracking-[0.2em] transition-all hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/20 dark:hover:border-white/30 dark:hover:text-white">
+                                    <a href={selectedJob.output.video?.url} target="_blank" rel="noreferrer" className="dashboard-action-btn dashboard-action-btn--secondary flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white py-4 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 transition-all hover:border-cyan-200 hover:bg-slate-50 hover:text-cyan-700 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:border-cyan-300/20 dark:hover:bg-white/20 dark:hover:text-white">
                                       <Download size={16} />
                                       Full Master
                                     </a>
                                   </div>
 
                                   {selectedJob.output?.trim?.asset?.url ? (
-                                    <div className="dashboard-export-card mt-8 space-y-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+                                    <div className="dashboard-export-card mt-6 space-y-3.5 rounded-[24px] border border-slate-200 bg-slate-50 p-[1.125rem] dark:border-white/10 dark:bg-white/5">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/60">
                                           Latest exported clip
@@ -1286,8 +1891,9 @@ function App() {
                                         <a
                                           href={selectedJob.output.trim.asset.url}
                                           target="_blank"
+                                          rel="noreferrer"
                                           download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
-                                          className="dashboard-pill-btn inline-flex items-center gap-2 rounded-full bg-white border border-slate-200 px-4 py-2 text-[10px] text-slate-600 font-black uppercase tracking-widest hover:bg-slate-50 hover:text-indigo-600 hover:border-slate-300 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
+                                          className="dashboard-pill-btn inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-cyan-200 hover:bg-slate-50 hover:text-cyan-700 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:border-cyan-300/20 dark:hover:bg-white/15 dark:hover:text-white"
                                         >
                                           <Download size={14} />
                                           Download clip
@@ -1304,13 +1910,13 @@ function App() {
                                 </div>
                               </div>
                             ) : (
-                              <div className="dashboard-preview-empty flex flex-col items-center justify-center py-24 text-center text-slate-400">
+                              <div className="dashboard-preview-empty flex flex-col items-center justify-center py-16 text-center text-slate-400">
                                 <motion.div
                                   animate={{ rotate: 360 }}
                                   transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                                  className="p-8 rounded-full bg-slate-50 dark:bg-white/5 mb-6"
+                                  className="mb-5 rounded-full bg-slate-50 p-6 dark:bg-white/5"
                                 >
-                                  <Clapperboard size={48} className="opacity-20" />
+                                  <Clapperboard size={36} className="opacity-20" />
                                 </motion.div>
                                 <h4 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-tight">Finalizing Assets</h4>
                                 <p className="mt-2 text-sm font-medium opacity-50">Visual data is being processed in the background.</p>
@@ -1335,25 +1941,25 @@ function App() {
                                   <button
                                     key={job._id}
                                     onClick={() => setSelectedJobId(job._id)}
-                                    className={`dashboard-history-item ${selectedJobId === job._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[28px] border p-5 transition-all duration-300`}
+                                    className={`dashboard-history-item ${selectedJobId === job._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 transition-all duration-300`}
                                   >
-                                    <div className="flex items-center gap-5 flex-1 min-w-0">
+                                    <div className="flex min-w-0 flex-1 items-center gap-4">
                                       <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
                                           job.status === 'failed' ? 'bg-rose-500 shadow-rose-500/40 animate-pulse' :
                                             'bg-amber-400 shadow-amber-400/40 animate-pulse'
                                         }`} />
                                       <div className="text-left min-w-0">
-                                        <div className="text-sm font-black text-slate-900 dark:text-white truncate max-w-[180px] tracking-tight">
+                                        <div className="max-w-[200px] truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">
                                           {job.script?.title || job.style}
                                         </div>
                                         <div className="flex items-center gap-2 mt-1">
                                           <span className="text-[9px] font-black uppercase opacity-30 tracking-widest truncate">
-                                            {job.productCategory}
+                                            {formatCategoryLabel(job.productCategory || 'general-product')}
                                           </span>
                                           <div className="shrink-0 h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
                                           <span className={`text-[9px] font-black ${job.status === 'completed' ? 'text-emerald-500' :
                                               job.status === 'failed' ? 'text-rose-500' :
-                                                'text-indigo-500 dark:text-flare'
+                                                'text-cyan-600 dark:text-cyan-300'
                                             }`}>
                                             {job.status === 'completed' ? 'Ready' : job.status === 'failed' ? 'Failed' : `${job.progress}% Sync`}
                                           </span>
@@ -1365,12 +1971,12 @@ function App() {
                                         <button
                                           type="button"
                                           onClick={(e) => { e.stopPropagation(); handleRegenerate(job); }}
-                                          className="dashboard-pill-btn px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-600 text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all dark:bg-flare/10 dark:text-flare dark:hover:bg-flare dark:hover:text-slate-900"
+                                          className="dashboard-pill-btn rounded-xl bg-cyan-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-700 transition-all hover:bg-cyan-600 hover:text-white dark:bg-cyan-300/10 dark:text-cyan-300 dark:hover:bg-cyan-300 dark:hover:text-slate-900"
                                         >
                                           Retry
                                         </button>
                                       )}
-                                      <div className="h-10 w-10 rounded-2xl bg-slate-50 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center dark:bg-white/5 translate-x-2 group-hover:translate-x-0">
+                                      <div className="flex h-9 w-9 translate-x-2 items-center justify-center rounded-2xl bg-slate-50 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 dark:bg-white/5">
                                         <ChevronRight size={18} className="text-slate-400" />
                                       </div>
                                     </div>
@@ -1381,6 +1987,140 @@ function App() {
                           </motion.div>
                         )}
                       </AnimatePresence>
+                      ) : (
+                        <div className="space-y-4 pb-4">
+                          {selectedPhotoAd ? (
+                            <>
+                              <div className="grid gap-3.5 sm:grid-cols-3">
+                                <div className="dashboard-insight-card rounded-[24px] border border-cyan-500/10 bg-cyan-500/[0.03] p-[1.125rem] dark:bg-cyan-400/[0.05]">
+                                  <div className="text-[9px] font-black uppercase tracking-widest text-cyan-600 opacity-70 dark:text-cyan-300">
+                                    Campaign Name
+                                  </div>
+                                  <div className="mt-2.5 text-[1.2rem] font-black leading-tight text-slate-900 dark:text-white">
+                                    {selectedPhotoAd.title}
+                                  </div>
+                                </div>
+                                <div className="dashboard-insight-card rounded-[24px] border border-amber-500/10 bg-amber-500/[0.03] p-[1.125rem] dark:bg-amber-300/[0.05]">
+                                  <div className="text-[9px] font-black uppercase tracking-widest text-amber-600 opacity-70 dark:text-amber-300">
+                                    Category
+                                  </div>
+                                  <div className="mt-2.5 text-[1.2rem] font-black leading-tight text-slate-900 dark:text-white">
+                                    {formatCategoryLabel(selectedPhotoAd.productCategory || 'general-product')}
+                                  </div>
+                                </div>
+                                <div className="dashboard-insight-card rounded-[24px] border border-emerald-500/10 bg-emerald-500/[0.03] p-[1.125rem] dark:bg-emerald-400/[0.05]">
+                                  <div className="text-[9px] font-black uppercase tracking-widest text-emerald-600 opacity-70 dark:text-emerald-300">
+                                    Output
+                                  </div>
+                                  <div className="mt-2.5 text-[1.2rem] font-black leading-tight text-slate-900 dark:text-white">
+                                    {selectedPhotoAd.images.length} luxury frames
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="dashboard-blueprint-card space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-white/[0.02]">
+                                <div className="flex items-center justify-between border-b border-slate-50 pb-3 dark:border-white/5">
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Photo Brief</div>
+                                  <div className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-700 dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-200">
+                                    {selectedPhotoAd.aspectRatio}
+                                  </div>
+                                </div>
+                                <p className="text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                                  {selectedPhotoAd.prompt}
+                                </p>
+                              </div>
+
+                              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                {selectedPhotoAd.images.map((image, index) => (
+                                  <div
+                                    key={`${selectedPhotoAd._id}-${index + 1}`}
+                                    className="dashboard-export-card overflow-hidden rounded-[26px] border border-slate-200 bg-white p-3 transition-transform hover:-translate-y-1 dark:border-white/10 dark:bg-white/[0.03]"
+                                  >
+                                    <div className="mb-3 flex items-center justify-between">
+                                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                                        Concept 0{index + 1}
+                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        <a
+                                          href={image.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="dashboard-pill-btn inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600 transition-all hover:border-cyan-200 hover:text-cyan-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-white"
+                                        >
+                                          <ExternalLink size={12} />
+                                          Open
+                                        </a>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDownloadPhoto(image.url || '', buildPhotoDownloadName(selectedPhotoAd.title, index))}
+                                          className="dashboard-pill-btn inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600 transition-all hover:border-cyan-200 hover:text-cyan-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-white"
+                                          title="Download image"
+                                        >
+                                          <Download size={12} />
+                                          Save
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <a href={image.url} target="_blank" rel="noreferrer">
+                                      <img
+                                        src={image.url}
+                                        alt={`${selectedPhotoAd.title} concept ${index + 1}`}
+                                        className="aspect-square w-full rounded-[18px] object-cover"
+                                      />
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="space-y-3">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                                  Photo History
+                                </div>
+                                <div className="grid gap-3">
+                                  {photoAds.map((item) => (
+                                    <button
+                                      key={item._id}
+                                      type="button"
+                                      onClick={() => setSelectedPhotoAdId(item._id)}
+                                      className={`dashboard-history-item ${selectedPhotoAdId === item._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 text-left transition-all duration-300`}
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">
+                                          {item.title}
+                                        </div>
+                                        <div className="mt-1 flex items-center gap-2">
+                                          <span className="truncate text-[9px] font-black uppercase tracking-widest opacity-30">
+                                            {formatCategoryLabel(item.productCategory || 'general-product')}
+                                          </span>
+                                          <div className="h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
+                                          <span className="text-[9px] font-black text-cyan-600 dark:text-cyan-300">
+                                            {item.images.length} images
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <ChevronRight size={18} className="text-slate-400 transition-transform group-hover:translate-x-1" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="dashboard-empty-state flex min-h-[20rem] flex-col items-center justify-center gap-4 text-center">
+                              <div className="rounded-full border border-slate-200 bg-white p-6 text-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-600">
+                                <Camera size={34} />
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                                  Photo studio ready
+                                </h3>
+                                <p className="mt-2 max-w-[340px] text-sm font-medium text-slate-400">
+                                  Add a campaign name and a rich prompt, then the studio will generate three polished ad photo concepts for you.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </section>
                 </main>
