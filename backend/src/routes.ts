@@ -9,9 +9,11 @@ import IORedis from 'ioredis';
 import mime from 'mime-types';
 import mongoose from 'mongoose';
 import { VideoJob } from './models/VideoJob';
+import { PhotoAd } from './models/PhotoAd';
 import { config } from './config';
 import { videoQueue } from './queue';
-import { ensureDir, fileExists, relativeFrom, uniqueFile } from './utils/files';
+import { ensureDir, fileExists, relativeFrom, slugify, uniqueFile } from './utils/files';
+import { mergeJobMetadata } from './utils/jobMetadata';
 import { getJobChannel } from './services/jobProgressService';
 import { trimVideo } from './services/renderService';
 import { uploadAsset } from './services/storageService';
@@ -48,6 +50,17 @@ const getOwnedJobFilter = (ownerId: string, jobId: string) => {
 
   return {
     _id: jobId,
+    owner: ownerId
+  };
+};
+
+const getOwnedPhotoAdFilter = (ownerId: string, photoAdId: string) => {
+  if (!mongoose.isValidObjectId(photoAdId)) {
+    return null;
+  }
+
+  return {
+    _id: photoAdId,
     owner: ownerId
   };
 };
@@ -104,6 +117,40 @@ const sanitizeJob = (job: any) => {
   }
 
   return plainJob;
+};
+
+const sanitizePhotoAd = (photoAd: any) => {
+  if (!photoAd) {
+    return photoAd;
+  }
+
+  const plainPhotoAd = typeof photoAd.toObject === 'function' ? photoAd.toObject() : { ...photoAd };
+  delete plainPhotoAd.owner;
+
+  plainPhotoAd.images = Array.isArray(plainPhotoAd.images)
+    ? plainPhotoAd.images.map((asset: Record<string, unknown>) => sanitizeStorageAsset(asset))
+    : [];
+
+  return plainPhotoAd;
+};
+
+const dataUrlPattern = /^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i;
+
+const decodeImageDataUrl = (dataUrl: string) => {
+  const match = dataUrlPattern.exec(dataUrl.trim());
+  if (!match) {
+    return null;
+  }
+
+  const mimeType = match[1].toLowerCase();
+  const base64Payload = match[2];
+  const extension = mime.extension(mimeType) || (mimeType === 'image/jpeg' ? 'jpg' : 'png');
+
+  return {
+    mimeType,
+    extension,
+    buffer: Buffer.from(base64Payload, 'base64')
+  };
 };
 
 router.get('/health', (_req, res) => {
@@ -181,15 +228,13 @@ router.post('/jobs', requireAuth, upload.single('image'), async (req: Authentica
         }
       );
 
-      job.metadata = {
-        ...(job.metadata || {}),
+      job.metadata = mergeJobMetadata(job.metadata, {
         queueJobId: String(queueJob.id)
-      };
+      });
     } else {
-      job.metadata = {
-        ...(job.metadata || {}),
+      job.metadata = mergeJobMetadata(job.metadata, {
         queueJobId: 'inline'
-      };
+      });
       setImmediate(() => {
         processVideoJob(String(job._id)).catch(async (error) => {
           await VideoJob.findByIdAndUpdate(job._id, {
@@ -229,6 +274,99 @@ router.get('/jobs/:jobId', requireAuth, async (req: AuthenticatedRequest, res, n
     }
 
     res.json({ data: sanitizeJob(job) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    const photoAds = await PhotoAd.find({ owner: userId })
+      .sort({ createdAt: -1 })
+      .limit(parseLimit(req.query.limit))
+      .lean();
+    res.json({ data: photoAds.map((photoAd) => sanitizePhotoAd(photoAd)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    const title = String(req.body.title || '').trim();
+    const prompt = String(req.body.prompt || '').trim();
+    const aspectRatio = String(req.body.aspectRatio || '1:1').trim();
+    const productCategory = String(req.body.productCategory || 'general-product').trim();
+    const style = String(req.body.style || 'minimal').trim();
+    const source = String(req.body.source || 'puter').trim();
+    const imageDataUrls = Array.isArray(req.body.imageDataUrls) ? req.body.imageDataUrls : [];
+
+    if (!title || !prompt) {
+      res.status(400).json({ message: 'Photo ad title and prompt are required.' });
+      return;
+    }
+
+    if (!imageDataUrls.length) {
+      res.status(400).json({ message: 'At least one generated image is required.' });
+      return;
+    }
+
+    const photoAd = new PhotoAd({
+      owner: userId,
+      title,
+      prompt,
+      aspectRatio,
+      productCategory,
+      style,
+      source,
+      images: []
+    });
+
+    const tempDir = path.join(config.workingDir, 'photo-ads', String(photoAd._id));
+    await ensureDir(tempDir);
+
+    const uploadedImages = [];
+
+    for (let index = 0; index < imageDataUrls.length; index += 1) {
+      const rawDataUrl = String(imageDataUrls[index] || '');
+      const decoded = decodeImageDataUrl(rawDataUrl);
+      if (!decoded) {
+        res.status(400).json({ message: `Image ${index + 1} is not a supported image data URL.` });
+        return;
+      }
+
+      const tempFilePath = path.join(tempDir, uniqueFile(`photo-${index + 1}`, decoded.extension));
+      await fs.writeFile(tempFilePath, decoded.buffer);
+
+      const assetKey = `${photoAd._id}/images/${String(index + 1).padStart(2, '0')}-${slugify(title)}.${decoded.extension}`;
+      const uploadedAsset = await uploadAsset(tempFilePath, assetKey);
+      await fs.unlink(tempFilePath).catch(() => undefined);
+      uploadedImages.push(uploadedAsset);
+    }
+
+    photoAd.images = uploadedImages;
+    await photoAd.save();
+
+    res.status(201).json({ data: sanitizePhotoAd(photoAd) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/photo-ads/:photoAdId', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    const filter = getOwnedPhotoAdFilter(userId, readSingleParam(req.params.photoAdId));
+    const photoAd = filter ? await PhotoAd.findOne(filter).lean() : null;
+
+    if (!photoAd) {
+      res.status(404).json({ message: 'Photo ad set not found.' });
+      return;
+    }
+
+    res.json({ data: sanitizePhotoAd(photoAd) });
   } catch (error) {
     next(error);
   }
