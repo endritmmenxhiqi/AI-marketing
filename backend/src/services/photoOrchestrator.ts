@@ -177,6 +177,7 @@ export const processPhotoJob = async (jobId: string) => {
 
     await publishJobProgress(jobId, {
       status: 'completed',
+      stage: 'completed',
       progress: 100,
       message: 'Success! Professional photos are ready.',
       variants: job.output.variants
@@ -187,6 +188,6 @@ export const processPhotoJob = async (jobId: string) => {
     job.status = 'failed';
     job.error = error.message;
     await job.save();
-    await publishJobProgress(jobId, { status: 'failed', progress: 0, message: `Error: ${error.message}` });
+    await publishJobProgress(jobId, { status: 'failed', stage: 'failed', progress: 0, message: `Error: ${error.message}` });
   }
 };
