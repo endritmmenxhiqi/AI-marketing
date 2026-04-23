@@ -43,8 +43,8 @@ import {
 import { useJobEvents } from './hooks/useJobEvents';
 import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
+import BrandLogo from './components/common/BrandLogo';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import logoMark from './assets/logo-mark.png';
 
 const styles = [
   { value: 'energetic', label: 'Energetic', tone: 'Fast hook, bold cadence, punchy CTA' },
@@ -135,12 +135,6 @@ const buildContentPackageExport = (job: VideoJob) => {
     '',
     'Hashtag Suggestions',
     hashtags.length ? hashtags.map((tag) => `#${String(tag).replace(/^#/, '')}`).join(' ') : 'N/A',
-    '',
-    'Thumbnail Text',
-    contentPackage?.thumbnailText || 'N/A',
-    '',
-    'Short Ad Copy',
-    contentPackage?.shortAdCopy || 'N/A',
     '',
     'Call to Action',
     job.script?.cta || 'N/A',
@@ -278,7 +272,7 @@ function AuthScreen({
           {/* Brand */}
           <div className="auth-brand-row">
             <div className="auth-icon-badge overflow-hidden p-0 border-none bg-transparent">
-              <img src={logoMark} alt="Logo" className="w-12 h-12 object-contain" />
+              <BrandLogo className="w-12 h-12 object-contain" />
             </div>
             <div>
               <h1 className="auth-heading">{t('appName')}</h1>
@@ -519,32 +513,6 @@ function AuthScreen({
     </div>
   );
 }
-function SplashScreen() {
-  return (
-    <motion.div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-white dark:bg-slate-950"
-      initial={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.5, ease: 'easeInOut' }}
-    >
-      <motion.div
-        initial={{ scale: 0.85, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="flex flex-col items-center gap-6"
-      >
-        <div className="relative h-28 w-28 overflow-hidden rounded-[32px] bg-white shadow-2xl dark:bg-white/10 dark:shadow-glow">
-          <img src={logoMark} alt="Logo" className="h-full w-full object-contain p-5" />
-        </div>
-        <div className="flex flex-col items-center text-center">
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase">AI Marketing Tool</h2>
-          <div className="mt-3 h-1 w-16 rounded-full bg-indigo-600 dark:bg-indigo-400" />
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
 function App() {
   const { theme, toggleTheme } = useTheme();
   const { lang, toggleLanguage } = useLanguage();
@@ -562,7 +530,6 @@ function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [isAppLoading, setIsAppLoading] = useState(true);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [error, setError] = useState('');
   const [trimStart, setTrimStart] = useState(0);
@@ -573,13 +540,6 @@ function App() {
   const [contentPackageNotice, setContentPackageNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsAppLoading(false);
-    }, 850);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -633,7 +593,6 @@ function App() {
     ? contentPackage.hashtagSuggestions
     : selectedJob?.script?.hashtags || [];
   const firstName = auth.email.split('@')[0] || 'creator';
-  const showStartupSplash = isAppLoading || isSessionLoading;
   const categoryLabel =
     categories.find((item) => item.value === productCategory)?.label || 'General product';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
@@ -873,15 +832,11 @@ function App() {
 
   return (
     <>
-      <AnimatePresence mode="wait">
-        {showStartupSplash && <SplashScreen key="splash" />}
-      </AnimatePresence>
-
       <Routes>
         <Route
           path="/"
           element={
-            showStartupSplash ? null : !auth.isAuthenticated ? (
+            isSessionLoading ? null : !auth.isAuthenticated ? (
               <AuthScreen onAuthenticated={({ email }) => setAuth({ email, isAuthenticated: true })} />
             ) : (
               <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_85%_15%,rgba(236,72,153,0.10),transparent_24%),linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fbff_100%)] text-slate-900 transition-colors dark:bg-mesh dark:text-white">
@@ -892,7 +847,7 @@ function App() {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                            <div className="flex items-center gap-3">
                               <div className="p-1 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 shadow-sm">
-                                <img src={logoMark} alt="Logo" className="w-11 h-11 object-contain" />
+                                <BrandLogo className="w-11 h-11 object-contain" />
                               </div>
                               <div>
                                 <h1 className="text-3xl font-bold tracking-tight md:text-4xl text-slate-900 dark:text-white">
@@ -1301,20 +1256,6 @@ function App() {
                                             </div>
                                           </div>
 
-                                          <div className="grid gap-4 md:grid-cols-2">
-                                            <div className="space-y-2">
-                                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Thumbnail Text</span>
-                                              <p className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-sm dark:bg-white/5 dark:text-white">
-                                                {contentPackage?.thumbnailText || 'Generating thumbnail text.'}
-                                              </p>
-                                            </div>
-                                            <div className="space-y-2">
-                                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Short Ad Copy</span>
-                                              <p className="rounded-2xl bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-sm dark:bg-white/5 dark:text-slate-300">
-                                                {contentPackage?.shortAdCopy || 'Generating short ad copy.'}
-                                              </p>
-                                            </div>
-                                          </div>
                                         </div>
                                       </div>
                                     </div>

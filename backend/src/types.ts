@@ -27,8 +27,6 @@ export interface ScriptScene {
 export interface ContentPackage {
   socialCaption: string;
   hashtagSuggestions: string[];
-  thumbnailText: string;
-  shortAdCopy: string;
 }
 
 export interface ScriptPackage {

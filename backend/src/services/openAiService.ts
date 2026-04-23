@@ -25,7 +25,7 @@ const blockedKeywordTokens = new Set([
 ]);
 
 const SCRIPT_PROMPT_VERSION = 'v5';
-const CONTENT_PACKAGE_PROMPT_VERSION = 'v1';
+const CONTENT_PACKAGE_PROMPT_VERSION = 'v2';
 const openAiChatCompletionsUrl = `${config.openAiBaseUrl}/chat/completions`;
 
 const getOpenAiHeaders = () => {
@@ -67,7 +67,7 @@ const scriptSchema = {
       contentPackage: {
         type: 'object',
         additionalProperties: false,
-        required: ['socialCaption', 'hashtagSuggestions', 'thumbnailText', 'shortAdCopy'],
+        required: ['socialCaption', 'hashtagSuggestions'],
         properties: {
           socialCaption: { type: 'string' },
           hashtagSuggestions: {
@@ -75,9 +75,7 @@ const scriptSchema = {
             items: { type: 'string' },
             minItems: 4,
             maxItems: 10
-          },
-          thumbnailText: { type: 'string' },
-          shortAdCopy: { type: 'string' }
+          }
         }
       },
       scenes: {
@@ -188,9 +186,7 @@ const normalizeScriptPackage = (payload: ScriptPackage) => {
 
   const contentPackage = payload.contentPackage || {
     socialCaption: '',
-    hashtagSuggestions: [],
-    thumbnailText: '',
-    shortAdCopy: ''
+    hashtagSuggestions: []
   };
 
   return {
@@ -214,9 +210,7 @@ const normalizeScriptPackage = (payload: ScriptPackage) => {
             .map((tag) => normalizeLine(tag).replace(/\s+/g, ''))
             .filter(Boolean)
         )
-      ).slice(0, 10),
-      thumbnailText: normalizeLine(contentPackage.thumbnailText),
-      shortAdCopy: normalizeLine(contentPackage.shortAdCopy)
+      ).slice(0, 10)
     }
   } satisfies ScriptPackage;
 };
@@ -292,11 +286,10 @@ export const generateScriptPackage = async (
             'Target a total runtime of 30-45 seconds. Do NOT produce videos shorter than 28 seconds.',
             'This tool is for marketing creatives only. Treat the input as a product advertisement brief.',
             'Always use exactly 4 scenes minimum, preferring 5 scenes for richer storytelling.',
-            'Also generate a contentPackage object with socialCaption, hashtagSuggestions, thumbnailText, and shortAdCopy.',
+            'Also generate a contentPackage object with socialCaption and hashtagSuggestions.',
             'socialCaption should be 1-2 punchy sentences that work as a post caption.',
             'hashtagSuggestions should be 4-10 relevant, high-intent hashtags.',
-            'thumbnailText should be very short, ideally 3-6 words, and thumbnail friendly.',
-            'shortAdCopy should be a compact promotional blurb of roughly 40-70 words.',
+            'Do not include thumbnailText or shortAdCopy.',
             'Infer the likely buyer, core problem, desired outcome, offer, and CTA from the brief when needed.',
             'Scene 1 should be a hard hook or pattern interrupt — make it impossible to scroll past.',
             'Scene 2 should introduce the product and the core problem it solves.',

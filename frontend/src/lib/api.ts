@@ -19,8 +19,6 @@ export interface JobScene {
 export interface ContentPackage {
   socialCaption?: string;
   hashtagSuggestions?: string[];
-  thumbnailText?: string;
-  shortAdCopy?: string;
 }
 
 export interface VideoJob {

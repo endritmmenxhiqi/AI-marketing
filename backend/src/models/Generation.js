@@ -10,14 +10,6 @@ const contentPackageSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    thumbnailText: {
-      type: String,
-      default: '',
-    },
-    shortAdCopy: {
-      type: String,
-      default: '',
-    },
   },
   { _id: false }
 );

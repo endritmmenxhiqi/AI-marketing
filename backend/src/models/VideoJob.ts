@@ -41,8 +41,6 @@ const contentPackageSchema = new Schema(
   {
     socialCaption: String,
     hashtagSuggestions: [String],
-    thumbnailText: String,
-    shortAdCopy: String,
   },
   { _id: false }
 );
