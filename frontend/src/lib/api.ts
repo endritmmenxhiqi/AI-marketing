@@ -49,7 +49,41 @@ export interface VideoJob {
   };
   metadata?: {
     durationSeconds?: number;
+    performance?: {
+      totalElapsedMs?: number;
+      targetElapsedMs?: number;
+      phaseDurations?: {
+        scriptMs?: number;
+        voiceMs?: number;
+        mediaMs?: number;
+        renderMs?: number;
+        uploadMs?: number;
+      };
+      concurrency?: {
+        voiceGeneration?: number;
+        mediaSelection?: number;
+        sceneRendering?: number;
+      };
+    };
   };
+}
+
+export interface PhotoAdAsset {
+  provider?: string;
+  key?: string;
+  url?: string;
+}
+
+export interface PhotoAd {
+  _id: string;
+  title: string;
+  prompt: string;
+  aspectRatio: string;
+  productCategory?: string;
+  style: string;
+  source?: string;
+  createdAt: string;
+  images: PhotoAdAsset[];
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
@@ -58,6 +92,12 @@ export interface AuthUser {
   id: string;
   email: string;
   role: string;
+}
+
+export interface PasswordResetResponse {
+  message: string;
+  user?: AuthUser;
+  token?: string;
 }
 
 type ApiError = Error & {
@@ -143,7 +183,7 @@ export const resetPassword = async (token: string, password: string) => {
   }
 
   const payload = await response.json();
-  return payload as { message: string; user?: any; token?: string };
+  return payload as PasswordResetResponse;
 };
 
 export const createJob = async (payload: {
@@ -196,6 +236,58 @@ export const fetchJob = async (jobId: string) => {
   }
   const payload = await response.json();
   return payload.data as VideoJob;
+};
+
+export const createPhotoAd = async (payload: {
+  title: string;
+  prompt: string;
+  aspectRatio: string;
+  productCategory: string;
+  style: string;
+  source?: string;
+  imageDataUrls: string[];
+}) => {
+  const response = await fetch(`${API_BASE}/photo-ads`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Failed to save photo ads.');
+  }
+
+  const payloadJson = await response.json();
+  return payloadJson.data as PhotoAd;
+};
+
+export const fetchPhotoAds = async () => {
+  const response = await fetch(`${API_BASE}/photo-ads`, {
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Failed to fetch photo ads.');
+  }
+
+  const payload = await response.json();
+  return payload.data as PhotoAd[];
+};
+
+export const fetchPhotoAd = async (photoAdId: string) => {
+  const response = await fetch(`${API_BASE}/photo-ads/${photoAdId}`, {
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Failed to fetch photo ad set.');
+  }
+
+  const payload = await response.json();
+  return payload.data as PhotoAd;
 };
 
 export const trimJob = async (jobId: string, startSeconds: number, endSeconds: number) => {

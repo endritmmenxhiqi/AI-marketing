@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Sparkles, RefreshCcw, ArrowRight } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, Lock, Sparkles, RefreshCcw, ArrowRight, Moon, Sun } from 'lucide-react';
 import { resetPassword } from '../lib/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
@@ -23,6 +23,11 @@ const ResetPasswordPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!token) {
+      setError('Reset link is invalid or expired.');
+      return;
+    }
 
     const { password, confirmPassword } = formData;
 
@@ -55,7 +60,7 @@ const ResetPasswordPage = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(err.message || 'Failed to reset password.');
+      setError(err?.message || 'Failed to reset password.');
     } finally {
       setLoading(false);
     }
@@ -84,7 +89,7 @@ const ResetPasswordPage = () => {
           onClick={toggleTheme}
           aria-label="Toggle theme"
         >
-          {theme === 'dark' ? '☀️' : '🌙'}
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
 
