@@ -255,7 +255,16 @@ export const generateScriptPackage = async (
             ].join(' ')
         : '';
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const repairInstruction = [
+    'The previous draft was invalid because it did not contain enough usable scenes.',
+    'Return exactly 5 complete scenes now.',
+    'Every scene must include a non-empty headline, 18-28 word voiceover, 1-3 onScreenText lines, 2-4 concrete Pexels keywords, visualBrief, and imagePrompt.',
+    'Do not summarize the ad as one scene. Split the story into hook, product/problem, benefit, proof/desire, and CTA.'
+  ].join('\n');
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -263,7 +272,7 @@ export const generateScriptPackage = async (
     },
     body: JSON.stringify({
       model: config.openAiModel,
-      temperature: 0.55,
+      temperature: attempt === 0 ? 0.55 : 0.35,
       response_format: {
         type: 'json_schema',
         json_schema: scriptSchema
@@ -312,7 +321,7 @@ export const generateScriptPackage = async (
             'For food products, prioritize closeups, serving, slicing, plating, ingredients, and authentic product textures before secondary lifestyle context.',
             'For fitness products, favor workout, home training, stretching, sweating, coaching, progress checks, and strong post-workout confidence over talking or standing around.',
             'imagePrompt must stay truthful to the product category and should never invent irrelevant content.'
-          ].join('\n')
+          ].join('\n') + (attempt === 0 ? '' : `\n\n${repairInstruction}`)
         }
       ]
     })
@@ -329,7 +338,20 @@ export const generateScriptPackage = async (
     throw new Error('OpenAI response did not include any content.');
   }
 
-  const parsed = normalizeScriptPackage(parseJson(content) as ScriptPackage);
-  await setCache(cacheKey, parsed);
-  return parsed;
+    try {
+      const parsed = normalizeScriptPackage(parseJson(content) as ScriptPackage);
+      await setCache(cacheKey, parsed);
+      return parsed;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : '';
+      if (attempt === 0 && message.includes('enough usable scenes')) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('OpenAI script response was invalid.');
 };

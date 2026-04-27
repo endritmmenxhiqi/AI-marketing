@@ -92,6 +92,8 @@ const videoJobSchema = new Schema(
     enableStyleTransfer: { type: Boolean, default: false },
     imagePath: { type: String, default: '' },
     imageUrl: { type: String, default: '' },
+    secondaryImagePath: { type: String, default: '' },
+    secondaryImageUrl: { type: String, default: '' },
     script: {
       title: String,
       hook: String,

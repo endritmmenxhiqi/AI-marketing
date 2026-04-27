@@ -631,6 +631,8 @@ function App() {
   const [enableStyleTransfer, setEnableStyleTransfer] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [secondaryFile, setSecondaryFile] = useState<File | null>(null);
+  const [secondaryPreviewUrl, setSecondaryPreviewUrl] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -647,6 +649,7 @@ function App() {
   const [photoAds, setPhotoAds] = useState<PhotoAd[]>([]);
   const [selectedPhotoAdId, setSelectedPhotoAdId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const secondaryFileInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const photoPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -892,8 +895,11 @@ function App() {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
       }
+      if (secondaryPreviewUrl) {
+        URL.revokeObjectURL(secondaryPreviewUrl);
+      }
     };
-  }, [previewUrl]);
+  }, [previewUrl, secondaryPreviewUrl]);
 
   useJobEvents(
     selectedJobId,
@@ -912,37 +918,56 @@ function App() {
     Boolean(selectedJobId)
   );
 
-  const handleFileChange = (nextFile: File | null) => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+  const handleFileChange = (nextFile: File | null, slot: 'primary' | 'secondary' = 'primary') => {
+    if (slot === 'primary') {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setFile(nextFile);
+      setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+    } else {
+      if (secondaryPreviewUrl) {
+        URL.revokeObjectURL(secondaryPreviewUrl);
+      }
+      setSecondaryFile(nextFile);
+      setSecondaryPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
     }
-    setFile(nextFile);
-    setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
     setIsPreviewOpen(false);
   };
 
-  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+  const onDrop = (event: DragEvent<HTMLDivElement>, slot: 'primary' | 'secondary' = 'primary') => {
     event.preventDefault();
     const droppedFile = event.dataTransfer.files?.[0];
     if (droppedFile) {
-      handleFileChange(droppedFile);
+      handleFileChange(droppedFile, slot);
     }
   };
 
-  const onSelectFile = (event: ChangeEvent<HTMLInputElement>) => {
+  const onSelectFile = (event: ChangeEvent<HTMLInputElement>, slot: 'primary' | 'secondary' = 'primary') => {
     const nextFile = event.target.files?.[0] || null;
-    handleFileChange(nextFile);
+    handleFileChange(nextFile, slot);
   };
 
-  const openFilePicker = () => {
-    fileInputRef.current?.click();
-  };
-
-  const clearSelectedFile = () => {
-    handleFileChange(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const openFilePicker = (slot: 'primary' | 'secondary' = 'primary') => {
+    if (slot === 'primary') {
+      fileInputRef.current?.click();
+      return;
     }
+
+    secondaryFileInputRef.current?.click();
+  };
+
+  const clearSelectedFile = (slot: 'primary' | 'secondary' = 'primary') => {
+    handleFileChange(null, slot);
+    const input = slot === 'primary' ? fileInputRef.current : secondaryFileInputRef.current;
+    if (input) {
+      input.value = '';
+    }
+  };
+
+  const clearProductFiles = () => {
+    clearSelectedFile('primary');
+    clearSelectedFile('secondary');
   };
 
   const handleSubmit = async () => {
@@ -956,6 +981,7 @@ function App() {
       setError('');
       const job = await createJob({
         image: file,
+        secondaryImage: secondaryFile,
         description,
         productCategory,
         style,
@@ -966,7 +992,7 @@ function App() {
       setSelectedJobId(job._id);
       setActiveWorkspaceTab('overview');
       setDescription('');
-      clearSelectedFile();
+      clearProductFiles();
     } catch (nextError: any) {
       if (nextError?.status === 401) {
         clearAuthSession('Your session expired. Please sign in again.');
@@ -1334,15 +1360,15 @@ function App() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="group relative">
+                      <div className="grid gap-3 md:grid-cols-2">
                         <div
                           onDragOver={(event) => event.preventDefault()}
-                          onDrop={onDrop}
-                          className="dashboard-upload-zone flex flex-col items-center justify-center gap-3 rounded-[26px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 backdrop-blur-sm transition-all hover:border-cyan-500/35 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-cyan-300/30 dark:hover:bg-white/[0.03]"
+                          onDrop={(event) => onDrop(event, 'primary')}
+                          className="dashboard-upload-zone flex min-h-[12rem] flex-col items-center justify-center gap-3 rounded-[26px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-5 backdrop-blur-sm transition-all hover:border-cyan-500/35 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-cyan-300/30 dark:hover:bg-white/[0.03]"
                         >
                           {file ? (
                             <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
-                              <div className="flex items-center gap-4">
+                              <div className="flex min-w-0 items-center gap-4">
                                 <div className="rounded-2xl bg-cyan-600 p-3 text-white shadow-lg shadow-cyan-500/20 dark:bg-cyan-300 dark:text-slate-950 dark:shadow-cyan-300/10">
                                   <FileImage size={20} />
                                 </div>
@@ -1351,7 +1377,7 @@ function App() {
                                   <div className="text-[10px] font-black opacity-40 uppercase tracking-tighter">{formatFileSize(file.size)}</div>
                                 </div>
                               </div>
-                              <button type="button" onClick={clearSelectedFile} className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                              <button type="button" onClick={() => clearSelectedFile('primary')} className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
                                 <Trash2 size={18} />
                               </button>
                             </div>
@@ -1361,16 +1387,52 @@ function App() {
                                 <ImagePlus size={26} />
                               </div>
                               <div className="text-center space-y-1">
-                                <div className="text-[15px] font-bold text-slate-900 dark:text-white">Product Asset</div>
-                                <p className="text-xs font-medium text-slate-400">Drag & drop or Click to upload</p>
+                                <div className="text-[15px] font-bold text-slate-900 dark:text-white">Product Asset 1</div>
+                                <p className="text-xs font-medium text-slate-400">Opening hero image</p>
                               </div>
-                              <button type="button" onClick={openFilePicker} className="mt-1 rounded-full bg-slate-900 px-[1.125rem] py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:bg-slate-700 active:scale-95 dark:bg-white dark:text-slate-900">
+                              <button type="button" onClick={() => openFilePicker('primary')} className="mt-1 rounded-full bg-slate-900 px-[1.125rem] py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:bg-slate-700 active:scale-95 dark:bg-white dark:text-slate-900">
                                 Select File
                               </button>
                             </>
                           )}
                         </div>
-                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onSelectFile} />
+                        <div
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => onDrop(event, 'secondary')}
+                          className="dashboard-upload-zone flex min-h-[12rem] flex-col items-center justify-center gap-3 rounded-[26px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-5 backdrop-blur-sm transition-all hover:border-cyan-500/35 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-cyan-300/30 dark:hover:bg-white/[0.03]"
+                        >
+                          {secondaryFile ? (
+                            <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
+                              <div className="flex min-w-0 items-center gap-4">
+                                <div className="rounded-2xl bg-amber-500 p-3 text-white shadow-lg shadow-amber-500/20 dark:bg-amber-300 dark:text-slate-950 dark:shadow-amber-300/10">
+                                  <FileImage size={20} />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{secondaryFile.name}</div>
+                                  <div className="text-[10px] font-black opacity-40 uppercase tracking-tighter">{formatFileSize(secondaryFile.size)}</div>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => clearSelectedFile('secondary')} className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="rounded-3xl bg-white p-3.5 text-slate-300 shadow-sm dark:bg-white/5 dark:text-slate-600">
+                                <ImagePlus size={26} />
+                              </div>
+                              <div className="text-center space-y-1">
+                                <div className="text-[15px] font-bold text-slate-900 dark:text-white">Product Asset 2</div>
+                                <p className="text-xs font-medium text-slate-400">Optional closing hero</p>
+                              </div>
+                              <button type="button" onClick={() => openFilePicker('secondary')} className="mt-1 rounded-full bg-slate-900 px-[1.125rem] py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:bg-slate-700 active:scale-95 dark:bg-white dark:text-slate-900">
+                                Select File
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => onSelectFile(event, 'primary')} />
+                        <input ref={secondaryFileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => onSelectFile(event, 'secondary')} />
                       </div>
 
                       <div className="grid gap-3.5 md:grid-cols-2">

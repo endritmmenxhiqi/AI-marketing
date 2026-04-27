@@ -316,6 +316,10 @@ const sceneCameraHints = (scene: ScriptScene) => {
 
 const buildFoodSignals = (description: string) => {
   const normalized = description.toLowerCase();
+  const pistachioBrief = normalized.includes('pistachio');
+  const layeredBrief = ['layer', 'layers', 'layered', 'creamy', 'cream', 'mousse'].some((token) =>
+    normalized.includes(token)
+  );
 
   if (normalized.includes('baklava')) {
     return {
@@ -332,7 +336,18 @@ const buildFoodSignals = (description: string) => {
   }
 
   return {
-    anchors: [] as string[],
+    anchors: unique([
+      normalized.includes('cake') || layeredBrief ? 'pistachio cake close up' : '',
+      normalized.includes('cake') || layeredBrief ? 'layered dessert cake' : '',
+      pistachioBrief ? 'pistachio dessert close up' : '',
+      pistachioBrief ? 'pistachio pastry' : '',
+      layeredBrief ? 'creamy layered dessert' : '',
+      layeredBrief ? 'dessert slice layers' : '',
+      'gourmet dessert plating',
+      'luxury dessert close up',
+      'dessert texture macro',
+      'elegant pastry dessert'
+    ]),
     avoidTerms: [] as string[]
   };
 };
@@ -617,6 +632,7 @@ const buildSearchQueries = ({
   ];
 
   const baseQueries = [
+    ...anchorQueries,
     ...scene.pexelsKeywords,
     ...scene.onScreenText,
     scene.visualBrief,
@@ -634,7 +650,6 @@ const buildSearchQueries = ({
     actionHint ? `${categoryText} ${actionHint}` : '',
     focusPhrase && actionHint ? `${focusPhrase} ${actionHint}` : '',
     productPhrase ? `${productPhrase} ${focusPhrase || scene.visualBrief}` : '',
-    ...anchorQueries,
     scene.visualBrief,
     scene.headline
   ];

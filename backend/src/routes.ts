@@ -28,6 +28,7 @@ const maximumJobListLimit = 50;
 
 type AuthenticatedUploadRequest = AuthenticatedRequest & {
   file?: Express.Multer.File;
+  files?: Express.Multer.File[] | Record<string, Express.Multer.File[]>;
 };
 
 const parseLimit = (value: unknown) => {
@@ -82,6 +83,7 @@ const sanitizeJob = (job: any) => {
   const plainJob = typeof job.toObject === 'function' ? job.toObject() : { ...job };
   delete plainJob.owner;
   delete plainJob.imagePath;
+  delete plainJob.secondaryImagePath;
 
   if (plainJob.metadata) {
     delete plainJob.metadata.jobFolder;
@@ -170,7 +172,14 @@ router.get('/jobs', requireAuth, async (req: AuthenticatedRequest, res, next) =>
   }
 });
 
-router.post('/jobs', requireAuth, upload.single('image'), async (req: AuthenticatedUploadRequest, res, next) => {
+router.post(
+  '/jobs',
+  requireAuth,
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'secondaryImage', maxCount: 1 }
+  ]),
+  async (req: AuthenticatedUploadRequest, res, next) => {
   try {
     const userId = getAuthenticatedUserId(req);
     const description = String(req.body.description || '').trim();
@@ -183,20 +192,30 @@ router.post('/jobs', requireAuth, upload.single('image'), async (req: Authentica
       return;
     }
 
-    let imagePath = '';
-    let imageUrl = '';
-
-    if (req.file) {
+    const uploadedFiles = !Array.isArray(req.files) && req.files ? req.files : {};
+    const primaryFile = uploadedFiles.image?.[0];
+    const secondaryFile = uploadedFiles.secondaryImage?.[0];
+    const saveProductImage = async (file: Express.Multer.File, label: string) => {
       await ensureDir(config.uploadsDir);
       const extension =
-        mime.extension(req.file.mimetype || '') ||
-        path.extname(req.file.originalname).replace(/^\./, '') ||
+        mime.extension(file.mimetype || '') ||
+        path.extname(file.originalname).replace(/^\./, '') ||
         'png';
-      const imageFileName = uniqueFile('product-image', extension);
-      imagePath = path.join(config.uploadsDir, imageFileName);
-      await fs.writeFile(imagePath, req.file.buffer);
-      imageUrl = `${config.appUrl}/storage/uploads/${imageFileName}`;
-    }
+      const imageFileName = uniqueFile(label, extension);
+      const imagePath = path.join(config.uploadsDir, imageFileName);
+      await fs.writeFile(imagePath, file.buffer);
+      return {
+        path: imagePath,
+        url: `${config.appUrl}/storage/uploads/${imageFileName}`
+      };
+    };
+
+    const primaryImage = primaryFile ? await saveProductImage(primaryFile, 'product-image-1') : null;
+    const secondaryImage = secondaryFile ? await saveProductImage(secondaryFile, 'product-image-2') : null;
+    const imagePath = primaryImage?.path || secondaryImage?.path || '';
+    const imageUrl = primaryImage?.url || secondaryImage?.url || '';
+    const secondaryImagePath = primaryImage ? secondaryImage?.path || '' : '';
+    const secondaryImageUrl = primaryImage ? secondaryImage?.url || '' : '';
 
     const job = await VideoJob.create({
       owner: userId,
@@ -206,7 +225,9 @@ router.post('/jobs', requireAuth, upload.single('image'), async (req: Authentica
       enableStyleTransfer,
       imagePath,
       imageUrl,
-      message: req.file
+      secondaryImagePath,
+      secondaryImageUrl,
+      message: primaryFile || secondaryFile
         ? 'Queued for generation.'
         : 'Queued for generation from product description only.',
       output: {

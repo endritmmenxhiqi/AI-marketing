@@ -28,6 +28,7 @@ export interface VideoJob {
   style: string;
   enableStyleTransfer: boolean;
   imageUrl?: string;
+  secondaryImageUrl?: string;
   createdAt: string;
   script?: {
     title?: string;
@@ -188,6 +189,7 @@ export const resetPassword = async (token: string, password: string) => {
 
 export const createJob = async (payload: {
   image?: File | null;
+  secondaryImage?: File | null;
   description: string;
   productCategory: string;
   style: string;
@@ -196,6 +198,9 @@ export const createJob = async (payload: {
   const formData = new FormData();
   if (payload.image) {
     formData.append('image', payload.image);
+  }
+  if (payload.secondaryImage) {
+    formData.append('secondaryImage', payload.secondaryImage);
   }
   formData.append('description', payload.description);
   formData.append('productCategory', payload.productCategory);

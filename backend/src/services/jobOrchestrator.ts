@@ -246,6 +246,24 @@ const createUploadFallback = (
 const isPerfumeUploadLocked = (productCategory: string, productImagePath: string) =>
   productCategory === 'perfume-fragrance' && Boolean(productImagePath);
 
+const selectProductImageForScene = ({
+  primaryImagePath,
+  secondaryImagePath,
+  sceneIndex,
+  sceneCount
+}: {
+  primaryImagePath: string;
+  secondaryImagePath: string;
+  sceneIndex: number;
+  sceneCount: number;
+}) => {
+  if (secondaryImagePath && sceneIndex === sceneCount - 1) {
+    return secondaryImagePath;
+  }
+
+  return primaryImagePath || secondaryImagePath;
+};
+
 const isPerfumeProductScene = (scene: ScriptScene) => {
   const sceneTokens = tokenize(
     [scene.headline, scene.visualBrief, ...(scene.onScreenText || []), ...(scene.pexelsKeywords || [])].join(' ')
@@ -302,17 +320,40 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
   }
 
   if (productCategory === 'food-dessert') {
+    const layeredDessertBrief = descriptionTokens.some((token) =>
+      ['cake', 'cream', 'creamy', 'layer', 'layers', 'layered', 'mousse', 'slice'].includes(token)
+    );
+
     return {
-      anchors: descriptionTokens.filter((token) =>
-        ['dessert', 'sweet', 'pistachio', 'pastry', 'chocolate', 'cookie', 'baklava', 'bakllava'].includes(token)
+      anchors: Array.from(
+        new Set([
+          ...descriptionTokens.filter((token) =>
+            [
+              'cake',
+              'cream',
+              'creamy',
+              'dessert',
+              'layer',
+              'layers',
+              'layered',
+              'mousse',
+              'pastry',
+              'pistachio',
+              'slice',
+              'sweet',
+              'texture'
+            ].includes(token)
+          ),
+          ...(layeredDessertBrief ? ['cake', 'layered', 'dessert'] : ['dessert'])
+        ])
       ),
-      avoidTokens: Array.from(foodMismatchTokens),
-      preferStillImages: false,
-      requireAnchorMatch: false,
+      avoidTokens: [],
+      preferStillImages: layeredDessertBrief,
+      requireAnchorMatch: true,
       minimumVideoDurationRatio: 0.8,
       minimumVideoSeconds: 5,
       useHeroUploadForFirstScene: true,
-      useHeroUploadForLastScene: false
+      useHeroUploadForLastScene: layeredDessertBrief
     };
   }
 
@@ -1236,6 +1277,8 @@ export const processVideoJob = async (jobId: string) => {
   });
 
   const mediaStartedAt = Date.now();
+  const primaryImagePath = videoJob.imagePath || '';
+  const secondaryImagePath = videoJob.secondaryImagePath || '';
   const mediaPromise = mapWithConcurrency(
     script.scenes,
     config.mediaSelectionConcurrency,
@@ -1243,7 +1286,12 @@ export const processVideoJob = async (jobId: string) => {
       const sceneDir = path.join(jobDir, `scene-${scene.sceneNumber}`);
       const prepared = await prepareSceneMedia({
         scene,
-        productImagePath: videoJob.imagePath,
+        productImagePath: selectProductImageForScene({
+          primaryImagePath,
+          secondaryImagePath,
+          sceneIndex: index,
+          sceneCount: script.scenes.length
+        }),
         style: videoJob.style,
         productCategory: videoJob.productCategory || 'general-product',
         description: videoJob.description,
