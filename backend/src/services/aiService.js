@@ -1,57 +1,43 @@
 const OpenAI = require('openai');
 const config = require('../config');
-const googleTTS = require('google-tts-api');
+
+const defaultHeaders = {};
+if (config.openaiBaseUrl?.includes('openrouter.ai')) {
+  if (config.openaiSiteUrl) {
+    defaultHeaders['HTTP-Referer'] = config.openaiSiteUrl;
+  }
+
+  if (config.openaiAppName) {
+    defaultHeaders['X-Title'] = config.openaiAppName;
+  }
+}
 
 const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: config.openRouterApiKey,
-  defaultHeaders: {
-    'HTTP-Referer': config.frontendUrl,
-    'X-Title': 'AI Marketing Generator',
-  },
+  apiKey: config.openaiApiKey,
+  baseURL: config.openaiBaseUrl,
+  defaultHeaders,
 });
 
-const getChatResponse = async (userMessage, history = [], imageBase64 = null) => {
+/**
+ * Get AI chat response.
+ * @param {string} userMessage - The user's input message.
+ * @param {Array} history - Previous message history.
+ * @returns {Promise<string>} AI response content.
+ */
+const getChatResponse = async (userMessage, history = []) => {
   try {
-    if (imageBase64) console.log('📸 AI po pranon një foto për analizë...');
-
-    let userContent = userMessage;
-    if (imageBase64) {
-      userContent = [
-        { type: "text", text: userMessage || "Analizo këtë foto për marketing." },
-        { 
-          type: "image_url", 
-          image_url: { 
-            url: `data:image/jpeg;base64,${imageBase64}` 
-          } 
-        }
-      ];
-    }
-
     const messages = [
       {
         role: 'system',
-        content: `MANDATORY: You are a SILENT ROBOTIC TOOL.
-NO CONVERSATION. NO "HELLO". NO "THE SCRIPT IS READY".
-
---- PROCEDURE ---
-1. PRODUCT MENTIONED -> OUTPUT SCRIPT ONLY. (Under 30s, match language).
-2. PHOTO RECEIVED -> OUTPUT LABELS ONLY:
-   "Teksti mbi foto: [Title]"
-   "Background Prompt: [Extremely detailed English description of a professional, luxury atmosphere or lifestyle scene (like a marble counter, wooden table, or high-end studio) that perfectly complements the product in the photo. 8k, photorealistic, cinematic lighting, 9:16 format.]"
-- These labels are CRITICAL for the automatic generator.
-
---- RULES ---
-- NEVER ASK QUESTIONS. 
-- NEVER EXPLAIN WHAT YOU ARE DOING.
-- JUST OUTPUT THE RAW DATA.`,
+        content: `You are an expert AI Marketing Assistant. Your goal is to help the user create, optimize, and manage marketing campaigns. 
+        Be professional, creative, and concise. Provide actionable advice and high-quality marketing copy.`,
       },
       ...history,
-      { role: 'user', content: userContent },
+      { role: 'user', content: userMessage },
     ];
 
     const response = await openai.chat.completions.create({
-      model: 'openai/gpt-4o-mini',
+      model: config.openaiModel,
       messages,
       temperature: 0.7,
       max_tokens: 1000,
@@ -64,33 +50,92 @@ NO CONVERSATION. NO "HELLO". NO "THE SCRIPT IS READY".
   }
 };
 
-/**
- * Generate Text-to-Speech (TTS) using Google TTS (Albanian Support).
- */
-const generateTTS = async (text, lang) => {
-  const englishWords = /\b(the|and|is|in|it|to|you|that|this|for|with|my|literally|guys|wait|hey)\b/i;
-  let finalLang = 'sq';
-  if (englishWords.test(text)) {
-    finalLang = 'en';
-  }
+const extractJson = (text) => {
+  const trimmed = text.trim();
+  const fencedMatch = trimmed.match(/```json\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch ? fencedMatch[1] : trimmed;
 
+  return JSON.parse(candidate);
+};
+
+const normalizeMarketingOutput = (payload) => ({
+  caption: String(payload.caption || '').trim(),
+  hashtags: Array.isArray(payload.hashtags)
+    ? payload.hashtags.map((item) => String(item).trim()).filter(Boolean)
+    : [],
+  contentPackage: {
+    socialCaption: String(payload.contentPackage?.socialCaption || '').trim(),
+    hashtagSuggestions: Array.isArray(payload.contentPackage?.hashtagSuggestions)
+      ? payload.contentPackage.hashtagSuggestions.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+  },
+  voiceoverScript: String(payload.voiceoverScript || '').trim(),
+  onScreenText: Array.isArray(payload.onScreenText)
+    ? payload.onScreenText.map((item) => String(item).trim()).filter(Boolean)
+    : [],
+  visualDirection: String(payload.visualDirection || '').trim(),
+  mediaKeywords: Array.isArray(payload.mediaKeywords)
+    ? payload.mediaKeywords.map((item) => String(item).trim()).filter(Boolean)
+    : [],
+  callToAction: String(payload.callToAction || '').trim(),
+});
+
+const generateMarketingContent = async ({
+  productDescription,
+  keywords = [],
+  style,
+  platform,
+  objective = '',
+}) => {
   try {
-    const results = await googleTTS.getAllAudioBase64(text, {
-      lang: finalLang,
-      slow: false,
-      host: 'https://translate.google.com',
-      splitPunct: ',.?',
+    const systemPrompt = [
+      'You are an expert AI marketing strategist for short-form social video.',
+      'Return only valid JSON with these keys:',
+      'caption, hashtags, voiceoverScript, onScreenText, visualDirection, mediaKeywords, callToAction.',
+      'Include a contentPackage object with socialCaption and hashtagSuggestions.',
+      'caption and callToAction must be strings.',
+      'hashtags, onScreenText, and mediaKeywords must be arrays of strings.',
+      'contentPackage.hashtagSuggestions must be an array of strings.',
+      'voiceoverScript and visualDirection must be strings.',
+      'Make the content practical for short-form video marketing.',
+    ].join(' ');
+
+    const userPrompt = JSON.stringify(
+      {
+        productDescription,
+        keywords,
+        style,
+        platform,
+        objective,
+      },
+      null,
+      2
+    );
+
+    const response = await openai.chat.completions.create({
+      model: config.openaiModel,
+      temperature: 0.8,
+      max_tokens: 900,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: `Generate short-form marketing content based on this brief:\n${userPrompt}`,
+        },
+      ],
     });
 
-    const buffers = results.map(res => Buffer.from(res.base64, 'base64'));
-    return Buffer.concat(buffers);
+    const text = response.choices[0]?.message?.content || '{}';
+    const parsed = extractJson(text);
+
+    return normalizeMarketingOutput(parsed);
   } catch (error) {
-    console.error('Google TTS Service Error:', error);
-    throw new Error('Failed to generate audio from TTS service');
+    console.error('AI Generation Error:', error);
+    throw new Error('Failed to generate marketing content');
   }
 };
 
 module.exports = {
   getChatResponse,
-  generateTTS,
+  generateMarketingContent,
 };

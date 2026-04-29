@@ -15,6 +15,13 @@ const signToken = (userId) =>
     expiresIn: process.env.JWT_EXPIRES_IN || '1d',
   });
 
+const buildUserPayload = (user) => ({
+  id: user._id,
+  email: user.email,
+  role: user.role,
+  createdAt: user.createdAt,
+});
+
 // ─── Service Functions ────────────────────────────────────────────────────────
 
 /**
@@ -38,7 +45,7 @@ const registerUser = async (email, password) => {
   const user = await User.create({ email, password: hashedPassword });
 
   const token = signToken(user._id);
-  return { token, user: { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt } };
+  return { token, user: buildUserPayload(user) };
 };
 
 /**
@@ -61,8 +68,14 @@ const loginUser = async (email, password) => {
     throw err;
   }
 
+  if (user.resetPasswordToken || user.resetPasswordExpires) {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+  }
+
   const token = signToken(user._id);
-  return { token, user: { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt } };
+  return { token, user: buildUserPayload(user) };
 };
 
 /**
@@ -85,9 +98,7 @@ const getUserById = async (userId) => {
 const generateResetToken = async (email) => {
   const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) {
-    const err = new Error('No user found with that email');
-    err.statusCode = 404;
-    throw err;
+    return null;
   }
 
   // Create a raw crypto token
@@ -97,7 +108,7 @@ const generateResetToken = async (email) => {
   user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
   user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
 
-  await user.save();
+  await user.save({ validateBeforeSave: false });
   return resetToken;
 };
 
@@ -126,10 +137,10 @@ const resetPassword = async (token, newPassword) => {
   // Clear reset fields
   user.resetPasswordToken = undefined;
   user.resetPasswordExpires = undefined;
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
   const jwtToken = signToken(user._id);
-  return { token: jwtToken, user: { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt } };
+  return { token: jwtToken, user: buildUserPayload(user) };
 };
 
 module.exports = { registerUser, loginUser, getUserById, generateResetToken, resetPassword };
