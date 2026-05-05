@@ -20,6 +20,7 @@ import { uploadAsset } from './services/storageService';
 import { processVideoJob } from './services/jobOrchestrator';
 import { localJobEvents } from './services/localEventBus';
 import { AuthenticatedRequest, getAuthenticatedUserId, requireAuth } from './auth';
+import { spendCredit } from './services/creditService';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -155,6 +156,42 @@ const decodeImageDataUrl = (dataUrl: string) => {
   };
 };
 
+const supportedImageMimeTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+
+const decodeRemoteImageUrl = async (imageUrl: string) => {
+  let url: URL;
+  try {
+    url = new URL(imageUrl);
+  } catch {
+    return null;
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    return null;
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Unable to download generated image (${response.status}).`);
+  }
+
+  const mimeType = (response.headers.get('content-type') || '').split(';')[0].toLowerCase();
+  if (!supportedImageMimeTypes.has(mimeType)) {
+    throw new Error(`Generated image URL returned unsupported content type: ${mimeType || 'unknown'}.`);
+  }
+
+  const extension = mime.extension(mimeType) || (mimeType === 'image/jpeg' ? 'jpg' : 'png');
+
+  return {
+    mimeType,
+    extension,
+    buffer: Buffer.from(await response.arrayBuffer())
+  };
+};
+
+const decodeGeneratedImage = async (imageSource: string) =>
+  decodeImageDataUrl(imageSource) || decodeRemoteImageUrl(imageSource);
+
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', project: 'AI Marketing Studio MVP' });
 });
@@ -217,6 +254,8 @@ router.post(
     const secondaryImagePath = primaryImage ? secondaryImage?.path || '' : '';
     const secondaryImageUrl = primaryImage ? secondaryImage?.url || '' : '';
 
+    const creditBalance = await spendCredit(userId);
+
     const job = await VideoJob.create({
       owner: userId,
       description,
@@ -278,7 +317,7 @@ router.post(
 
     await job.save();
 
-    res.status(201).json({ data: sanitizeJob(job) });
+    res.status(201).json({ data: sanitizeJob(job), credits: creditBalance.credits });
   } catch (error) {
     next(error);
   }
@@ -348,16 +387,24 @@ router.post('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, ne
     const tempDir = path.join(config.workingDir, 'photo-ads', String(photoAd._id));
     await ensureDir(tempDir);
 
+    const decodedImages = [];
     const uploadedImages = [];
 
     for (let index = 0; index < imageDataUrls.length; index += 1) {
-      const rawDataUrl = String(imageDataUrls[index] || '');
-      const decoded = decodeImageDataUrl(rawDataUrl);
+      const imageSource = String(imageDataUrls[index] || '').trim();
+      const decoded = await decodeGeneratedImage(imageSource);
       if (!decoded) {
-        res.status(400).json({ message: `Image ${index + 1} is not a supported image data URL.` });
+        res.status(400).json({ message: `Image ${index + 1} is not a supported generated image.` });
         return;
       }
 
+      decodedImages.push(decoded);
+    }
+
+    const creditBalance = await spendCredit(userId);
+
+    for (let index = 0; index < decodedImages.length; index += 1) {
+      const decoded = decodedImages[index];
       const tempFilePath = path.join(tempDir, uniqueFile(`photo-${index + 1}`, decoded.extension));
       await fs.writeFile(tempFilePath, decoded.buffer);
 
@@ -370,7 +417,7 @@ router.post('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, ne
     photoAd.images = uploadedImages;
     await photoAd.save();
 
-    res.status(201).json({ data: sanitizePhotoAd(photoAd) });
+    res.status(201).json({ data: sanitizePhotoAd(photoAd), credits: creditBalance.credits });
   } catch (error) {
     next(error);
   }

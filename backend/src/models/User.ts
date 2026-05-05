@@ -4,6 +4,8 @@ export interface UserDocument extends mongoose.Document {
   email: string;
   password: string;
   role: 'user' | 'admin';
+  credits: number;
+  creditsUsed: number;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
   createdAt: Date;
@@ -30,6 +32,16 @@ const userSchema = new Schema<UserDocument>(
       type: String,
       enum: ['user', 'admin'],
       default: 'user'
+    },
+    credits: {
+      type: Number,
+      default: 5,
+      min: 0
+    },
+    creditsUsed: {
+      type: Number,
+      default: 0,
+      min: 0
     },
     resetPasswordToken: String,
     resetPasswordExpires: Date

@@ -10,6 +10,8 @@ type AuthenticatedUserPayload = {
   id: string;
   email: string;
   role: string;
+  credits: number;
+  creditsUsed: number;
   createdAt: Date;
 };
 
@@ -25,11 +27,15 @@ const serializeUser = (user: {
   _id: unknown;
   email: string;
   role: string;
+  credits?: number;
+  creditsUsed?: number;
   createdAt: Date;
 }): AuthenticatedUserPayload => ({
   id: String(user._id),
   email: user.email,
   role: user.role,
+  credits: user.credits ?? 5,
+  creditsUsed: user.creditsUsed ?? 0,
   createdAt: user.createdAt
 });
 
@@ -53,7 +59,9 @@ export const registerUser = async (email: string, password: string) => {
   const hashedPassword = await bcrypt.hash(password, 12);
   const user = await User.create({
     email: normalizedEmail,
-    password: hashedPassword
+    password: hashedPassword,
+    credits: 5,
+    creditsUsed: 0
   });
 
   return {
@@ -84,6 +92,12 @@ export const getUserById = async (userId: string) => {
   const user = await User.findById(userId);
   if (!user) {
     throw createHttpError('User not found.', 404);
+  }
+
+  if (typeof user.credits !== 'number' || typeof user.creditsUsed !== 'number') {
+    user.credits = typeof user.credits === 'number' ? user.credits : 5;
+    user.creditsUsed = typeof user.creditsUsed === 'number' ? user.creditsUsed : 0;
+    await user.save();
   }
 
   return serializeUser(user);
