@@ -107,9 +107,12 @@ const scoreVideoFile = (file: { width: number; height: number }) => {
   const aspect = file.width / Math.max(file.height, 1);
   const aspectDelta = Math.abs(aspect - TARGET_ASPECT_RATIO);
   const portraitBonus = file.height >= file.width ? 1.5 : 0;
-  const resolutionScore = (file.width * file.height) / 1_000_000;
+  
+  // Prefer HD (1080-1440px width) over massive 4K/UHD to save bandwidth and render time
+  const isHD = file.width >= 1080 && file.width <= 2560;
+  const resolutionBonus = isHD ? 2.0 : 0.5;
 
-  return portraitBonus + resolutionScore - aspectDelta * 2.5;
+  return portraitBonus + resolutionBonus - aspectDelta * 2.5;
 };
 
 const sortVideoFiles = (
@@ -238,8 +241,6 @@ const buildSearchQueries = ({
   const esportsSignals = isEsportsBrief(description, productCategory)
     ? buildEsportsSignals(description)
     : null;
-  const productTokens = tokenize(description).slice(0, 10);
-  const productPhrase = productTokens.slice(0, 4).join(' ');
   const actionHint =
     productCategory === 'fitness-wellness'
       ? 'person workout movement training'
@@ -252,48 +253,39 @@ const buildSearchQueries = ({
         : '';
 
   const baseQueries = [
-    ...(foodSignals?.anchors || []).flatMap((anchor) => [
-      anchor,
+    // 1. High-relevance anchor-based queries (Top 3 anchors only to save time)
+    ...(footballSignals?.anchors || []).slice(0, 3).flatMap((anchor) => [
+      `${anchor} ${scene.visualBrief}`,
+      `${anchor} vertical action`,
+      anchor
+    ]),
+    ...(foodSignals?.anchors || []).slice(0, 3).flatMap((anchor) => [
+      `${anchor} ${scene.visualBrief}`,
       `${anchor} close up`,
-      `${anchor} serving`,
-      `${anchor} ${scene.visualBrief}`,
-      `${anchor} ${scene.headline}`,
-      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+      anchor
     ]),
-    ...(fitnessSignals?.anchors || []).flatMap((anchor) => [
-      anchor,
-      `${anchor} vertical`,
-      `${anchor} person`,
-      `${anchor} action`,
+    ...(fitnessSignals?.anchors || []).slice(0, 3).flatMap((anchor) => [
       `${anchor} ${scene.visualBrief}`,
-      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+      `${anchor} workout action`,
+      anchor
     ]),
-    ...(footballSignals?.anchors || []).flatMap((anchor) => [
-      anchor,
-      `${anchor} vertical`,
-      `${anchor} action`,
-      `${anchor} crowd`,
+    ...(esportsSignals?.anchors || []).slice(0, 3).flatMap((anchor) => [
       `${anchor} ${scene.visualBrief}`,
-      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+      `${anchor} gaming arena`,
+      anchor
     ]),
-    ...(esportsSignals?.anchors || []).flatMap((anchor) => [
-      anchor,
-      `${anchor} vertical`,
-      `${anchor} player`,
-      `${anchor} stage lights`,
-      `${anchor} crowd`,
-      `${anchor} ${scene.visualBrief}`,
-      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
-    ]),
-    ...scene.pexelsKeywords.map((item) => `${categoryText} ${item}`),
-    ...scene.pexelsKeywords.map((item) => (actionHint ? `${item} ${actionHint}` : item)),
-    ...scene.pexelsKeywords,
-    `${categoryText} ${scene.headline}`,
-    `${categoryText} ${scene.visualBrief}`,
-    actionHint ? `${categoryText} ${actionHint}` : '',
-    productPhrase ? `${productPhrase} ${scene.visualBrief}` : '',
+
+    // 2. Direct scene-based queries (Highest priority)
     scene.visualBrief,
-    scene.headline
+    `${categoryText} ${scene.headline}`,
+    
+    // 3. Keyword-based combos (Limited to first 2 keywords)
+    ...scene.pexelsKeywords.slice(0, 2).map((item) => `${categoryText} ${item}`),
+    ...scene.pexelsKeywords.slice(0, 2).map((item) => (actionHint ? `${item} ${actionHint}` : item)),
+    
+    // 4. Fallbacks
+    scene.headline,
+    categoryText
   ];
 
   return unique(
@@ -312,7 +304,7 @@ const buildSearchQueries = ({
 
         return avoidTerms.length ? !queryTokens.some((token) => avoidTerms.includes(token)) : true;
       })
-  );
+  ).slice(0, 15); // Limit to top 15 most promising queries
 };
 
 export const findSceneMedia = async (
@@ -334,10 +326,11 @@ export const findSceneMedia = async (
   const seen = new Set<string>();
   const maxResults = 6;
 
-  for (const query of queries) {
+  // Limit search to the first few queries to avoid massive API overhead
+  for (const query of queries.slice(0, 8)) {
     const payloads = await Promise.all([
       pexelsVideoSearch(query, 'portrait'),
-      pexelsVideoSearch(query, 'landscape')
+      // Skip landscape search initially to speed things up
     ]);
     const videos = sortByResolution(
       payloads
@@ -383,7 +376,8 @@ export const findSceneMedia = async (
     }
   }
 
-  for (const query of queries) {
+  // If no videos found, try photos (only for top 5 queries)
+  for (const query of queries.slice(0, 5)) {
     const photoPayload = await pexelsPhotoSearch(query, 'portrait');
     const photos = sortByResolution(photoPayload.photos || []).map(
       (photo: any): MediaCandidate => ({

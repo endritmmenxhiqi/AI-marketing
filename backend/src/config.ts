@@ -1,7 +1,5 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
-// @ts-expect-error - no types available for ffprobe-static
-import ffprobeStatic from 'ffprobe-static';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 

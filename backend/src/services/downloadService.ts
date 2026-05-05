@@ -1,4 +1,6 @@
-import fs from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { ensureDir, uniqueFile } from '../utils/files';
 
@@ -21,13 +23,15 @@ export const downloadToFile = async ({
     try {
       console.log(`[Download] Attempt ${attempt}/${retries} for ${label}: ${url}`);
       const response = await fetch(url);
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
         throw new Error(`Failed to download asset: ${response.status} ${url}`);
       }
 
-      const buffer = Buffer.from(await response.arrayBuffer());
       const outputPath = path.join(outputDir, uniqueFile(label, extension));
-      await fs.writeFile(outputPath, buffer);
+      await pipeline(
+        Readable.fromWeb(response.body as any),
+        createWriteStream(outputPath)
+      );
       return outputPath;
     } catch (error: any) {
       if (attempt === retries) throw error;

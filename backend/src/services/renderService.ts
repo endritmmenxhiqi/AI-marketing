@@ -42,9 +42,6 @@ const runCommand = (command: FfmpegCommand, outputPath: string) =>
       .save(outputPath);
   });
 
-const escapeText = (value: string) =>
-  value.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'").replace(/,/g, '\\,');
-
 const escapeFilterPath = (value: string) =>
   value.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
 
@@ -102,14 +99,10 @@ const buildCaptionFilters = async ({
 
 const createSceneClip = async ({
   plan,
-  jobDir,
-  productImagePath,
-  isLast
+  jobDir
 }: {
   plan: SceneRenderPlan;
   jobDir: string;
-  productImagePath: string;
-  isLast: boolean;
 }) => {
   const outputPath = path.join(jobDir, `scene-${plan.index + 1}.mp4`);
   const sceneDuration = getSceneDuration(plan); // breathing room after voiceover ends
@@ -129,8 +122,6 @@ const createSceneClip = async ({
     if (plan.media.kind !== 'video') {
       const frameCount = Math.ceil(sceneDuration * 30);
       const isUpload = plan.media.source === 'upload';
-      const aspect = (plan.media.width || 1080) / Math.max(plan.media.height || 1920, 1);
-      const isWide = aspect > TARGET_ASPECT_RATIO + 0.12;
 
       const motionVariants = [
         `zoompan=z='min(zoom+0.0008,1.15)':d=${frameCount}:s=1080x1920:fps=30`,
@@ -347,25 +338,21 @@ export const trimVideo = async ({
 
 export const renderMarketingVideo = async ({
   plans,
-  productImagePath,
   jobDir,
   musicPath
 }: {
   plans: SceneRenderPlan[];
-  productImagePath: string;
   jobDir: string;
   musicPath: string;
 }) => {
   await ensureDir(jobDir);
 
   const scenePaths: string[] = [];
-  for (const [index, plan] of plans.entries()) {
+  for (const plan of plans) {
     scenePaths.push(
       await createSceneClip({
         plan,
-        jobDir,
-        productImagePath,
-        isLast: index === plans.length - 1
+        jobDir
       })
     );
   }

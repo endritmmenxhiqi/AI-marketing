@@ -364,7 +364,7 @@ const buildSelectionReason = ({
 
 const chooseMedia = async ({
   scene,
-  productImagePath,
+  productImagePaths,
   style,
   productCategory,
   description,
@@ -376,7 +376,7 @@ const chooseMedia = async ({
   usedMediaKeys
 }: {
   scene: ScriptScene;
-  productImagePath: string;
+  productImagePaths: string[];
   style: string;
   productCategory: string;
   description: string;
@@ -388,20 +388,29 @@ const chooseMedia = async ({
   usedMediaKeys: Set<string>;
 }): Promise<MediaCandidate> => {
   const strategy = buildMediaStrategy(description, productCategory);
-  const isMiddleScene = sceneIndex === Math.floor(sceneCount / 2);
   
-  if (
-    productImagePath &&
-    (sceneIndex === 0 || sceneIndex === sceneCount - 1 || isMiddleScene)
-  ) {
-    let reason = 'Used the uploaded product image to open with a product-faithful hero scene.';
-    if (sceneIndex === sceneCount - 1) {
-      reason = 'Used the uploaded product image to close with a clear product-and-CTA hero shot.';
-    } else if (isMiddleScene) {
-      reason = 'Inserted the product image in the middle of the video to reinforce your brand.';
-    }
+  if (productImagePaths.length > 0 && sceneIndex === 0) {
+    // First image always opens the video
+    return createUploadFallback(
+      productImagePaths[0],
+      'Used the first uploaded product image to open with a product-faithful hero scene.'
+    );
+  }
 
-    return createUploadFallback(productImagePath, reason);
+  if (productImagePaths.length >= 2 && sceneIndex === sceneCount - 1) {
+    // Second image always closes the video
+    return createUploadFallback(
+      productImagePaths[1],
+      'Used the second uploaded product image to close with a clear product-and-CTA hero shot.'
+    );
+  }
+
+  if (productImagePaths.length === 1 && sceneIndex === sceneCount - 1) {
+    // Only one image uploaded — reuse it for the closing scene too
+    return createUploadFallback(
+      productImagePaths[0],
+      'Reused the uploaded product image to close with a clear product-and-CTA hero shot.'
+    );
   }
 
   const candidates = await findSceneMedia(scene, productCategory, description);
@@ -458,7 +467,7 @@ const chooseMedia = async ({
       } satisfies MediaCandidate;
     }
 
-    if (!productImagePath && best) {
+    if (productImagePaths.length === 0 && best) {
       const selected = best.candidate;
       const extension = selected.kind === 'video' ? 'mp4' : 'jpg';
       const localPath = await downloadToFile({
@@ -480,7 +489,8 @@ const chooseMedia = async ({
     }
   }
 
-  if (allowStyleTransfer && productImagePath && candidates.length === 0) {
+  if (allowStyleTransfer && productImagePaths.length > 0 && candidates.length === 0) {
+    const productImagePath = productImagePaths[0];
     const replicate = await createReplicateStyledImages({
       productImagePath,
       prompt: scene.imagePrompt,
@@ -510,7 +520,7 @@ const chooseMedia = async ({
     }
   }
 
-  if (!productImagePath) {
+  if (productImagePaths.length === 0) {
     const stability = await createStabilityFallbackImage({
       prompt: scene.imagePrompt,
       outputDir: sceneDir
@@ -528,7 +538,7 @@ const chooseMedia = async ({
     );
   }
 
-  return createUploadFallback(productImagePath);
+  return createUploadFallback(productImagePaths[sceneIndex % productImagePaths.length]);
 };
 
 export const processVideoJob = async (jobId: string) => {
@@ -588,7 +598,7 @@ export const processVideoJob = async (jobId: string) => {
     const sceneDir = path.join(jobDir, `scene-${scene.sceneNumber}`);
     const media = await chooseMedia({
       scene,
-      productImagePath: videoJob.imagePath,
+      productImagePaths: videoJob.imagePaths && videoJob.imagePaths.length > 0 ? videoJob.imagePaths : videoJob.imagePath ? [videoJob.imagePath] : [],
       style: videoJob.style,
       productCategory: videoJob.productCategory || 'general-product',
       description: videoJob.description,
@@ -636,7 +646,6 @@ export const processVideoJob = async (jobId: string) => {
   const music = await selectBackgroundMusic();
   const rendered = await renderMarketingVideo({
     plans,
-    productImagePath: videoJob.imagePath || '',
     jobDir,
     musicPath: music.path
   });
