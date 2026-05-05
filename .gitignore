@@ -29,17 +29,6 @@ out/
 .DS_Store
 Thumbs.db
 
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Misc
 .gemini/
 antigravity/
