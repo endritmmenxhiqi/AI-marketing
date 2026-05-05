@@ -84,9 +84,10 @@ const videoJobSchema = new Schema(
     description: { type: String, required: true },
     productCategory: { type: String, default: 'general-product' },
     style: { type: String, required: true },
-    enableStyleTransfer: { type: Boolean, default: false },
     imagePath: { type: String, default: '' },
     imageUrl: { type: String, default: '' },
+    imagePaths: { type: [String], default: [] },
+    imageUrls: { type: [String], default: [] },
     script: {
       title: String,
       hook: String,

@@ -15,9 +15,21 @@ export const createApp = () => {
     })
   );
   app.use(express.json({ limit: '10mb' }));
-  app.use('/storage', express.static(path.join(config.rootDir, 'storage/exports')));
-  app.use('/storage/uploads', express.static(path.join(config.rootDir, 'storage/uploads')));
-  app.use('/storage/work', express.static(config.workingDir));
+  const staticOptions = {
+    acceptRanges: true,
+    setHeaders: (res: express.Response) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  };
+
+  app.use('/storage/uploads', express.static(path.join(config.rootDir, 'storage/uploads'), staticOptions));
+  app.use('/storage/work', express.static(config.workingDir, staticOptions));
+  app.use('/storage', express.static(path.join(config.rootDir, 'storage/exports'), staticOptions));
 
   app.get('/', (_req, res) => {
     res.json({

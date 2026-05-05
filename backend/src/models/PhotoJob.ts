@@ -23,7 +23,10 @@ const photoJobSchema = new Schema(
     source: { type: String, enum: ['upload', 'prompt'], default: 'upload' },
     imagePath: { type: String, default: '' },
     imageUrl: { type: String, default: '' },
+    imagePaths: { type: [String], default: [] },
+    imageUrls: { type: [String], default: [] },
     prompt: { type: String, default: '' },
+    caption: { type: String, default: '' },
     output: {
       variants: [storageAssetSchema],
       final: storageAssetSchema,

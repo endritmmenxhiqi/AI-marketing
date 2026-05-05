@@ -16,7 +16,7 @@ import { getJobChannel } from './services/jobProgressService';
 import { trimVideo } from './services/renderService';
 import { uploadAsset } from './services/storageService';
 import { processVideoJob } from './services/jobOrchestrator';
-import { processPhotoJob } from './services/photoOrchestrator';
+import { processPhotoJob, completePhotoJobWithImage } from './services/photoOrchestrator';
 import { localJobEvents } from './services/localEventBus';
 
 const router = express.Router();
@@ -36,7 +36,7 @@ router.get('/jobs', async (_req, res, next) => {
   }
 });
 
-router.post('/photo-jobs', upload.single('image'), async (req, res, next) => {
+router.post('/photo-jobs', upload.array('images', 2), async (req, res, next) => {
   try {
     const description = String(req.body.description || '').trim();
     const style = String(req.body.style || '').trim();
@@ -47,17 +47,21 @@ router.post('/photo-jobs', upload.single('image'), async (req, res, next) => {
       return;
     }
 
-    let imagePath = '';
-    let imageUrl = '';
-    const source = req.file ? 'upload' : 'prompt';
+    const imagePaths: string[] = [];
+    const imageUrls: string[] = [];
+    const files = (req.files as Express.Multer.File[]) || [];
+    const source = files.length > 0 ? 'upload' : 'prompt';
 
-    if (req.file) {
+    if (files.length > 0) {
       await ensureDir(config.uploadsDir);
-      const extension = mime.extension(req.file.mimetype || '') || 'png';
-      const imageFileName = uniqueFile('product-photo', extension);
-      imagePath = path.join(config.uploadsDir, imageFileName);
-      await fs.writeFile(imagePath, req.file.buffer);
-      imageUrl = `${config.appUrl}/storage/uploads/${imageFileName}`;
+      for (const file of files) {
+        const extension = mime.extension(file.mimetype || '') || 'png';
+        const imageFileName = uniqueFile('product-photo', extension);
+        const imagePath = path.join(config.uploadsDir, imageFileName);
+        await fs.writeFile(imagePath, file.buffer);
+        imagePaths.push(imagePath);
+        imageUrls.push(`${config.appUrl}/storage/uploads/${imageFileName}`);
+      }
     }
 
     const job = await PhotoJob.create({
@@ -65,9 +69,11 @@ router.post('/photo-jobs', upload.single('image'), async (req, res, next) => {
       productCategory,
       style,
       source,
-      imagePath,
-      imageUrl,
-      message: req.file ? 'Design fix queued.' : 'AI Photo Creation queued.'
+      imagePath: imagePaths[0] || '',
+      imageUrl: imageUrls[0] || '',
+      imagePaths,
+      imageUrls,
+      message: files.length > 0 ? 'Design fix queued.' : 'AI Photo Creation queued.'
     });
 
     setImmediate(() => {
@@ -93,7 +99,7 @@ router.post('/photo-jobs', upload.single('image'), async (req, res, next) => {
   }
 });
 
-router.post('/jobs', upload.single('image'), async (req, res, next) => {
+router.post('/jobs', upload.array('images', 2), async (req, res, next) => {
   try {
     const description = String(req.body.description || '').trim();
     const style = String(req.body.style || '').trim();
@@ -105,19 +111,23 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
       return;
     }
 
-    let imagePath = '';
-    let imageUrl = '';
+    const imagePaths: string[] = [];
+    const imageUrls: string[] = [];
+    const files = (req.files as Express.Multer.File[]) || [];
 
-    if (req.file) {
+    if (files.length > 0) {
       await ensureDir(config.uploadsDir);
-      const extension =
-        mime.extension(req.file.mimetype || '') ||
-        path.extname(req.file.originalname).replace(/^\./, '') ||
-        'png';
-      const imageFileName = uniqueFile('product-image', extension);
-      imagePath = path.join(config.uploadsDir, imageFileName);
-      await fs.writeFile(imagePath, req.file.buffer);
-      imageUrl = `${config.appUrl}/storage/uploads/${imageFileName}`;
+      for (const file of files) {
+        const extension =
+          mime.extension(file.mimetype || '') ||
+          path.extname(file.originalname).replace(/^\./, '') ||
+          'png';
+        const imageFileName = uniqueFile('product-image', extension);
+        const imagePath = path.join(config.uploadsDir, imageFileName);
+        await fs.writeFile(imagePath, file.buffer);
+        imagePaths.push(imagePath);
+        imageUrls.push(`${config.appUrl}/storage/uploads/${imageFileName}`);
+      }
     }
 
     const job = await VideoJob.create({
@@ -125,9 +135,11 @@ router.post('/jobs', upload.single('image'), async (req, res, next) => {
       productCategory,
       style,
       enableStyleTransfer,
-      imagePath,
-      imageUrl,
-      message: req.file
+      imagePath: imagePaths[0] || '',
+      imageUrl: imageUrls[0] || '',
+      imagePaths,
+      imageUrls,
+      message: files.length > 0
         ? 'Queued for generation.'
         : 'Queued for generation from product description only.',
       output: {
@@ -339,6 +351,31 @@ router.post('/jobs/:jobId/trim', async (req, res, next) => {
         relativePath: relativeFrom(config.rootDir, trimmed.outputPath)
       }
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/photo-jobs/:jobId/complete', upload.single('image'), async (req, res, next) => {
+  try {
+    const jobId = String(req.params.jobId || '');
+    if (!jobId.match(/^[0-9a-fA-F]{24}$/)) {
+      res.status(400).json({ message: 'Invalid Job ID format.' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ message: 'No image file provided.' });
+      return;
+    }
+
+    const job = await completePhotoJobWithImage(
+      jobId,
+      req.file.buffer,
+      req.file.mimetype
+    );
+
+    res.json({ data: job });
   } catch (error) {
     next(error);
   }

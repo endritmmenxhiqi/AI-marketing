@@ -4,6 +4,7 @@ export type JobStage =
   | 'queued'
   | 'writing-brief'
   | 'generating-design'
+  | 'pending-image-generation'
   | 'writing-script'
   | 'finding-media'
   | 'generating-voice'
@@ -96,4 +97,5 @@ export interface JobProgressPayload {
   previewUrl?: string;
   trimUrl?: string;
   variants?: any[];
+  imagePrompt?: string;
 }
