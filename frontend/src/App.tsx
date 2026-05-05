@@ -38,6 +38,7 @@ import {
   createPhotoAd,
   fetchJobs,
   fetchPhotoAds,
+  fetchMe,
   forgotPassword,
   loginUser,
   PhotoAd,
@@ -260,9 +261,11 @@ const mergeJobProgress = (job: VideoJob, payload: Partial<VideoJob> & { videoUrl
 });
 
 function AuthScreen({
+  initialError = '',
   onAuthenticated,
 }: {
-  onAuthenticated: (payload: { email: string; token: string }) => void;
+  initialError?: string;
+  onAuthenticated: (payload: { email: string; token: string; credits: number }) => void;
 }) {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot-password'>('login');
   const [email, setEmail] = useState('');
@@ -276,6 +279,10 @@ function AuthScreen({
   const [focused, setFocused] = useState('');
   const { lang, toggleLanguage, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    setError(initialError);
+  }, [initialError]);
 
   // Password strength
   const calcStrength = (p: string) => {
@@ -328,7 +335,8 @@ function AuthScreen({
 
         localStorage.setItem('token', payload.token);
         localStorage.setItem('user_email', payload.user.email);
-        onAuthenticated({ email: payload.user.email, token: payload.token });
+        localStorage.setItem('user_credits', String(payload.user.credits));
+        onAuthenticated({ email: payload.user.email, token: payload.token, credits: payload.user.credits });
       }
     } catch (nextError: any) {
       setError(nextError.message || 'Authentication failed.');
@@ -622,6 +630,7 @@ function App() {
   const [auth, setAuth] = useState(() => ({
     token: localStorage.getItem('token') || '',
     email: localStorage.getItem('user_email') || '',
+    credits: Number(localStorage.getItem('user_credits') || 0),
   }));
   const [jobs, setJobs] = useState<VideoJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -636,6 +645,7 @@ function App() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [trimLoading, setTrimLoading] = useState(false);
@@ -709,12 +719,14 @@ function App() {
   const clearAuthSession = (message = '') => {
     localStorage.removeItem('token');
     localStorage.removeItem('user_email');
-    setAuth({ token: '', email: '' });
+    localStorage.removeItem('user_credits');
+    setAuth({ token: '', email: '', credits: 0 });
     setJobs([]);
     setSelectedJobId(null);
     setPhotoAds([]);
     setSelectedPhotoAdId(null);
-    setError(message);
+    setError('');
+    setAuthError(message);
   };
 
   useEffect(() => {
@@ -730,12 +742,19 @@ function App() {
       };
     }
 
-    Promise.all([fetchJobs(), fetchPhotoAds()])
-      .then(([jobsData, photoAdsData]) => {
+    Promise.all([fetchJobs(), fetchPhotoAds(), fetchMe()])
+      .then(([jobsData, photoAdsData, user]) => {
         if (!isActive) {
           return;
         }
 
+        localStorage.setItem('user_email', user.email);
+        localStorage.setItem('user_credits', String(user.credits));
+        setAuth((current) => ({
+          ...current,
+          email: user.email,
+          credits: user.credits,
+        }));
         setJobs(jobsData);
         setSelectedJobId((current) =>
           current && jobsData.some((job) => job._id === current) ? current : jobsData[0]?._id || null
@@ -970,6 +989,17 @@ function App() {
     clearSelectedFile('secondary');
   };
 
+  const refreshCredits = async () => {
+    const user = await fetchMe();
+    localStorage.setItem('user_credits', String(user.credits));
+    setAuth((current) => ({
+      ...current,
+      email: user.email,
+      credits: user.credits,
+    }));
+    return user.credits;
+  };
+
   const handleSubmit = async () => {
     if (!description.trim()) {
       setError('Add a product description first.');
@@ -979,7 +1009,13 @@ function App() {
     try {
       setSubmitting(true);
       setError('');
-      const job = await createJob({
+      const availableCredits = await refreshCredits();
+      if (availableCredits <= 0) {
+        setError('You are out of credits. Buy more credits to create another video.');
+        return;
+      }
+
+      const result = await createJob({
         image: file,
         secondaryImage: secondaryFile,
         description,
@@ -987,6 +1023,11 @@ function App() {
         style,
         enableStyleTransfer,
       });
+      const job = result.data;
+      if (typeof result.credits === 'number') {
+        localStorage.setItem('user_credits', String(result.credits));
+        setAuth((current) => ({ ...current, credits: result.credits || 0 }));
+      }
 
       setJobs((current) => [job, ...current]);
       setSelectedJobId(job._id);
@@ -997,6 +1038,10 @@ function App() {
       if (nextError?.status === 401) {
         clearAuthSession('Your session expired. Please sign in again.');
         return;
+      }
+      if (nextError?.status === 402) {
+        localStorage.setItem('user_credits', '0');
+        setAuth((current) => ({ ...current, credits: 0 }));
       }
 
       setError(nextError.message || 'Unable to create a video job.');
@@ -1108,6 +1153,12 @@ function App() {
       setPhotoGenerating(true);
       setPhotoProgressLabel('Connecting to Puter...');
       setError('');
+      const availableCredits = await refreshCredits();
+      if (availableCredits <= 0) {
+        setError('You are out of credits. Buy more credits to create another photo ad set.');
+        setPhotoProgressLabel('');
+        return;
+      }
 
       const imageDataUrls = await generatePhotoAdSet(
         {
@@ -1120,7 +1171,7 @@ function App() {
 
       setPhotoProgressLabel('Saving photo set to your studio...');
 
-      const nextSet = await createPhotoAd({
+      const result = await createPhotoAd({
         title: photoTitle.trim(),
         prompt: photoPrompt.trim(),
         aspectRatio: photoAspectRatio,
@@ -1129,6 +1180,11 @@ function App() {
         source: 'puter',
         imageDataUrls,
       });
+      const nextSet = result.data;
+      if (typeof result.credits === 'number') {
+        localStorage.setItem('user_credits', String(result.credits));
+        setAuth((current) => ({ ...current, credits: result.credits || 0 }));
+      }
 
       setPhotoAds((current) => [nextSet, ...current]);
       setSelectedPhotoAdId(nextSet._id);
@@ -1140,6 +1196,10 @@ function App() {
       if (nextError?.status === 401) {
         clearAuthSession('Your session expired. Please sign in again.');
         return;
+      }
+      if (nextError?.status === 402) {
+        localStorage.setItem('user_credits', '0');
+        setAuth((current) => ({ ...current, credits: 0 }));
       }
       setError(formatPhotoErrorMessage(nextError));
       setPhotoProgressLabel('');
@@ -1181,7 +1241,14 @@ function App() {
         path="/"
         element={
           !auth.token ? (
-            <AuthScreen onAuthenticated={setAuth} />
+            <AuthScreen
+              initialError={authError}
+              onAuthenticated={(payload) => {
+                setAuthError('');
+                setError('');
+                setAuth(payload);
+              }}
+            />
           ) : (
             <div className="studio-dashboard min-h-screen text-slate-900 transition-colors dark:text-white">
               <div className="studio-dashboard__inner mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-4 py-4 lg:px-5">
@@ -1255,7 +1322,11 @@ function App() {
                       </button>
                     </div>
 
-                    <div className="relative z-10 mt-3.5 grid grid-cols-2 gap-2.5">
+                    <div className="relative z-10 mt-3.5 grid grid-cols-3 gap-2.5">
+                       <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
+                          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Credits</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-white">{auth.credits}</span>
+                       </div>
                        <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
                           <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Active Style</span>
                           <span className="text-sm font-bold text-slate-800 dark:text-white">{styles.find(s => s.value === style)?.label || style}</span>

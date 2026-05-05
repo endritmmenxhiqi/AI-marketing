@@ -93,6 +93,8 @@ export interface AuthUser {
   id: string;
   email: string;
   role: string;
+  credits: number;
+  creditsUsed: number;
 }
 
 export interface PasswordResetResponse {
@@ -187,6 +189,19 @@ export const resetPassword = async (token: string, password: string) => {
   return payload as PasswordResetResponse;
 };
 
+export const fetchMe = async () => {
+  const response = await fetch(`${API_BASE}/auth/me`, {
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Failed to load account details.');
+  }
+
+  const payload = await response.json();
+  return payload.user as AuthUser;
+};
+
 export const createJob = async (payload: {
   image?: File | null;
   secondaryImage?: File | null;
@@ -218,7 +233,7 @@ export const createJob = async (payload: {
   }
 
   const payloadJson = await response.json();
-  return payloadJson.data as VideoJob;
+  return payloadJson as { data: VideoJob; credits?: number };
 };
 
 export const fetchJobs = async () => {
@@ -266,7 +281,7 @@ export const createPhotoAd = async (payload: {
   }
 
   const payloadJson = await response.json();
-  return payloadJson.data as PhotoAd;
+  return payloadJson as { data: PhotoAd; credits?: number };
 };
 
 export const fetchPhotoAds = async () => {
