@@ -205,6 +205,7 @@ type PreparedSceneMedia = {
   targetDuration: number;
   sceneIndex: number;
   sceneCount: number;
+  forceUploadedImage: boolean;
   strategy: MediaStrategy;
   candidates: MediaCandidate[];
   fixedMedia?: MediaCandidate;
@@ -234,7 +235,8 @@ const createUploadFallback = (
 ): MediaCandidate => ({
   kind: 'image',
   source: 'upload',
-  url: '',
+  externalId: productImagePath,
+  url: productImagePath,
   width: 1080,
   height: 1920,
   query: 'uploaded product image',
@@ -257,6 +259,18 @@ const selectProductImageForScene = ({
   sceneIndex: number;
   sceneCount: number;
 }) => {
+  if (primaryImagePath && secondaryImagePath) {
+    if (sceneIndex === 0) {
+      return primaryImagePath;
+    }
+
+    if (sceneIndex === sceneCount - 1) {
+      return secondaryImagePath;
+    }
+
+    return '';
+  }
+
   if (secondaryImagePath && sceneIndex === sceneCount - 1) {
     return secondaryImagePath;
   }
@@ -934,6 +948,7 @@ const prepareSceneMedia = async ({
   targetDuration,
   sceneIndex,
   sceneCount,
+  forceUploadedImage,
 }: {
   scene: ScriptScene;
   productImagePath: string;
@@ -945,13 +960,15 @@ const prepareSceneMedia = async ({
   targetDuration: number;
   sceneIndex: number;
   sceneCount: number;
+  forceUploadedImage: boolean;
 }): Promise<PreparedSceneMedia> => {
   const strategy = buildMediaStrategy(description, productCategory);
   const perfumeUploadLocked = isPerfumeUploadLocked(productCategory, productImagePath);
   const perfumeProductScene = perfumeUploadLocked && isPerfumeProductScene(scene);
   if (
     productImagePath &&
-    ((strategy.useHeroUploadForFirstScene && sceneIndex === 0) ||
+    (forceUploadedImage ||
+      (strategy.useHeroUploadForFirstScene && sceneIndex === 0) ||
       (strategy.useHeroUploadForLastScene && sceneIndex === sceneCount - 1))
   ) {
     return {
@@ -966,12 +983,13 @@ const prepareSceneMedia = async ({
       targetDuration,
       sceneIndex,
       sceneCount,
+      forceUploadedImage,
       strategy,
       candidates: [],
       fixedMedia: createUploadFallback(
         productImagePath,
         sceneIndex === 0
-          ? 'Used the uploaded product image to open with a product-faithful hero scene.'
+          ? 'Used the first uploaded product image to open with a product-faithful hero scene.'
           : 'Used the uploaded product image to close with a clear product-and-CTA hero shot.'
       )
     };
@@ -990,6 +1008,7 @@ const prepareSceneMedia = async ({
       targetDuration,
       sceneIndex,
       sceneCount,
+      forceUploadedImage,
       strategy,
       candidates: [],
       fixedMedia: createUploadFallback(
@@ -1017,6 +1036,7 @@ const prepareSceneMedia = async ({
     targetDuration,
     sceneIndex,
     sceneCount,
+    forceUploadedImage,
     strategy,
     candidates
   };
@@ -1279,6 +1299,11 @@ export const processVideoJob = async (jobId: string) => {
   const mediaStartedAt = Date.now();
   const primaryImagePath = videoJob.imagePath || '';
   const secondaryImagePath = videoJob.secondaryImagePath || '';
+  const shouldForceUploadedImageForScene = (index: number) =>
+    Boolean(
+      (primaryImagePath && index === 0) ||
+        (secondaryImagePath && index === script.scenes.length - 1)
+    );
   const mediaPromise = mapWithConcurrency(
     script.scenes,
     config.mediaSelectionConcurrency,
@@ -1299,7 +1324,8 @@ export const processVideoJob = async (jobId: string) => {
         allowStyleTransfer: videoJob.enableStyleTransfer,
         targetDuration: estimatedDurations[index],
         sceneIndex: index,
-        sceneCount: script.scenes.length
+        sceneCount: script.scenes.length,
+        forceUploadedImage: shouldForceUploadedImageForScene(index)
       });
 
       completedMediaSelections += 1;

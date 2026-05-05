@@ -2,9 +2,9 @@ import { MediaCandidate, ScriptScene } from '../types';
 import { config } from '../config';
 
 const TARGET_ASPECT_RATIO = 9 / 16;
-const PEXELS_VIDEO_RESULTS_PER_QUERY = 14;
-const PEXELS_PHOTO_RESULTS_PER_QUERY = 12;
-const MAX_SELECTED_RESULTS = 10;
+const PEXELS_VIDEO_RESULTS_PER_QUERY = 8;
+const PEXELS_PHOTO_RESULTS_PER_QUERY = 8;
+const MAX_SELECTED_RESULTS = 6;
 const HIGH_QUALITY_VIDEO_PIXELS = 1920 * 1080;
 const ULTRA_QUALITY_VIDEO_PIXELS = 2560 * 1440;
 const foodAvoidTerms = new Set([
@@ -201,7 +201,8 @@ const pexelsVideoSearch = async (query: string, orientation: 'portrait' | 'lands
   const response = await fetch(url, {
     headers: {
       Authorization: config.pexelsApiKey
-    }
+    },
+    signal: AbortSignal.timeout(config.pexelsSearchTimeoutMs)
   });
 
   if (!response.ok) {
@@ -221,7 +222,8 @@ const pexelsPhotoSearch = async (query: string, orientation: 'portrait' | 'lands
   const response = await fetch(url, {
     headers: {
       Authorization: config.pexelsApiKey
-    }
+    },
+    signal: AbortSignal.timeout(config.pexelsSearchTimeoutMs)
   });
 
   if (!response.ok) {

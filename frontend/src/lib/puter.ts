@@ -125,6 +125,36 @@ export async function ensurePuterSession() {
 
 export type PhotoAspectRatio = keyof typeof PHOTO_DIMENSIONS;
 
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Unable to read generated image.'));
+    reader.readAsDataURL(blob);
+  });
+
+const getGeneratedImageSource = async (image: HTMLImageElement) => {
+  if (image.src.startsWith('data:image/')) {
+    return image.src;
+  }
+
+  if (!image.src.startsWith('blob:')) {
+    return image.src;
+  }
+
+  const response = await fetch(image.src);
+  if (!response.ok) {
+    throw new Error(`Unable to load generated image (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/')) {
+    throw new Error('Puter returned an unsupported generated image format.');
+  }
+
+  return blobToDataUrl(blob);
+};
+
 export async function generatePhotoAdSet(
   input: {
     title: string;
@@ -167,7 +197,7 @@ export async function generatePhotoAdSet(
       throw new Error(`Photo concept ${index + 1} failed: ${message}`);
     }
 
-    images.push(image.src);
+    images.push(await getGeneratedImageSource(image));
   }
 
   return images;

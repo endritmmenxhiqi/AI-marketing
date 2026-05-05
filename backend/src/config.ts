@@ -26,9 +26,6 @@ export const config = {
   openAiModel: process.env.OPENAI_MODEL || 'gpt-4o',
   deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
   deepgramTtsModel: process.env.DEEPGRAM_TTS_MODEL || 'aura-2-thalia-en',
-  elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
-  elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb',
-  elevenLabsModelId: process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2',
   pexelsApiKey: process.env.PEXELS_API_KEY || '',
   replicateApiToken: process.env.REPLICATE_API_TOKEN || '',
   replicateModel: process.env.REPLICATE_MODEL || '',
@@ -56,8 +53,9 @@ export const config = {
   jobConcurrency: Number(process.env.JOB_CONCURRENCY || 2),
   voiceGenerationConcurrency: Number(process.env.VOICE_GENERATION_CONCURRENCY || 4),
   mediaSelectionConcurrency: Number(process.env.MEDIA_SELECTION_CONCURRENCY || 3),
-  mediaSearchBatchSize: Number(process.env.MEDIA_SEARCH_BATCH_SIZE || 3),
-  maxMediaQueriesPerScene: Number(process.env.MAX_MEDIA_QUERIES_PER_SCENE || 8),
+  mediaSearchBatchSize: Number(process.env.MEDIA_SEARCH_BATCH_SIZE || 2),
+  maxMediaQueriesPerScene: Number(process.env.MAX_MEDIA_QUERIES_PER_SCENE || 5),
+  pexelsSearchTimeoutMs: Number(process.env.PEXELS_SEARCH_TIMEOUT_MS || 8000),
   renderSceneConcurrency: Number(
     process.env.RENDER_SCENE_CONCURRENCY || Math.max(2, Math.min(logicalCpuCount - 1, 4))
   ),
