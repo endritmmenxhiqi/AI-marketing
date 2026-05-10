@@ -13,6 +13,7 @@ export const publishJobProgress = async (jobId: string, payload: JobProgressPayl
     progress: payload.progress,
     message: payload.message,
     error: payload.error || '',
+    ...(payload.imageUrl ? { 'output.image.url': payload.imageUrl } : {}),
     ...(payload.videoUrl ? { 'output.video.url': payload.videoUrl } : {}),
     ...(payload.previewUrl ? { 'output.preview.url': payload.previewUrl } : {}),
     ...(payload.trimUrl ? { 'output.trim.asset.url': payload.trimUrl } : {}),

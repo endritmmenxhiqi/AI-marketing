@@ -1,5 +1,6 @@
 import { MediaCandidate, ScriptScene } from '../types';
 import { config } from '../config';
+import { findSceneMedia as findPikaSceneMedia, isPikaConfigured } from './pikaService';
 
 const TARGET_ASPECT_RATIO = 9 / 16;
 const foodAvoidTerms = new Set([
@@ -22,6 +23,49 @@ const fitnessAvoidTerms = new Set([
   'seminar',
   'talking'
 ]);
+const perfumeAvoidTerms = new Set([
+  'app',
+  'computer',
+  'dessert',
+  'food',
+  'gaming',
+  'gym',
+  'kitchen',
+  'laptop',
+  'meeting',
+  'office',
+  'pet',
+  'podcast',
+  'skincare',
+  'smartphone',
+  'workout'
+]);
+const esportsAvoidTerms = new Set([
+  'business',
+  'coding',
+  'conference',
+  'console',
+  'controller',
+  'office',
+  'phone',
+  'programming',
+  'smartphone',
+  'vr'
+]);
+const esportsBriefTokens = [
+  'counter strike',
+  'counter-strike',
+  'cs2',
+  'esports',
+  'e sports',
+  'gaming tournament',
+  'major finals'
+];
+
+const isEsportsBrief = (description: string, productCategory: string) => {
+  const normalized = `${productCategory} ${description}`.toLowerCase();
+  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
+};
 
 const normalizeQuery = (value: string) =>
   value
@@ -146,6 +190,29 @@ const buildFitnessSignals = (description: string) => {
   };
 };
 
+const buildPerfumeSignals = (description: string) => {
+  const normalized = description.toLowerCase();
+  const anchors = unique([
+    'perfume bottle luxury',
+    'fragrance bottle close up',
+    'perfume spray slow motion',
+    'luxury fragrance product',
+    'mens perfume luxury',
+    'womens perfume luxury',
+    normalized.includes('men') || normalized.includes('masculine') ? 'well dressed man perfume' : '',
+    normalized.includes('women') || normalized.includes('feminine') ? 'elegant woman perfume' : '',
+    normalized.includes('gold') ? 'gold perfume bottle luxury' : '',
+    normalized.includes('black') ? 'black perfume bottle luxury' : '',
+    normalized.includes('vanity') ? 'perfume vanity close up' : '',
+    normalized.includes('spray') ? 'perfume spray close up' : ''
+  ]);
+
+  return {
+    anchors,
+    avoidTerms: Array.from(perfumeAvoidTerms)
+  };
+};
+
 const footballAvoidTerms = new Set([
   'nfl',
   'touchdown',
@@ -173,31 +240,67 @@ const buildFootballSignals = (description: string) => {
   };
 };
 
+const buildEsportsSignals = (description: string) => {
+  const normalized = description.toLowerCase();
+  const anchors = unique([
+    'esports tournament',
+    'gaming tournament stage',
+    'pro gamer pc',
+    'gaming arena crowd',
+    'esports trophy celebration',
+    'keyboard mouse close up',
+    normalized.includes('crowd') ? 'esports crowd cheering' : '',
+    normalized.includes('arena') ? 'gaming arena lights' : '',
+    normalized.includes('player') ? 'esports player pc' : '',
+    normalized.includes('trophy') ? 'championship trophy celebration' : ''
+  ]);
+
+  return {
+    anchors,
+    avoidTerms: Array.from(esportsAvoidTerms)
+  };
+};
+
 const buildSearchQueries = ({
   scene,
   productCategory,
-  description
+  description,
+  searchMode = 'default'
 }: {
   scene: ScriptScene;
   productCategory: string;
   description: string;
+  searchMode?: 'default' | 'perfume-support';
 }) => {
-  const categoryText = productCategory.replace(/-/g, ' ');
+  const categoryText = searchMode === 'perfume-support' ? 'luxury lifestyle' : productCategory.replace(/-/g, ' ');
   const foodSignals = productCategory === 'food-dessert' ? buildFoodSignals(description) : null;
+  const perfumeSignals =
+    productCategory === 'perfume-fragrance' && searchMode !== 'perfume-support'
+      ? buildPerfumeSignals(description)
+      : null;
   const fitnessSignals =
     productCategory === 'fitness-wellness' ? buildFitnessSignals(description) : null;
   const footballSignals =
     productCategory === 'sports-football' ? buildFootballSignals(description) : null;
+  const esportsSignals = isEsportsBrief(description, productCategory)
+    ? buildEsportsSignals(description)
+    : null;
   const productTokens = tokenize(description).slice(0, 10);
   const productPhrase = productTokens.slice(0, 4).join(' ');
   const actionHint =
-    productCategory === 'fitness-wellness'
-      ? 'person workout movement training'
-      : productCategory === 'food-dessert'
-        ? 'close up serving texture'
-        : productCategory === 'sports-football'
-          ? 'soccer match stadium crowd goal celebration'
-        : '';
+    searchMode === 'perfume-support'
+      ? 'well dressed person luxury interior mirror preparation suit details city night'
+      : productCategory === 'perfume-fragrance'
+        ? 'perfume bottle spray close up luxury interior'
+        : productCategory === 'fitness-wellness'
+          ? 'person workout movement training'
+          : productCategory === 'food-dessert'
+            ? 'close up serving texture'
+            : productCategory === 'sports-football'
+              ? 'soccer match stadium crowd goal celebration'
+              : esportsSignals
+                ? 'esports arena crowd player pc headset keyboard mouse trophy'
+                : '';
 
   const baseQueries = [
     ...(foodSignals?.anchors || []).flatMap((anchor) => [
@@ -216,10 +319,27 @@ const buildSearchQueries = ({
       `${anchor} ${scene.visualBrief}`,
       ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
     ]),
+    ...(perfumeSignals?.anchors || []).flatMap((anchor) => [
+      anchor,
+      `${anchor} vertical`,
+      `${anchor} close up`,
+      `${anchor} luxury`,
+      `${anchor} ${scene.visualBrief}`,
+      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+    ]),
     ...(footballSignals?.anchors || []).flatMap((anchor) => [
       anchor,
       `${anchor} vertical`,
       `${anchor} action`,
+      `${anchor} crowd`,
+      `${anchor} ${scene.visualBrief}`,
+      ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
+    ]),
+    ...(esportsSignals?.anchors || []).flatMap((anchor) => [
+      anchor,
+      `${anchor} vertical`,
+      `${anchor} player`,
+      `${anchor} stage lights`,
       `${anchor} crowd`,
       `${anchor} ${scene.visualBrief}`,
       ...scene.pexelsKeywords.map((item) => `${anchor} ${item}`)
@@ -244,8 +364,10 @@ const buildSearchQueries = ({
 
         const avoidTerms = [
           ...(foodSignals?.avoidTerms || []),
+          ...(perfumeSignals?.avoidTerms || []),
           ...(fitnessSignals?.avoidTerms || []),
-          ...(footballSignals?.avoidTerms || [])
+          ...(footballSignals?.avoidTerms || []),
+          ...(esportsSignals?.avoidTerms || [])
         ];
 
         return avoidTerms.length ? !queryTokens.some((token) => avoidTerms.includes(token)) : true;
@@ -256,97 +378,146 @@ const buildSearchQueries = ({
 export const findSceneMedia = async (
   scene: ScriptScene,
   productCategory: string,
-  description: string
+  description: string,
+  searchMode: 'default' | 'perfume-support' = 'default',
+  outputMode: 'video' | 'image' = 'video'
 ) => {
-  if (!config.pexelsApiKey) {
-    return [];
+  // Prefer AI-generated footage for video output to shift the visual look away from stock clips.
+  if (outputMode === 'video' && isPikaConfigured()) {
+    try {
+      const pikaMedia = await findPikaSceneMedia(scene, productCategory, description);
+      if (pikaMedia.length) {
+        return pikaMedia;
+      }
+      console.warn('Pika returned no video for this scene; falling back to Pexels search.');
+    } catch (error) {
+      console.warn(`Pika primary search failed. Falling back to Pexels: ${String(error)}`);
+    }
   }
 
   const queries = buildSearchQueries({
     scene,
     productCategory,
-    description
+    description,
+    searchMode
   });
 
   const selected: MediaCandidate[] = [];
   const seen = new Set<string>();
   const maxResults = 6;
 
-  for (const query of queries) {
-    const payloads = await Promise.all([
-      pexelsVideoSearch(query, 'portrait'),
-      pexelsVideoSearch(query, 'landscape')
-    ]);
-    const videos = sortByResolution(
-      payloads
-        .flatMap((payload) => payload.videos || [])
-        .reduce<VideoMediaCandidate[]>((items, video: any) => {
-          const bestFile = sortVideoFiles(
-            (video.video_files || []) as Array<{
-              width: number;
-              height: number;
-              link: string;
-              file_type: string;
-            }>
-          ).find((file: any) => file.file_type === 'video/mp4');
+  if (config.pexelsApiKey) {
+    for (const query of queries) {
+      const payloadResults = await Promise.allSettled([
+        pexelsVideoSearch(query, 'portrait'),
+        pexelsVideoSearch(query, 'landscape')
+      ]);
+      const rejected = payloadResults.filter((result) => result.status === 'rejected');
+      if (rejected.length) {
+        const reason = String(rejected[0].reason || 'Unknown Pexels error');
+        console.warn(`Pexels video search failed for "${query}": ${reason}`);
+      }
 
-          if (!bestFile?.link) {
+      const payloads = payloadResults
+        .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (!payloads.length) {
+        continue;
+      }
+
+      const videos = sortByResolution(
+        payloads
+          .flatMap((payload) => payload.videos || [])
+          .reduce<VideoMediaCandidate[]>((items, video: any) => {
+            const bestFile = sortVideoFiles(
+              (video.video_files || []) as Array<{
+                width: number;
+                height: number;
+                link: string;
+                file_type: string;
+              }>
+            ).find((file: any) => file.file_type === 'video/mp4');
+
+            if (!bestFile?.link) {
+              return items;
+            }
+
+            items.push({
+              kind: 'video',
+              source: 'pexels',
+              externalId: String(video.id),
+              url: bestFile.link,
+              thumbnailUrl: video.image,
+              width: bestFile.width,
+              height: bestFile.height,
+              duration: video.duration,
+              attribution: `Pexels / ${video.user?.name || 'creator'}`,
+              query
+            });
             return items;
-          }
+          }, [])
+      );
 
-          items.push({
-            kind: 'video',
+      for (const item of videos) {
+        if (!seen.has(item.externalId || item.url)) {
+          selected.push(item);
+          seen.add(item.externalId || item.url);
+        }
+        if (selected.length >= maxResults) {
+          return selected;
+        }
+      }
+    }
+
+    for (const query of queries) {
+      try {
+        const photoPayload = await pexelsPhotoSearch(query, 'portrait');
+        const photos = sortByResolution(photoPayload.photos || []).map(
+          (photo: any): MediaCandidate => ({
+            kind: 'image',
             source: 'pexels',
-            externalId: String(video.id),
-            url: bestFile.link,
-            thumbnailUrl: video.image,
-            width: bestFile.width,
-            height: bestFile.height,
-            duration: video.duration,
-            attribution: `Pexels / ${video.user?.name || 'creator'}`,
+            externalId: String(photo.id),
+            url: photo.src?.original || photo.src?.large2x || photo.src?.large,
+            thumbnailUrl: photo.src?.medium,
+            width: photo.width,
+            height: photo.height,
+            attribution: `Pexels / ${photo.photographer || 'creator'}`,
             query
-          });
-          return items;
-        }, [])
-    );
+          })
+        );
 
-    for (const item of videos) {
-      if (!seen.has(item.externalId || item.url)) {
-        selected.push(item);
-        seen.add(item.externalId || item.url);
+        for (const item of photos) {
+          if (!seen.has(item.externalId || item.url)) {
+            selected.push(item);
+            seen.add(item.externalId || item.url);
+          }
+          if (selected.length >= maxResults) {
+            return selected;
+          }
+        }
+      } catch (error) {
+        console.warn(`Pexels photo search failed for "${query}": ${String(error)}`);
       }
-      if (selected.length >= maxResults) {
-        return selected;
+    }
+  } else {
+    console.warn('PEXELS_API_KEY not configured. Falling back to Pika when available.');
+  }
+
+  if (selected.length) {
+    return selected;
+  }
+
+  if (outputMode === 'video' && isPikaConfigured()) {
+    try {
+      const pikaMedia = await findPikaSceneMedia(scene, productCategory, description);
+      if (pikaMedia.length) {
+        return pikaMedia;
       }
+    } catch (error) {
+      console.warn(`Pika fallback failed: ${String(error)}`);
     }
   }
 
-  for (const query of queries) {
-    const photoPayload = await pexelsPhotoSearch(query, 'portrait');
-    const photos = sortByResolution(photoPayload.photos || []).map(
-      (photo: any): MediaCandidate => ({
-        kind: 'image',
-        source: 'pexels',
-        externalId: String(photo.id),
-        url: photo.src?.original || photo.src?.large2x || photo.src?.large,
-        thumbnailUrl: photo.src?.medium,
-        width: photo.width,
-        height: photo.height,
-        attribution: `Pexels / ${photo.photographer || 'creator'}`,
-        query
-      })
-    );
-
-    for (const item of photos) {
-      if (!seen.has(item.externalId || item.url)) {
-        selected.push(item);
-        seen.add(item.externalId || item.url);
-      }
-      if (selected.length >= maxResults) {
-        return selected;
-      }
-    }
-  }
-
-  return selected;
+  return [];
 };

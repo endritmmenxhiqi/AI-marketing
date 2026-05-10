@@ -18,8 +18,31 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
+      enum: ['user', 'premium'],
       default: 'user',
+    },
+    credits: {
+      type: Number,
+      default: 5,
+      min: 0,
+    },
+    totalGenerations: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ['free', 'active', 'cancelled'],
+      default: 'free',
+    },
+    stripeCustomerId: {
+      type: String,
+      default: '',
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: '',
     },
     resetPasswordToken: String,
     resetPasswordExpires: Date,

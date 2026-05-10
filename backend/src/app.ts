@@ -34,7 +34,17 @@ export const createApp = () => {
       credentials: true
     })
   );
-  app.use(express.json({ limit: '10mb' }));
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req, _res, buffer) => {
+        const request = req as express.Request;
+        if (request.originalUrl === '/api/payments/webhook') {
+          request.rawBody = Buffer.from(buffer);
+        }
+      },
+    })
+  );
   app.use('/storage', express.static(path.join(config.rootDir, 'storage/exports')));
   app.use('/storage/uploads', express.static(path.join(config.rootDir, 'storage/uploads')));
 

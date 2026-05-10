@@ -35,6 +35,7 @@ export const config = {
   elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb',
   elevenLabsModelId: process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2',
   pexelsApiKey: process.env.PEXELS_API_KEY || '',
+  falKey: process.env.FAL_KEY || '',
   replicateApiToken: process.env.REPLICATE_API_TOKEN || '',
   replicateModel: process.env.REPLICATE_MODEL || '',
   replicatePollIntervalMs: Number(process.env.REPLICATE_POLL_INTERVAL_MS || 1500),
@@ -56,6 +57,18 @@ export const config = {
   ffmpegFontPath: process.env.FFMPEG_FONT_PATH || defaultFontPath,
   cacheTtlHours: Number(process.env.CACHE_TTL_HOURS || 24),
   jobConcurrency: Number(process.env.JOB_CONCURRENCY || 2),
+  initialUserCredits: Number(process.env.INITIAL_USER_CREDITS || 5),
+  lowCreditThreshold: Number(process.env.LOW_CREDIT_THRESHOLD || 2),
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  stripeCheckoutSuccessUrl:
+    process.env.STRIPE_CHECKOUT_SUCCESS_URL || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/billing/success`,
+  stripeCheckoutCancelUrl:
+    process.env.STRIPE_CHECKOUT_CANCEL_URL || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/billing/cancel`,
+  stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID || '',
+  stripeCreditPack10PriceId: process.env.STRIPE_CREDIT_PACK_10_PRICE_ID || '',
+  stripeCreditPack50PriceId: process.env.STRIPE_CREDIT_PACK_50_PRICE_ID || '',
+  stripeCreditPack100PriceId: process.env.STRIPE_CREDIT_PACK_100_PRICE_ID || '',
   email: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT || 587),
@@ -70,7 +83,7 @@ export const config = {
   outputDir: path.join(rootDir, 'storage/exports'),
 };
 
-export const requiredAtBoot = ['MONGODB_URI', 'REDIS_URL'] as const;
+export const requiredAtBoot = ['MONGODB_URI', 'REDIS_URL', 'JWT_SECRET'] as const;
 
 module.exports = Object.assign(config, {
   config,

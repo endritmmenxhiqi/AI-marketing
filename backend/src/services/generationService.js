@@ -1,6 +1,6 @@
 const Generation = require('../models/Generation');
 const { generateMarketingContent } = require('./aiService');
-const { searchPexelsMedia } = require('./mediaService');
+const { searchPikaMedia } = require('./mediaService');
 const { synthesizeVoiceover } = require('./ttsService');
 const { renderGenerationPreview } = require('./renderService');
 
@@ -41,7 +41,7 @@ const createGeneration = async (ownerId, payload) => {
     objective,
   });
 
-  const media = await searchPexelsMedia({
+  const media = await searchPikaMedia({
     productDescription,
     keywords,
     mediaKeywords: aiOutputs.mediaKeywords,
@@ -112,7 +112,7 @@ const getGenerationById = async (ownerId, generationId) => {
 const refreshGenerationMedia = async (ownerId, generationId) => {
   const generation = await getGenerationById(ownerId, generationId);
 
-  generation.media = await searchPexelsMedia({
+  generation.media = await searchPikaMedia({
     productDescription: generation.productDescription,
     keywords: generation.keywords,
     mediaKeywords: generation.outputs?.mediaKeywords || [],

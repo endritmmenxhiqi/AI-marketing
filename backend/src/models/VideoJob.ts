@@ -98,6 +98,7 @@ const videoJobSchema = new Schema(
     productCategory: { type: String, default: 'general-product' },
     style: { type: String, required: true },
     enableStyleTransfer: { type: Boolean, default: false },
+    outputMode: { type: String, enum: ['video', 'image'], default: 'video' },
     imagePath: { type: String, default: '' },
     imageUrl: { type: String, default: '' },
     script: {
@@ -112,6 +113,7 @@ const videoJobSchema = new Schema(
     output: {
       video: storageAssetSchema,
       preview: storageAssetSchema,
+      image: storageAssetSchema,
       voiceover: storageAssetSchema,
       trim: trimSchema,
       sceneFiles: [storageAssetSchema],
@@ -122,6 +124,9 @@ const videoJobSchema = new Schema(
       sceneCount: Number,
       musicSource: String,
       queueJobId: String,
+      queuePriority: Number,
+      creditSource: String,
+      creditRequestId: String,
       startedAt: Date,
       completedAt: Date,
       failedAt: Date,

@@ -2,8 +2,9 @@ import { Worker } from 'bullmq';
 import { connectDatabase } from './db';
 import { config } from './config';
 import { VIDEO_QUEUE_NAME, closeRedisConnections, ensureRedisConnection, redisConnection } from './queue';
-import { processVideoJob } from './services/jobOrchestrator';
+import { processGenerationJob } from './services/jobOrchestrator';
 import { publishJobProgress } from './services/jobProgressService';
+import { refundGenerationCredit } from './services/userCreditService';
 import { ensureDir } from './utils/files';
 
 const bootWorker = async () => {
@@ -29,7 +30,7 @@ const bootWorker = async () => {
     VIDEO_QUEUE_NAME,
     async (queueJob) => {
       try {
-        return await processVideoJob(String(queueJob.data.jobId));
+        return await processGenerationJob(String(queueJob.data.jobId));
       } catch (error: any) {
         await publishJobProgress(String(queueJob.data.jobId), {
           status: 'failed',
@@ -48,11 +49,36 @@ const bootWorker = async () => {
   );
 
   worker.on('completed', (job) => {
-    console.log(`Completed video job ${job.data.jobId}`);
+    console.log(`Completed generation job ${job.data.jobId}`);
   });
 
-  worker.on('failed', (job, error) => {
-    console.error(`Failed video job ${job?.data?.jobId}:`, error.message);
+  worker.on('failed', async (job, error) => {
+    console.error(`Failed generation job ${job?.data?.jobId}:`, error.message);
+    if (!job) {
+      return;
+    }
+
+    const maxAttempts = Number(job.opts.attempts || 1);
+    if (job.attemptsMade < maxAttempts) {
+      return;
+    }
+
+    const source = job.data?.credit?.source;
+    const userId = job.data?.userId;
+    if (!source || !userId) {
+      return;
+    }
+
+    try {
+      await refundGenerationCredit({
+        userId: String(userId),
+        source: 'wallet',
+        reason: 'worker_job_failed',
+        jobId: String(job.data.jobId || ''),
+      });
+    } catch (refundError: any) {
+      console.error(`Unable to refund credits for failed job ${job.data?.jobId}:`, refundError?.message);
+    }
   });
 };
 

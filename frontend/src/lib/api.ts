@@ -32,6 +32,7 @@ export interface VideoJob {
   productCategory?: string;
   style: string;
   enableStyleTransfer: boolean;
+  outputMode?: 'video' | 'image';
   imageUrl?: string;
   createdAt: string;
   script?: {
@@ -45,6 +46,7 @@ export interface VideoJob {
   output?: {
     video?: { url?: string };
     preview?: { url?: string };
+    image?: { url?: string };
     voiceover?: { url?: string };
     sceneFiles?: Array<{ url?: string }>;
     trim?: {
@@ -64,6 +66,31 @@ export interface AuthUser {
   id: string;
   email: string;
   role: string;
+  credits?: number;
+  totalGenerations?: number;
+  subscriptionStatus?: string;
+}
+
+export interface CreditState {
+  role: 'user' | 'premium';
+  subscriptionStatus: 'free' | 'active' | 'cancelled';
+  credits: number;
+  totalGenerations: number;
+}
+
+export interface BillingConfig {
+  free: {
+    starterCredits: number;
+  };
+  premium: {
+    priority: boolean;
+    priceId?: string;
+  };
+  creditPacks: Array<{
+    credits: number;
+    priceId?: string;
+    unitAmountCents?: number;
+  }>;
 }
 
 type ApiError = Error & { status?: number };
@@ -176,6 +203,7 @@ export const createJob = async (payload: {
   productCategory: string;
   style: string;
   enableStyleTransfer: boolean;
+  outputMode: 'video' | 'image';
 }) => {
   const formData = new FormData();
   if (payload.image) {
@@ -185,6 +213,7 @@ export const createJob = async (payload: {
   formData.append('productCategory', payload.productCategory);
   formData.append('style', payload.style);
   formData.append('enableStyleTransfer', String(payload.enableStyleTransfer));
+  formData.append('outputMode', payload.outputMode);
 
   const response = await apiFetch(`${API_BASE}/jobs`, {
     method: 'POST',
@@ -234,4 +263,46 @@ export const trimJob = async (jobId: string, startSeconds: number, endSeconds: n
   return payload.data;
 };
 
+export const deleteJob = async (jobId: string) => {
+  const response = await apiFetch(`${API_BASE}/jobs/${jobId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw await buildError(response, 'Failed to delete job.');
+  }
+
+  return true;
+};
+
 export const getJobEventsUrl = (jobId: string) => `${API_BASE}/jobs/${jobId}/events`;
+
+export const fetchCredits = async () => {
+  const response = await apiFetch(`${API_BASE}/user/credits`);
+  if (!response.ok) {
+    throw await buildError(response, 'Failed to fetch credits.');
+  }
+
+  const payload = await response.json();
+  return payload as { data: CreditState; billing: BillingConfig };
+};
+
+export const createCheckoutSession = async (payload: {
+  mode: 'credits' | 'subscription';
+  pack?: number;
+}) => {
+  const response = await apiFetch(`${API_BASE}/payments/create-checkout-session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw await buildError(response, 'Failed to start checkout.');
+  }
+
+  const body = await response.json();
+  return body.data as { id: string; url: string };
+};

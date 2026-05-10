@@ -122,6 +122,64 @@ const searchPexelsMedia = async ({ productDescription, keywords, mediaKeywords, 
   }
 };
 
+// Pika 2.2 text-to-video generation via FAL AI
+const searchPikaMedia = async ({ productDescription, keywords, mediaKeywords, platform }) => {
+  if (!config.falKey) {
+    return {
+      provider: 'pika',
+      configured: false,
+      query: productDescription,
+      fetchedAt: new Date(),
+      errorMessage: 'FAL_KEY is missing - set FAL_KEY environment variable',
+      videos: [],
+    };
+  }
+
+  try {
+    // Dynamically import to avoid issues if package not installed
+    const { generateVideo } = await import('./pikaService.js');
+    
+    // Build prompt from available data
+    const prompt = [
+      ...mediaKeywords.slice(0, 3),
+      ...keywords.slice(0, 2),
+      productDescription
+    ].filter(Boolean).join(', ');
+
+    const result = await generateVideo({
+      prompt,
+      duration: '5',
+      resolution: '720p',
+    });
+
+    return {
+      provider: 'pika',
+      configured: true,
+      query: prompt,
+      fetchedAt: new Date(),
+      errorMessage: '',
+      videos: result?.video ? [{
+        externalId: result.requestId,
+        url: result.video.url,
+        thumbnailUrl: result.video.url,  // Use video URL as thumbnail for generated content
+        duration: result.video.duration,
+        width: result.video.width,
+        height: result.video.height,
+      }] : [],
+    };
+  } catch (error) {
+    return {
+      provider: 'pika',
+      configured: true,
+      query: productDescription,
+      fetchedAt: new Date(),
+      errorMessage: error.message,
+      videos: [],
+    };
+  }
+};
+
 module.exports = {
   searchPexelsMedia,
+  searchPikaMedia,
 };

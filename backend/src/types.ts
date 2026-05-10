@@ -5,10 +5,13 @@ export type JobStage =
   | 'writing-script'
   | 'finding-media'
   | 'generating-voice'
+  | 'generating-image'
   | 'rendering-video'
   | 'uploading-assets'
   | 'completed'
   | 'failed';
+
+export type JobOutputMode = 'video' | 'image';
 
 export type CreativeStyle = 'energetic' | 'luxury' | 'minimal' | 'cinematic';
 
@@ -41,7 +44,7 @@ export interface ScriptPackage {
 
 export interface MediaCandidate {
   kind: MediaKind;
-  source: 'pexels' | 'replicate' | 'stability' | 'upload';
+  source: 'pexels' | 'replicate' | 'stability' | 'upload' | 'pika';
   externalId?: string;
   url: string;
   thumbnailUrl?: string;
@@ -96,6 +99,7 @@ export interface JobProgressPayload {
   progress: number;
   message: string;
   error?: string;
+  imageUrl?: string;
   videoUrl?: string;
   previewUrl?: string;
   trimUrl?: string;

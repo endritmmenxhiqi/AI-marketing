@@ -19,6 +19,9 @@ const buildUserPayload = (user) => ({
   id: user._id,
   email: user.email,
   role: user.role,
+  credits: user.credits,
+  totalGenerations: user.totalGenerations,
+  subscriptionStatus: user.subscriptionStatus,
   createdAt: user.createdAt,
 });
 
@@ -88,7 +91,15 @@ const getUserById = async (userId) => {
     err.statusCode = 404;
     throw err;
   }
-  return { id: user._id, email: user.email, role: user.role, createdAt: user.createdAt };
+  return {
+    id: user._id,
+    email: user.email,
+    role: user.role,
+    credits: user.credits,
+    totalGenerations: user.totalGenerations,
+    subscriptionStatus: user.subscriptionStatus,
+    createdAt: user.createdAt
+  };
 };
 
 /**
