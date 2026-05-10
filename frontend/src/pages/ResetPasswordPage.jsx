@@ -9,7 +9,7 @@ const ResetPasswordPage = () => {
   const { theme, toggleTheme } = useTheme();
   const { token } = useParams();
   const navigate = useNavigate();
-  const { lang, toggleLanguage, t } = useLanguage();
+  const { t } = useLanguage();
 
   const [formData, setFormData] = useState({ password: '', confirmPassword: '' });
   const [error, setError] = useState('');
@@ -73,17 +73,8 @@ const ResetPasswordPage = () => {
       <div className="auth-orb auth-orb--2" />
       <div className="auth-orb auth-orb--3" />
 
-      {/* Top-right controls: Language + Theme */}
+      {/* Top-right controls */}
       <div className="auth-controls-row">
-        <button
-          className="auth-theme-toggle"
-          onClick={toggleLanguage}
-          aria-label="Toggle language"
-        >
-          <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.02em' }}>
-            {lang === 'sq' ? 'EN' : 'AL'}
-          </span>
-        </button>
         <button
           className="auth-theme-toggle"
           onClick={toggleTheme}

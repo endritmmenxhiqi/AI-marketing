@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   FileImage,
+  History,
   ImagePlus,
   Layout,
   LoaderCircle,
@@ -23,6 +24,7 @@ import {
   Moon,
   Palette,
   PenTool,
+  PlayCircle,
   RefreshCcw,
   Scissors,
   Sparkles,
@@ -92,14 +94,6 @@ const quickBriefs = [
     style: 'cinematic',
     description:
       'Premium black sneakers for stylish young athletes. Show 5 scenes: shoe close-up, lacing up, city walk, fast footwork or running, final product shot with CTA. Keep the shoes visible in every scene and avoid generic luxury lifestyle filler.',
-  },
-  {
-    id: 'beauty',
-    label: 'Beauty launch',
-    category: 'beauty-skincare',
-    style: 'luxury',
-    description:
-      'A brightening serum for women 28+ who want smoother, more even skin without a long routine. Show texture, glow, before-and-after feeling, and end with a subscribe-and-save CTA.',
   },
   {
     id: 'energy',
@@ -277,7 +271,7 @@ function AuthScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [focused, setFocused] = useState('');
-  const { lang, toggleLanguage, t } = useLanguage();
+  const { t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -297,7 +291,7 @@ function AuthScreen({
   };
   const strength = calcStrength(password);
   const strengthColors = ['#ef4444', '#f59e0b', '#22c55e', '#22c55e'];
-  const strengthLabels = lang === 'sq' ? ['Dobët', 'Mesatar', 'Mirë', 'Fortë'] : ['Weak', 'Fair', 'Good', 'Strong'];
+  const strengthLabels = ['Weak', 'Fair', 'Good', 'Strong'];
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -352,18 +346,8 @@ function AuthScreen({
       <div className="auth-orb auth-orb--2" />
       <div className="auth-orb auth-orb--3" />
 
-      {/* Top-right controls: Language + Theme */}
+      {/* Top-right controls */}
       <div className="auth-controls-row">
-        <button
-          className="auth-theme-toggle"
-          onClick={toggleLanguage}
-          aria-label="Toggle language"
-          title={lang === 'sq' ? 'Switch to English' : 'Kaloni në Shqip'}
-        >
-          <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.02em' }}>
-            {lang === 'sq' ? 'EN' : 'AL'}
-          </span>
-        </button>
         <button
           className="auth-theme-toggle"
           onClick={toggleTheme}
@@ -625,7 +609,6 @@ function AuthScreen({
 
 function App() {
   const { theme, toggleTheme } = useTheme();
-  const { lang, toggleLanguage } = useLanguage();
   const [creatorMode, setCreatorMode] = useState<CreatorMode>('video');
   const [auth, setAuth] = useState(() => ({
     token: localStorage.getItem('token') || '',
@@ -809,11 +792,13 @@ function App() {
   const firstName = auth.email.split('@')[0] || 'creator';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
   const workspaceTabs = [
-    { id: 'overview' as const, label: 'Campaign' },
-    { id: 'preview' as const, label: 'Preview' },
-    { id: 'history' as const, label: `History${jobs.length > 0 ? ` (${jobs.length})` : ''}` },
+    { id: 'overview' as const, label: 'Campaign', description: 'Brief and production health', icon: Target },
+    { id: 'preview' as const, label: 'Preview', description: 'Video player and trim export', icon: PlayCircle },
+    { id: 'history' as const, label: 'History', description: `${jobs.length} saved ${jobs.length === 1 ? 'job' : 'jobs'}`, icon: History },
   ];
   const jobsProcessing = jobs.filter((job) => job.status === 'processing').length;
+  const previewSourceUrl = selectedJob?.output?.preview?.url || selectedJob?.output?.video?.url || '';
+  const masterVideoUrl = selectedJob?.output?.video?.url || previewSourceUrl;
   const dashboardStats =
     creatorMode === 'video'
       ? [
@@ -1219,10 +1204,14 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openJobWorkspace = (job: VideoJob) => {
+    setCreatorMode('video');
+    setSelectedJobId(job._id);
+    setActiveWorkspaceTab(job.output?.preview?.url || job.output?.video?.url ? 'preview' : 'overview');
+  };
+
   const shellCard =
     'dashboard-shell-card rounded-[28px] border border-slate-200/80 bg-white/85 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-slate-950/55 dark:shadow-glow';
-  const shellMutedCard =
-    'dashboard-muted-card rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-4 dark:border-white/10 dark:bg-white/[0.04]';
   const getStatusBadgeClass = (status?: string) => {
     if (status === 'completed') {
       return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200';
@@ -1251,96 +1240,133 @@ function App() {
             />
           ) : (
             <div className="studio-dashboard min-h-screen text-slate-900 transition-colors dark:text-white">
-              <div className="studio-dashboard__inner mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-4 py-4 lg:px-5">
-                <header className="studio-dashboard__header grid gap-4 xl:grid-cols-[minmax(0,1fr),340px]">
-                  <div className={`${shellCard} dashboard-hero-card relative overflow-hidden bg-gradient-to-br from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/90`}>
-                    <div className="relative space-y-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2.5">
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-2xl bg-cyan-500/12 p-2 text-cyan-700 dark:bg-cyan-400/12 dark:text-cyan-300">
-                            <Sparkles size={18} />
-                          </div>
-                          <div>
-                            <h1 className="text-[1.75rem] font-bold tracking-tight text-slate-900 dark:text-white md:text-[2.15rem]">
-                              AI Marketing Studio
-                            </h1>
-                            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400">
-                              Create high-conversion short-form ads in seconds.
-                            </p>
-                          </div>
-                        </div>
+              <div className="studio-dashboard__inner dashboard-app-shell mx-auto grid min-h-screen max-w-[1480px] gap-4 px-4 py-4 lg:grid-cols-[264px_minmax(0,1fr)] lg:px-5">
+                <aside className={`${shellCard} dashboard-sidebar flex flex-col gap-5`}>
+                  <div className="dashboard-sidebar-brand flex items-center gap-3">
+                    <div className="dashboard-brand-mark flex h-11 w-11 items-center justify-center rounded-xl text-white">
+                      <Sparkles size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <h1 className="text-[1.08rem] font-black text-slate-950 dark:text-white">AI Marketing Studio</h1>
+                      <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">Campaign workspace</p>
+                    </div>
+                  </div>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="auth-theme-toggle"
-                            onClick={toggleLanguage}
-                            aria-label="Toggle language"
-                          >
-                            <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '0.02em' }}>
-                              {lang === 'sq' ? 'EN' : 'AL'}
-                            </span>
-                          </button>
-                          <button
-                            className="auth-theme-toggle"
-                            onClick={toggleTheme}
-                            aria-label="Toggle theme"
-                          >
-                            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                          </button>
-                        </div>
+                  <nav className="dashboard-sidebar-nav grid gap-2" aria-label="Workspace">
+                    {workspaceTabs.map(({ id, label, description, icon: TabIcon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setCreatorMode('video');
+                          setActiveWorkspaceTab(id);
+                        }}
+                        className={`dashboard-sidebar-button ${creatorMode === 'video' && activeWorkspaceTab === id ? 'active' : ''} group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left`}
+                      >
+                        <span className="dashboard-sidebar-icon flex h-9 w-9 items-center justify-center rounded-lg">
+                          <TabIcon size={18} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-black">{label}</span>
+                          <span className="block truncate text-[11px] font-semibold opacity-60">{description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </nav>
+
+                  <div className="dashboard-sidebar-mode space-y-2">
+                    <div className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">Create type</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCreatorMode('video')}
+                        className={`dashboard-mode-button ${creatorMode === 'video' ? 'active' : ''} flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] font-black`}
+                      >
+                        <Clapperboard size={15} />
+                        Video
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreatorMode('photo')}
+                        className={`dashboard-mode-button ${creatorMode === 'photo' ? 'active' : ''} flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] font-black`}
+                      >
+                        <Camera size={15} />
+                        Photo
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="dashboard-sidebar-account mt-auto space-y-4">
+                    <div>
+                      <div className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300">Account</div>
+                      <h2 className="mt-1 truncate text-[1.25rem] font-black capitalize text-slate-950 dark:text-white">{firstName}</h2>
+                      <p className="truncate text-[12px] font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
+                    </div>
+
+                    <div className="dashboard-account-rows grid gap-2 text-[12px] font-bold">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Credits</span>
+                        <strong>{auth.credits}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Style</span>
+                        <strong>{styles.find(s => s.value === style)?.label || style}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Category</span>
+                        <strong className="truncate">{formatCategoryLabel(productCategory)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        className="dashboard-icon-button flex h-11 items-center justify-center rounded-lg"
+                        onClick={toggleTheme}
+                        aria-label="Toggle theme"
+                        title="Toggle theme"
+                      >
+                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="dashboard-icon-button dashboard-logout-btn flex h-11 items-center justify-center rounded-lg"
+                        aria-label="Sign out"
+                        title="Sign out"
+                      >
+                        <LogOut size={18} />
+                      </button>
+                    </div>
+                  </div>
+                </aside>
+
+                <div className="dashboard-content flex min-w-0 flex-col gap-4">
+                  <header className={`${shellCard} dashboard-topbar`}>
+                    <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="max-w-2xl">
+                        <div className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300">Command center</div>
+                        <h2 className="mt-1 text-[1.8rem] font-black text-slate-950 dark:text-white md:text-[2.15rem]">
+                          Build, preview, and ship short-form ads.
+                        </h2>
+                        <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                          A cleaner workspace for briefs, production status, video review, and export history.
+                        </p>
                       </div>
 
-                      <div className="grid gap-2.5 md:grid-cols-3">
+                      <div className="dashboard-topbar-stats grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
                         {dashboardStats.map((item) => (
-                          <div key={item.label} className={`${shellMutedCard} dashboard-stat-card group transition-all hover:bg-white/95 dark:hover:bg-white/10`}>
-                            <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500">
+                          <div key={item.label} className="dashboard-topbar-stat rounded-xl px-4 py-3">
+                            <div className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">
                               {item.label}
                             </div>
-                            <div className="mt-1 text-[1.9rem] font-bold tracking-tight leading-none">{item.value}</div>
+                            <div className="mt-1 truncate text-[1.45rem] font-black leading-none text-slate-950 dark:text-white">{item.value}</div>
                           </div>
                         ))}
                       </div>
-
                     </div>
-                  </div>
+                  </header>
 
-                  <div className={`${shellCard} dashboard-account-card relative flex flex-col justify-between overflow-hidden text-slate-900 dark:text-white`}>
-                    {/* Light mode beautiful frosted gradient backdrop */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-50/95 to-amber-50/95 backdrop-blur-xl pointer-events-none dark:hidden" />
-                    
-                    {/* Light mode top-right glow */}
-                    <div className="pointer-events-none absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-gradient-to-br from-cyan-400/20 to-amber-300/20 blur-3xl dark:hidden" />
-
-                    <div className="relative z-10 flex flex-wrap items-start justify-between gap-2.5">
-                      <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.15em] text-cyan-700 dark:text-cyan-300">Account</div>
-                        <h2 className="mt-1 text-[1.55rem] font-black capitalize tracking-tight text-slate-900 dark:text-white">{firstName}</h2>
-                        <p className="text-[13px] font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
-                      </div>
-                      <button type="button" onClick={handleLogout} className="dashboard-logout-btn group flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/50 transition-all hover:bg-rose-50 hover:text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white dark:ring-0">
-                        <LogOut size={16} className="text-slate-400 group-hover:text-rose-500 transition-colors dark:text-inherit" />
-                      </button>
-                    </div>
-
-                    <div className="relative z-10 mt-3.5 grid grid-cols-3 gap-2.5">
-                       <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
-                          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Credits</span>
-                          <span className="text-sm font-bold text-slate-800 dark:text-white">{auth.credits}</span>
-                       </div>
-                       <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
-                          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Active Style</span>
-                          <span className="text-sm font-bold text-slate-800 dark:text-white">{styles.find(s => s.value === style)?.label || style}</span>
-                       </div>
-                       <div className="dashboard-account-meta flex flex-col gap-1 rounded-2xl bg-white/70 p-3 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
-                          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Category</span>
-                          <span className="text-sm font-bold truncate text-slate-800 dark:text-white">{formatCategoryLabel(productCategory)}</span>
-                       </div>
-                    </div>
-
-                  </div>
-                </header>
-
-                <main className="studio-dashboard__main grid gap-4 xl:grid-cols-[0.96fr,1.04fr]">
+                  <main className="studio-dashboard__main dashboard-board grid gap-4 xl:grid-cols-[minmax(390px,0.82fr)_minmax(0,1.18fr)]">
                   {/* LEFT COLUMN: Creation Section */}
                   <section className={`${shellCard} dashboard-builder-card flex flex-col gap-[1.125rem]`}>
                     <div className="flex items-center justify-between">
@@ -1782,20 +1808,6 @@ function App() {
                         </div>
                       </div>
 
-                      {creatorMode === 'video' ? (
-                        <div className="dashboard-tabs flex gap-1 rounded-2xl bg-slate-100/50 p-1 dark:bg-white/5">
-                          {workspaceTabs.map((tab) => (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => setActiveWorkspaceTab(tab.id)}
-                              className={`dashboard-tab ${activeWorkspaceTab === tab.id ? 'active' : ''} flex-1 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all`}
-                            >
-                              {tab.label}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
 
                     <div className="flex-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar">
@@ -1874,6 +1886,16 @@ function App() {
                                     </div>
                                   </div>
                                 </div>
+                                {previewSourceUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveWorkspaceTab('preview')}
+                                    className="dashboard-action-btn dashboard-action-btn--primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-4 text-[11px] font-black uppercase tracking-[0.18em]"
+                                  >
+                                    <PlayCircle size={17} />
+                                    Open video preview
+                                  </button>
+                                ) : null}
                               </>
                             ) : (
                               <div className="dashboard-empty-state flex flex-col items-center justify-center py-16 text-center">
@@ -1900,7 +1922,7 @@ function App() {
                             exit={{ opacity: 0, y: -10 }}
                             className="space-y-6 pb-3"
                           >
-                            {selectedJob?.output?.preview?.url ? (
+                            {previewSourceUrl ? (
                               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
                                 <div className="dashboard-preview-stage relative group mx-auto w-full max-w-[320px]">
                                   <div className="absolute -inset-6 bg-cyan-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-cyan-300/10" />
@@ -1909,7 +1931,7 @@ function App() {
                                       ref={previewVideoRef}
                                       controls
                                       playsInline
-                                      src={selectedJob.output.preview.url}
+                                      src={previewSourceUrl}
                                       onLoadedMetadata={(event) => {
                                         const duration = Number(event.currentTarget.duration || 0) || 0;
                                         if (duration > 0 && Number.isFinite(duration)) {
@@ -1918,6 +1940,17 @@ function App() {
                                       }}
                                       className="aspect-[9/16] w-full bg-black object-contain shadow-inner"
                                     />
+                                  </div>
+                                  <div className="mt-4 flex justify-center">
+                                    <a
+                                      href={previewSourceUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="dashboard-pill-btn inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition-all hover:border-cyan-200 hover:text-cyan-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                                    >
+                                      <ExternalLink size={14} />
+                                      Open video
+                                    </a>
                                   </div>
                                 </div>
 
@@ -2009,7 +2042,7 @@ function App() {
                                     <button disabled={trimLoading} onClick={handleTrim} className="dashboard-action-btn dashboard-action-btn--primary rounded-2xl bg-cyan-600 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-cyan-300 dark:to-blue-300 dark:text-slate-900 shadow-[0_8px_24px_rgba(14,165,233,0.3)] dark:shadow-[0_8px_24px_rgba(103,232,249,0.18)]">
                                       {trimLoading ? 'Processing...' : 'Export Clip'}
                                     </button>
-                                    <a href={selectedJob.output.video?.url} target="_blank" rel="noreferrer" className="dashboard-action-btn dashboard-action-btn--secondary flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white py-4 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 transition-all hover:border-cyan-200 hover:bg-slate-50 hover:text-cyan-700 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:border-cyan-300/20 dark:hover:bg-white/20 dark:hover:text-white">
+                                    <a href={masterVideoUrl} target="_blank" rel="noreferrer" className="dashboard-action-btn dashboard-action-btn--secondary flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white py-4 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 transition-all hover:border-cyan-200 hover:bg-slate-50 hover:text-cyan-700 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:border-cyan-300/20 dark:hover:bg-white/20 dark:hover:text-white">
                                       <Download size={16} />
                                       Full Master
                                     </a>
@@ -2073,7 +2106,7 @@ function App() {
                                 jobs.map((job) => (
                                   <button
                                     key={job._id}
-                                    onClick={() => setSelectedJobId(job._id)}
+                                    onClick={() => openJobWorkspace(job)}
                                     className={`dashboard-history-item ${selectedJobId === job._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 transition-all duration-300`}
                                   >
                                     <div className="flex min-w-0 flex-1 items-center gap-4">
@@ -2257,6 +2290,7 @@ function App() {
                     </div>
                   </section>
                 </main>
+                </div>
 
                 <AnimatePresence>
                   {isPreviewOpen && previewUrl ? (

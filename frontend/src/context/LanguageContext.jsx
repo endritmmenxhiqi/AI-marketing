@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 
 // ─── Translations Dictionary ───────────────────────────────────────────────────
 const translations = {
@@ -151,27 +151,23 @@ const translations = {
 const LanguageContext = createContext(null);
 
 export const LanguageProvider = ({ children }) => {
-  const [lang, setLang] = useState(() => localStorage.getItem('language') || 'en');
+  const lang = 'en';
 
   useEffect(() => {
-    localStorage.setItem('language', lang);
-    document.documentElement.lang = lang;
-  }, [lang]);
-
-  const toggleLanguage = () => {
-    setLang((prev) => (prev === 'en' ? 'sq' : 'en'));
-  };
+    localStorage.setItem('language', 'en');
+    document.documentElement.lang = 'en';
+  }, []);
 
   /**
    * Translation function
    * @param {string} key - the translation key
    */
   const t = (key) => {
-    return translations[lang][key] || key;
+    return translations.en[key] || key;
   };
 
   return (
-    <LanguageContext.Provider value={{ lang, toggleLanguage, t }}>
+    <LanguageContext.Provider value={{ lang, t }}>
       {children}
     </LanguageContext.Provider>
   );
