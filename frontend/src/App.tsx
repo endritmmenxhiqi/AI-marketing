@@ -363,7 +363,9 @@ function DashboardPage() {
         {
           title: photoTitle.trim(),
           prompt: photoPrompt.trim(),
-          aspectRatio: photoAspectRatio,
+          aspectRatio: photoAspectRatio as any,
+          style: form.style,
+          productCategory: form.productCategory,
         },
         setPhotoProgressLabel
       );
@@ -874,49 +876,51 @@ function DashboardPage() {
                     </div>
                   </article>
 
-                  <article className={`panel panel--upload ${createFocus === 'upload' ? 'is-emphasis' : ''}`}>
-                    <div className="panel-kicker">ASSET UPLOAD</div>
-                    <div className="drop-zone">
-                      <Upload size={34} strokeWidth={1.8} />
-                      <div className="drop-zone__title">
-                        {form.images.length === 0 && 'Drop or pick up to 2 photos'}
-                        {form.images.length === 1 && '1 photo selected — add 1 more for the closing scene'}
-                        {form.images.length >= 2 && '2 photos selected ✓'}
-                      </div>
-                      <div className="drop-zone__meta">
-                        {form.images.length > 0
-                          ? form.images.map((f, i) => `${i === 0 ? 'Start' : 'End'}: ${f.name}`).join(' · ')
-                          : 'Photo 1 → opens video · Photo 2 → closes video'}
-                      </div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden-file-input"
-                        onChange={handleFileChangeLocal}
-                      />
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        <button
-                          type="button"
-                          className="mini-button"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={form.images.length >= 2}
-                        >
-                          {form.images.length === 0 ? 'SELECT PHOTOS' : form.images.length === 1 ? 'ADD CLOSING PHOTO' : '2 / 2 SELECTED'}
-                        </button>
-                        {form.images.length > 0 && (
+                  {createMode === 'video' && (
+                    <article className={`panel panel--upload ${createFocus === 'upload' ? 'is-emphasis' : ''}`}>
+                      <div className="panel-kicker">ASSET UPLOAD</div>
+                      <div className="drop-zone">
+                        <Upload size={34} strokeWidth={1.8} />
+                        <div className="drop-zone__title">
+                          {form.images.length === 0 && 'Drop or pick up to 2 photos'}
+                          {form.images.length === 1 && '1 photo selected — add 1 more for the closing scene'}
+                          {form.images.length >= 2 && '2 photos selected ✓'}
+                        </div>
+                        <div className="drop-zone__meta">
+                          {form.images.length > 0
+                            ? form.images.map((f, i) => `${i === 0 ? 'Start' : 'End'}: ${f.name}`).join(' · ')
+                            : 'Photo 1 → opens video · Photo 2 → closes video'}
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden-file-input"
+                          onChange={handleFileChangeLocal}
+                        />
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
                           <button
                             type="button"
-                            className="mini-button mini-button--ghost"
-                            onClick={() => setForm((c) => ({ ...c, images: [] }))}
+                            className="mini-button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={form.images.length >= 2}
                           >
-                            CLEAR ALL
+                            {form.images.length === 0 ? 'SELECT PHOTOS' : form.images.length === 1 ? 'ADD CLOSING PHOTO' : '2 / 2 SELECTED'}
                           </button>
-                        )}
+                          {form.images.length > 0 && (
+                            <button
+                              type="button"
+                              className="mini-button mini-button--ghost"
+                              onClick={() => setForm((c) => ({ ...c, images: [] }))}
+                            >
+                              CLEAR ALL
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </article>
+                    </article>
+                  )}
                 </div>
               </div>
             </section>

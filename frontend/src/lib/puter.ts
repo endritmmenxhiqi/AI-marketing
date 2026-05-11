@@ -157,10 +157,11 @@ const getGeneratedImageSource = async (image: HTMLImageElement) => {
 };
 
 export async function generatePhotoAdSet(
-  input: {
     title: string;
     prompt: string;
     aspectRatio: PhotoAspectRatio;
+    style: string;
+    productCategory: string;
   },
   onProgress?: (label: string) => void
 ) {
@@ -173,10 +174,12 @@ export async function generatePhotoAdSet(
     onProgress?.(`Generating concept ${index + 1} of ${PHOTO_VARIATIONS.length}`);
 
     const prompt = [
+      `Product Category: ${input.productCategory}.`,
+      `Creative Style: ${input.style}.`,
       input.title,
       input.prompt,
       'High-end commercial photography for an ad campaign.',
-      'Luxury brand feel, premium lighting, polished composition, rich detail, tasteful color grading.',
+      'Premium lighting, polished composition, rich detail, tasteful color grading.',
       variant,
     ].join(' ');
 
