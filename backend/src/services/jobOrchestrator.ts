@@ -568,6 +568,7 @@ export const processVideoJob = async (jobId: string) => {
   videoJob.audience = script.audience;
   videoJob.offer = script.offer;
   videoJob.proof = script.proof;
+  videoJob.caption = script.caption;
   videoJob.metadata = {
     ...(videoJob.metadata || {}),
     jobFolder: jobDir,

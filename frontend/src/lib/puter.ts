@@ -157,6 +157,7 @@ const getGeneratedImageSource = async (image: HTMLImageElement) => {
 };
 
 export async function generatePhotoAdSet(
+  input: {
     title: string;
     prompt: string;
     aspectRatio: PhotoAspectRatio;

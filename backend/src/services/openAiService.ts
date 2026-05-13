@@ -24,7 +24,7 @@ const blockedKeywordTokens = new Set([
   'viral'
 ]);
 
-const SCRIPT_PROMPT_VERSION = 'v4';
+const SCRIPT_PROMPT_VERSION = 'v5';
 const esportsBriefTokens = [
   'counter strike',
   'counter-strike',
@@ -43,11 +43,12 @@ const isEsportsBrief = (description: string, productCategory: string) => {
 const scriptSchema = {
   name: 'marketing_video_script',
   schema: {
-    required: ['title', 'hook', 'cta', 'hashtags', 'musicMood', 'audience', 'offer', 'proof', 'scenes'],
+    required: ['title', 'hook', 'cta', 'caption', 'hashtags', 'musicMood', 'audience', 'offer', 'proof', 'scenes'],
     properties: {
       title: { type: 'string' },
       hook: { type: 'string' },
       cta: { type: 'string' },
+      caption: { type: 'string' },
       hashtags: {
         type: 'array',
         items: { type: 'string' },
@@ -152,12 +153,12 @@ const normalizeScriptPackage = (payload: ScriptPackage) => {
         scene.pexelsKeywords.length >= 2
           ? scene.pexelsKeywords
           : Array.from(
-              new Set(
-                [scene.headline, scene.visualBrief]
-                  .map(normalizeKeyword)
-                  .filter(Boolean)
-              )
-            ).slice(0, 3)
+            new Set(
+              [scene.headline, scene.visualBrief]
+                .map(normalizeKeyword)
+                .filter(Boolean)
+            )
+          ).slice(0, 3)
     }));
 
   if (scenes.length < 4) {
@@ -168,6 +169,7 @@ const normalizeScriptPackage = (payload: ScriptPackage) => {
     title: normalizeLine(payload.title),
     hook: normalizeLine(payload.hook),
     cta: normalizeLine(payload.cta),
+    caption: normalizeLine((payload as any).caption || ''),
     hashtags: Array.from(
       new Set(
         (payload.hashtags || [])
@@ -180,7 +182,7 @@ const normalizeScriptPackage = (payload: ScriptPackage) => {
     offer: normalizeLine((payload as any).offer || ''),
     proof: normalizeLine((payload as any).proof || ''),
     scenes
-  } satisfies ScriptPackage & { audience: string; offer: string; proof: string };
+  } satisfies ScriptPackage & { audience: string; offer: string; proof: string; caption: string };
 };
 
 export const generateScriptPackage = async (
@@ -200,32 +202,32 @@ export const generateScriptPackage = async (
   const categoryGuidance =
     productCategory === 'food-dessert'
       ? [
-          'For food and dessert ads, prioritize appetite appeal, texture, ingredients, authenticity, and craving.',
-          'If the product is a specific named dessert, keep every scene visually and verbally loyal to that exact dessert.',
-          'Do not drift into generic cakes, cupcakes, frosting, whipped cream, or unrelated bakery prep unless the brief explicitly describes those.',
-          'Usage occasions like gifting, guests, or after-dinner can support the message, but the product itself must stay the visual star.'
-        ].join(' ')
+        'For food and dessert ads, prioritize appetite appeal, texture, ingredients, authenticity, and craving.',
+        'If the product is a specific named dessert, keep every scene visually and verbally loyal to that exact dessert.',
+        'Do not drift into generic cakes, cupcakes, frosting, whipped cream, or unrelated bakery prep unless the brief explicitly describes those.',
+        'Usage occasions like gifting, guests, or after-dinner can support the message, but the product itself must stay the visual star.'
+      ].join(' ')
       : productCategory === 'fitness-wellness'
         ? [
-            'For fitness and wellness ads, prioritize visible movement, training, progress, energy, confidence, and action.',
-            'Prefer scenes of people actively working out, training at home, tracking progress, or feeling stronger.',
-            'Avoid passive talking-head scenes, generic socializing, meetings, interviews, or equipment-only footage unless the brief explicitly asks for it.',
-            'If the offer is a program or membership, the visuals should still show the transformation journey, not abstract community filler.'
-          ].join(' ')
+          'For fitness and wellness ads, prioritize visible movement, training, progress, energy, confidence, and action.',
+          'Prefer scenes of people actively working out, training at home, tracking progress, or feeling stronger.',
+          'Avoid passive talking-head scenes, generic socializing, meetings, interviews, or equipment-only footage unless the brief explicitly asks for it.',
+          'If the offer is a program or membership, the visuals should still show the transformation journey, not abstract community filler.'
+        ].join(' ')
         : productCategory === 'sports-football'
           ? [
-              'For football/soccer hype videos, prioritize match energy: stadium lights, crowd chants, kickoff, dribbling, tackles, saves, goal celebrations, and fast momentum shifts.',
-              'Use Pexels keywords that clearly indicate soccer (e.g., "soccer match", "football stadium", "soccer fans", "goal celebration") to avoid American football footage.',
-              'Avoid logos, identifiable players, or team-specific trademarks in visuals; keep it generic match atmosphere and action.'
-            ].join(' ')
-        : esportsBrief
-          ? [
+            'For football/soccer hype videos, prioritize match energy: stadium lights, crowd chants, kickoff, dribbling, tackles, saves, goal celebrations, and fast momentum shifts.',
+            'Use Pexels keywords that clearly indicate soccer (e.g., "soccer match", "football stadium", "soccer fans", "goal celebration") to avoid American football footage.',
+            'Avoid logos, identifiable players, or team-specific trademarks in visuals; keep it generic match atmosphere and action.'
+          ].join(' ')
+          : esportsBrief
+            ? [
               'For esports and Counter-Strike style promos, prioritize arena-tournament energy: player walkouts, focused gamers at PCs, headset comms, keyboard and mouse closeups, crowd eruptions, stage lights, trophy moments, and big-screen match atmosphere.',
               'Use Pexels keywords that clearly describe visible esports footage such as "esports tournament", "gaming tournament stage", "pro gamer pc", "gaming arena crowd", "keyboard mouse close up", and "trophy celebration".',
               'Avoid drifting into generic tech product shots, coding desks, office work, server rooms, mobile gaming, console controllers, or abstract RGB gadget footage unless the brief explicitly asks for them.',
               'Do not promise official Counter-Strike majors footage, team logos, or branded tournament assets. Keep the visuals generic, premium, and clearly esports-driven.'
             ].join(' ')
-        : '';
+            : '';
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -284,7 +286,8 @@ export const generateScriptPackage = async (
             'imagePrompt must stay truthful to the product category and should never invent irrelevant content.',
             'Include an "audience" field describing the primary buyer persona.',
             'Include an "offer" field describing the core deal or promise.',
-            'Include a "proof" field describing why the customer should trust the product.'
+            'Include a "proof" field describing why the customer should trust the product.',
+            'Include a "caption" field: A persuasive social media post (hook + CTA) including 4-6 relevant hashtags. The hashtags MUST be highly specific to the product and the actual content of the ad, NOT generic marketing terms like #marketing, #innovation, #ai, or #business.'
           ].join('\n')
         }
       ]
@@ -294,7 +297,7 @@ export const generateScriptPackage = async (
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[OpenAI] Request failed:', errorText);
-    
+
     // Fallback to a generic script if API fails (e.g. out of credits)
     console.warn('[OpenAI] Falling back to generic script due to API error.');
     return normalizeScriptPackage({
@@ -303,6 +306,10 @@ export const generateScriptPackage = async (
       cta: `Get yours today and transform your routine.`,
       hashtags: ['#marketing', '#innovation', '#ai', '#business'],
       musicMood: 'Energetic and Uplifting',
+      audience: `People looking for a better ${productCategory} solution`,
+      offer: `A simple way to experience ${description.slice(0, 40)}`,
+      proof: 'Built around a clear customer problem, benefit, and action-driven message',
+      caption: `Discover the power of our latest ${productCategory}! Get yours today and transform your routine. #marketing #innovation #ai #business`,
       scenes: [
         {
           sceneNumber: 1,
@@ -413,7 +420,7 @@ export const generateMarketingBrief = async (
   const payload = await response.json();
   const content = payload.choices?.[0]?.message?.content;
   const parsed = parseJson(content);
-  
+
   const result = {
     audience: normalizeLine(parsed.audience || ''),
     offer: normalizeLine(parsed.offer || ''),

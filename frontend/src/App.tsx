@@ -19,6 +19,7 @@ import {
   Sparkles,
   Sun,
   Upload,
+  X,
 } from 'lucide-react';
 import logoWhite from './assets/logo-white.png';
 import { useAuth } from './context/AuthContext';
@@ -237,8 +238,8 @@ function DashboardPage() {
       setSelectedJobId(jobId);
       setHistoryMode(createMode);
       setWorkspaceFocus('preview');
-      setActiveSection('workspace');
-      setExpandedSection('workspace');
+      setActiveSection('history');
+      setExpandedSection('history');
       refreshUser();
     },
     loadJobs
@@ -316,6 +317,7 @@ function DashboardPage() {
     setCreateMode(mode);
     setHistoryMode(mode);
     setCreateFocus(mode);
+    setCreatorMode(mode);
     setActiveSection('create');
     setExpandedSection('create');
   };
@@ -328,6 +330,7 @@ function DashboardPage() {
 
   const selectHistoryMode = (mode: CampaignKind) => {
     setHistoryMode(mode);
+    setCreatorMode(mode);
     setActiveSection('history');
     setExpandedSection('history');
   };
@@ -415,11 +418,13 @@ function DashboardPage() {
 
   const [creatorMode, setCreatorMode] = useState<'video' | 'photo'>('video');
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'preview' | 'brief' | 'overview'>('overview');
+  const [isOutputViewerOpen, setIsOutputViewerOpen] = useState(false);
 
   const handleHistoryCardClick = (job: DashboardJob) => {
     setSelectedPhotoAdId(null);
     setSelectedJobId(job._id);
     setHistoryMode(job.kind);
+    setCreatorMode(job.kind);
     setWorkspaceFocus('preview');
     setActiveSection('workspace');
     setExpandedSection('workspace');
@@ -435,8 +440,26 @@ function DashboardPage() {
 
   const openOutput = () => {
     if (!activeOutputUrl) return;
-    window.open(activeOutputUrl, '_blank', 'noopener,noreferrer');
+    setIsOutputViewerOpen(true);
   };
+
+  useEffect(() => {
+    if (!isOutputViewerOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOutputViewerOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.classList.add('is-output-viewer-open');
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.classList.remove('is-output-viewer-open');
+    };
+  }, [isOutputViewerOpen]);
 
   const overviewCards = [
     {
@@ -988,6 +1011,9 @@ function DashboardPage() {
                           if (!activeJob) return 'No job selected yet';
                           if (activeJob.kind === 'video') {
                             const vJob = activeJob as VideoJob;
+                            if (vJob.caption) {
+                              return <div className="post-preview">{vJob.caption}</div>;
+                            }
                             if (vJob.script) {
                               return (
                                 <div className="post-preview">
@@ -1026,8 +1052,8 @@ function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="player__preview player__preview--photo">
-                      <div className="player__preview-surface player__preview-surface--photo">
+                    <div className={`player__preview${creatorMode === 'photo' ? ' player__preview--photo' : ''}`}>
+                      <div className={`player__preview-surface${creatorMode === 'photo' ? ' player__preview-surface--photo' : ''}`}>
                         {creatorMode === 'photo' ? (
                           selectedPhotoAd ? (
                             <div className="photo-studio-preview">
@@ -1132,6 +1158,21 @@ function DashboardPage() {
                           </div>
                         )}
                       </div>
+
+                      {activeJob?.kind === 'video' && (activeJob as VideoJob).caption && (
+                        <div className="photo-caption-block" style={{ marginTop: '20px' }}>
+                          <p className="photo-caption-text">{(activeJob as VideoJob).caption}</p>
+                          {(activeJob as VideoJob).script?.hashtags && (activeJob as VideoJob).script!.hashtags!.length > 0 && (
+                            <div className="photo-caption-tags">
+                              {(activeJob as VideoJob).script!.hashtags!.map(tag => (
+                                <span key={tag} className="photo-caption-tag">
+                                  {tag.startsWith('#') ? tag : `#${tag}`}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="player__actions" style={creatorMode === 'photo' ? { display: 'none' } : {}}>
@@ -1335,6 +1376,51 @@ function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {isOutputViewerOpen && activeOutputUrl && (
+        <div
+          className="output-viewer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Campaign output preview"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsOutputViewerOpen(false);
+            }
+          }}
+        >
+          <div className="output-viewer__panel">
+            <div className="output-viewer__topbar">
+              <span>Output preview</span>
+              <button
+                type="button"
+                className="output-viewer__close"
+                aria-label="Close output preview"
+                onClick={() => setIsOutputViewerOpen(false)}
+              >
+                <X size={18} strokeWidth={2.4} />
+              </button>
+            </div>
+
+            <div className="output-viewer__frame">
+              <video
+                key={`viewer-${activeOutputUrl}`}
+                className="output-viewer__asset"
+                controls
+                playsInline
+                autoPlay
+                loop
+                preload="auto"
+                crossOrigin="anonymous"
+              >
+                <source src={activeOutputUrl.replace('localhost', '127.0.0.1')} type="video/mp4" />
+                <source src={activeOutputUrl} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

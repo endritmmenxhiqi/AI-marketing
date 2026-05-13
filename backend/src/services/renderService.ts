@@ -61,42 +61,6 @@ const writeFilterTextFile = async ({
   return escapeFilterPath(textPath);
 };
 
-const buildCaptionFilters = async ({
-  captions,
-  inputLabel,
-  jobDir,
-  sceneIndex
-}: {
-  captions: CaptionCue[];
-  inputLabel: string;
-  jobDir: string;
-  sceneIndex: number;
-}) => {
-  const filters: string[] = [];
-
-  for (const [index, caption] of captions.entries()) {
-    const start = caption.start.toFixed(2);
-    const end = caption.end.toFixed(2);
-    const enableExpression = `between(t\\,${start}\\,${end})`;
-    const textLabel = `captext${index}`;
-    const previousLabel = index === 0 ? inputLabel : `captext${index - 1}`;
-    const captionFile = await writeFilterTextFile({
-      jobDir,
-      sceneIndex,
-      label: `caption-${index}`,
-      text: caption.text
-    });
-
-    filters.push(
-      `[${previousLabel}]drawtext=fontfile='${escapeFilterPath(
-        config.ffmpegFontPath
-      )}':textfile='${captionFile}':reload=0:fontsize=54:fontcolor=white:line_spacing=12:shadowcolor=black@0.78:shadowx=0:shadowy=10:x=(w-text_w)/2:y=${CAPTION_TEXT_Y}:enable='${enableExpression}'[${textLabel}]`
-    );
-  }
-
-  return filters;
-};
-
 const createSceneClip = async ({
   plan,
   jobDir
@@ -132,9 +96,9 @@ const createSceneClip = async ({
       const selectedMotion = motionVariants[plan.index % motionVariants.length];
 
       if (isUpload) {
-        // ALWAYS keep uploaded foreground sharp and static to prevent blur/cropping.
-        // Apply the zoompan motion ONLY to the blurred background so the video feels alive and cinematic!
-        return `[0:v]split=2[bg][fg];[bg]scale=1080:1920:force_original_aspect_ratio=increase:flags=bicubic,crop=1080:1920,boxblur=40:20,eq=brightness=-0.1:contrast=1.05,${selectedMotion}[bg_moving];[fg]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1[fg_static];[bg_moving][fg_static]overlay=(W-w)/2:(H-h)/2[bg0]`;
+        // APPLY subtle zoompan to the foreground upload to prevent it from being static!
+        const fgMotion = `zoompan=z='min(zoom+0.0004,1.06)':d=${frameCount}:s=1080x1920:fps=30`;
+        return `[0:v]split=2[bg][fg];[bg]scale=1080:1920:force_original_aspect_ratio=increase:flags=bicubic,crop=1080:1920,boxblur=40:20,eq=brightness=-0.1:contrast=1.05,${selectedMotion}[bg_moving];[fg]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1,${fgMotion}[fg_moving];[bg_moving][fg_moving]overlay=(W-w)/2:(H-h)/2[bg0]`;
       }
 
       return `[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,${selectedMotion}[bg0]`;
@@ -163,17 +127,73 @@ const createSceneClip = async ({
   })();
 
   const filters = [sourcePrep];
-  // Keep the scene visuals clean by rendering only the timed bottom captions.
-  filters.push(
-    ...(await buildCaptionFilters({
-      captions: plan.voice.captions,
-      inputLabel: 'bg0',
-      jobDir,
-      sceneIndex: plan.index
-    }))
-  );
 
-  const contentLabel = plan.voice.captions.length ? `captext${plan.voice.captions.length - 1}` : 'bg0';
+  // Render Headline at the top (with a slight upward drift)
+  if (plan.scene.headline) {
+    const headlineFile = await writeFilterTextFile({
+      jobDir,
+      sceneIndex: plan.index,
+      label: 'headline',
+      text: plan.scene.headline.toUpperCase()
+    });
+    filters.push(
+      `[bg0]drawtext=fontfile='${escapeFilterPath(
+        config.ffmpegFontPath
+      )}':textfile='${headlineFile}':reload=0:fontsize=84:fontcolor=white:line_spacing=12:shadowcolor=black@0.8:shadowx=0:shadowy=6:x=(w-text_w)/2:y=220-(t*5)[bg_headline]`
+    );
+  }
+
+  let currentLabel = plan.scene.headline ? 'bg_headline' : 'bg0';
+
+  // Render onScreenText snippets in the center of the screen
+  if (plan.scene.onScreenText && plan.scene.onScreenText.length > 0) {
+    for (const [index, text] of plan.scene.onScreenText.entries()) {
+      const textFile = await writeFilterTextFile({
+        jobDir,
+        sceneIndex: plan.index,
+        label: `onscreen-${index}`,
+        text: text.toUpperCase()
+      });
+      const nextLabel = `bg_onscreen_${index}`;
+      
+      // Each snippet appears for a portion of the scene
+      const snippetDuration = sceneDuration / plan.scene.onScreenText.length;
+      const start = (index * snippetDuration).toFixed(2);
+      const end = ((index + 1) * snippetDuration).toFixed(2);
+      
+      filters.push(
+        `[${currentLabel}]drawtext=fontfile='${escapeFilterPath(
+          config.ffmpegFontPath
+        )}':textfile='${textFile}':reload=0:fontsize=72:fontcolor=white:box=1:boxcolor=black@0.4:boxborderw=20:line_spacing=12:shadowcolor=black@0.8:shadowx=0:shadowy=6:x=(w-text_w)/2:y=(h-text_h)/2-100:enable='between(t\\,${start}\\,${end})'[${nextLabel}]`
+      );
+      currentLabel = nextLabel;
+    }
+  }
+
+  const captionInputLabel = currentLabel;
+
+  // Build Caption Filters with movement (drift upwards)
+  for (const [index, caption] of plan.voice.captions.entries()) {
+    const start = caption.start.toFixed(2);
+    const end = caption.end.toFixed(2);
+    const enableExpression = `between(t\\,${start}\\,${end})`;
+    const textLabel = `captext${index}`;
+    const previousLabel = index === 0 ? captionInputLabel : `captext${index - 1}`;
+    const captionFile = await writeFilterTextFile({
+      jobDir,
+      sceneIndex: plan.index,
+      label: `caption-${index}`,
+      text: caption.text
+    });
+
+    filters.push(
+      `[${previousLabel}]drawtext=fontfile='${escapeFilterPath(
+        config.ffmpegFontPath
+      )}':textfile='${captionFile}':reload=0:fontsize=64:fontcolor=white:line_spacing=12:shadowcolor=black@0.78:shadowx=0:shadowy=10:x=(w-text_w)/2:y=${CAPTION_TEXT_Y}-15*(t-${start}):enable='${enableExpression}'[${textLabel}]`
+    );
+  }
+
+  const contentLabel = plan.voice.captions.length ? `captext${plan.voice.captions.length - 1}` : captionInputLabel;
   const finalLabel = `sceneout${plan.index}`;
   const fadeOutStart = Math.max(sceneDuration - 0.3, 0).toFixed(2);
 

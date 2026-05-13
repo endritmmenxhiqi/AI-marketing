@@ -52,7 +52,14 @@ export const useJobs = (activeJobId: string | null) => {
     const video = jobs.videoJobs.map((job) => toDashboardJob(job, 'video'));
     const photo = jobs.photoJobs.map((job) => toDashboardJob(job, 'photo'));
 
-    return [...video, ...photo].sort(
+    const all = [...video, ...photo];
+    
+    // Deduplicate by _id to ensure "saved once" behavior
+    const unique = all.filter((job, index, self) => 
+      index === self.findIndex((t) => t._id === job._id)
+    );
+
+    return unique.sort(
       (left, right) => +new Date(right.createdAt || 0) - +new Date(left.createdAt || 0)
     );
   }, [jobs]);

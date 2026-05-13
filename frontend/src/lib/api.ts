@@ -32,6 +32,7 @@ export interface VideoJob {
   audience?: string;
   offer?: string;
   proof?: string;
+  caption?: string;
   createdAt: string;
   script?: {
     title?: string;

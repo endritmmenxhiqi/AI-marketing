@@ -92,6 +92,7 @@ const videoJobSchema = new Schema(
     audience: { type: String, default: '' },
     offer: { type: String, default: '' },
     proof: { type: String, default: '' },
+    caption: { type: String, default: '' },
     script: {
       title: String,
       hook: String,

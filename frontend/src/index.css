@@ -1562,7 +1562,7 @@ video {
 
 .player__preview-surface {
   position: relative;
-  min-height: 290px;
+  min-height: 680px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
   overflow: hidden;
@@ -1571,7 +1571,7 @@ video {
 
 .player__asset {
   width: 100%;
-  min-height: 290px;
+  min-height: 680px;
   height: 100%;
   object-fit: cover;
   display: block;
@@ -1581,7 +1581,7 @@ video {
   display: grid;
   gap: 6px;
   place-items: center;
-  min-height: 290px;
+  min-height: 680px;
   padding: 24px;
   text-align: center;
   color: rgba(245, 239, 230, 0.82);
@@ -3834,4 +3834,129 @@ video {
 
 [data-theme='light'] .auth-footer {
   color: #64748b;
+}
+
+/* Keep generated video previews inside the workspace player. */
+.studio-page .player__preview:not(.player__preview--photo) {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-top: 24px !important;
+  position: static !important;
+}
+
+.studio-page .player__preview-surface:not(.player__preview-surface--photo) {
+  width: min(100%, 260px) !important;
+  min-height: 0 !important;
+  aspect-ratio: 9 / 16 !important;
+  max-height: 48vh !important;
+  overflow: hidden !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 12px !important;
+  background: #000 !important;
+}
+
+.studio-page .player__preview-surface:not(.player__preview-surface--photo) .player__asset {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  object-fit: contain !important;
+  margin: 0 !important;
+}
+
+.studio-page .player__preview-surface:not(.player__preview-surface--photo) .player__empty-state {
+  width: 100% !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.is-output-viewer-open {
+  overflow: hidden;
+}
+
+.output-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 13, 24, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.output-viewer__panel {
+  width: min(94vw, 560px);
+  max-height: 94vh;
+  display: grid;
+  gap: 12px;
+}
+
+.output-viewer__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.output-viewer__close {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.output-viewer__frame {
+  width: auto;
+  height: min(90vh, 880px);
+  aspect-ratio: 9 / 16;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #000;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.output-viewer__asset {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Cover ensures it fills the 9:16 frame perfectly */
+  background: #000;
+}
+
+@media (max-width: 640px) {
+  .studio-page .player__preview-surface:not(.player__preview-surface--photo) {
+    width: min(100%, 220px) !important;
+    max-height: 44vh !important;
+  }
+
+  .output-viewer {
+    padding: 14px;
+  }
+
+  .output-viewer__panel {
+    width: 100%;
+  }
+
+  .output-viewer__frame {
+    width: min(100%, 48vh);
+    max-height: 84vh;
+  }
 }

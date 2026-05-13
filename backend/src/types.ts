@@ -32,6 +32,7 @@ export interface ScriptPackage {
   hook: string;
   cta: string;
   hashtags: string[];
+  caption: string;
   musicMood: string;
   audience: string;
   offer: string;
