@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Clapperboard,
+  Coins,
+  CreditCard,
   Download,
   ExternalLink,
   Eye,
@@ -26,6 +28,7 @@ import {
   PenTool,
   PlayCircle,
   RefreshCcw,
+  ReceiptText,
   Scissors,
   Sparkles,
   Sun,
@@ -35,9 +38,14 @@ import {
   Zap,
 } from 'lucide-react';
 import {
+  createDemoCreditPurchase,
   createJob,
   fetchJob,
   createPhotoAd,
+  CreditPackage,
+  CreditTransaction,
+  fetchCreditPackages,
+  fetchCreditTransactions,
   fetchJobs,
   fetchPhotoAds,
   fetchMe,
@@ -223,6 +231,29 @@ const formatPhotoErrorMessage = (error: unknown) => {
 
 const buildPhotoDownloadName = (title: string, index: number) =>
   `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'photo-ad'}-${index + 1}.png`;
+
+const formatCreditAmount = (amount: number) => `${amount > 0 ? '+' : ''}${amount}`;
+
+const formatCreditDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'Just now';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const formatCreditSource = (source: string) =>
+  source
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 
 const mergeJobProgress = (job: VideoJob, payload: Partial<VideoJob> & { videoUrl?: string; previewUrl?: string; trimUrl?: string }) => ({
   ...job,
@@ -641,6 +672,13 @@ function App() {
   const [photoProgressLabel, setPhotoProgressLabel] = useState('');
   const [photoAds, setPhotoAds] = useState<PhotoAd[]>([]);
   const [selectedPhotoAdId, setSelectedPhotoAdId] = useState<string | null>(null);
+  const [creditPackages, setCreditPackages] = useState<CreditPackage[]>([]);
+  const [creditTransactions, setCreditTransactions] = useState<CreditTransaction[]>([]);
+  const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
+  const [selectedCreditPackageId, setSelectedCreditPackageId] = useState('');
+  const [creditCheckoutLoading, setCreditCheckoutLoading] = useState(false);
+  const [creditCheckoutError, setCreditCheckoutError] = useState('');
+  const [creditCheckoutSuccess, setCreditCheckoutSuccess] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const secondaryFileInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -709,6 +747,9 @@ function App() {
     setSelectedJobId(null);
     setPhotoAds([]);
     setSelectedPhotoAdId(null);
+    setCreditPackages([]);
+    setCreditTransactions([]);
+    setIsCreditsModalOpen(false);
     setError('');
     setAuthError(message);
   };
@@ -726,8 +767,8 @@ function App() {
       };
     }
 
-    Promise.all([fetchJobs(), fetchPhotoAds(), fetchMe()])
-      .then(([jobsData, photoAdsData, user]) => {
+    Promise.all([fetchJobs(), fetchPhotoAds(), fetchMe(), fetchCreditPackages(), fetchCreditTransactions()])
+      .then(([jobsData, photoAdsData, user, packagesData, creditTransactionsData]) => {
         if (!isActive) {
           return;
         }
@@ -747,6 +788,13 @@ function App() {
         setSelectedPhotoAdId((current) =>
           current && photoAdsData.some((item) => item._id === current) ? current : photoAdsData[0]?._id || null
         );
+        setCreditPackages(packagesData);
+        setSelectedCreditPackageId((current) =>
+          current && packagesData.some((item) => item.id === current)
+            ? current
+            : packagesData[1]?.id || packagesData[0]?.id || ''
+        );
+        setCreditTransactions(creditTransactionsData);
       })
       .catch((nextError: any) => {
         if (!isActive) {
@@ -762,6 +810,7 @@ function App() {
         setSelectedJobId(null);
         setPhotoAds([]);
         setSelectedPhotoAdId(null);
+        setCreditTransactions([]);
         setError(nextError.message || 'Unable to load your studio data.');
       });
 
@@ -789,6 +838,10 @@ function App() {
   const selectedPhotoAd = useMemo(
     () => photoAds.find((item) => item._id === selectedPhotoAdId) || null,
     [photoAds, selectedPhotoAdId]
+  );
+  const selectedCreditPackage = useMemo(
+    () => creditPackages.find((item) => item.id === selectedCreditPackageId) || creditPackages[0] || null,
+    [creditPackages, selectedCreditPackageId]
   );
   const firstName = auth.email.split('@')[0] || 'creator';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
@@ -993,6 +1046,46 @@ function App() {
     return user.credits;
   };
 
+  const refreshCreditTransactions = async () => {
+    const transactions = await fetchCreditTransactions();
+    setCreditTransactions(transactions);
+    return transactions;
+  };
+
+  const openCreditsModal = () => {
+    setCreditCheckoutError('');
+    setCreditCheckoutSuccess('');
+    setIsCreditsModalOpen(true);
+  };
+
+  const handleDemoCreditPurchase = async () => {
+    if (!selectedCreditPackage) {
+      setCreditCheckoutError('Choose a credit package first.');
+      return;
+    }
+
+    try {
+      setCreditCheckoutLoading(true);
+      setCreditCheckoutError('');
+      setCreditCheckoutSuccess('');
+
+      const result = await createDemoCreditPurchase(selectedCreditPackage.id);
+      localStorage.setItem('user_credits', String(result.credits));
+      setAuth((current) => ({ ...current, credits: result.credits || 0 }));
+      setCreditTransactions((current) => [result.transaction, ...current].slice(0, 12));
+      setCreditCheckoutSuccess(`${result.package.credits} credits added to your account.`);
+    } catch (nextError: any) {
+      if (nextError?.status === 401) {
+        clearAuthSession('Your session expired. Please sign in again.');
+        return;
+      }
+
+      setCreditCheckoutError(nextError.message || 'Unable to complete the demo checkout.');
+    } finally {
+      setCreditCheckoutLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!description.trim()) {
       setError('Add a product description first.');
@@ -1005,6 +1098,7 @@ function App() {
       const availableCredits = await refreshCredits();
       if (availableCredits <= 0) {
         setError('You are out of credits. Buy more credits to create another video.');
+        openCreditsModal();
         return;
       }
 
@@ -1027,6 +1121,7 @@ function App() {
       setActiveWorkspaceTab('overview');
       setDescription('');
       clearProductFiles();
+      refreshCreditTransactions().catch(() => undefined);
     } catch (nextError: any) {
       if (nextError?.status === 401) {
         clearAuthSession('Your session expired. Please sign in again.');
@@ -1035,6 +1130,7 @@ function App() {
       if (nextError?.status === 402) {
         localStorage.setItem('user_credits', '0');
         setAuth((current) => ({ ...current, credits: 0 }));
+        openCreditsModal();
       }
 
       setError(nextError.message || 'Unable to create a video job.');
@@ -1151,6 +1247,7 @@ function App() {
       if (availableCredits <= 0) {
         setError('You are out of credits. Buy more credits to create another photo ad set.');
         setPhotoProgressLabel('');
+        openCreditsModal();
         return;
       }
 
@@ -1186,6 +1283,7 @@ function App() {
       setPhotoProgressLabel('Photo set saved and ready.');
       setPhotoTitle('');
       setPhotoPrompt('');
+      refreshCreditTransactions().catch(() => undefined);
     } catch (nextError: any) {
       console.error('Photo ad generation failed:', nextError);
       if (nextError?.status === 401) {
@@ -1195,6 +1293,7 @@ function App() {
       if (nextError?.status === 402) {
         localStorage.setItem('user_credits', '0');
         setAuth((current) => ({ ...current, credits: 0 }));
+        openCreditsModal();
       }
       setError(formatPhotoErrorMessage(nextError));
       setPhotoProgressLabel('');
@@ -1340,6 +1439,15 @@ function App() {
                         <strong className="truncate">{formatCategoryLabel(productCategory)}</strong>
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={openCreditsModal}
+                      className="dashboard-action-btn dashboard-action-btn--primary flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                    >
+                      <CreditCard size={15} />
+                      Buy credits
+                    </button>
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
@@ -2381,6 +2489,195 @@ function App() {
                   </section>
                 </main>
                 </div>
+
+                <AnimatePresence>
+                  {isCreditsModalOpen ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/88 px-4 py-8"
+                      onClick={() => setIsCreditsModalOpen(false)}
+                    >
+                      <motion.div
+                        initial={{ scale: 0.96, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.96, opacity: 0 }}
+                        className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-950"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-white/10">
+                          <div>
+                            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
+                              <Coins size={15} />
+                              Demo checkout
+                            </div>
+                            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                              Buy more credits
+                            </h3>
+                            <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">
+                              This university version simulates payment confirmation, then records the credit purchase in your account history.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsCreditsModalOpen(false)}
+                            className="dashboard-icon-button flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                            aria-label="Close credit checkout"
+                            title="Close"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+
+                        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+                          <div className="space-y-4">
+                            <div className="grid gap-3 md:grid-cols-3">
+                              {creditPackages.length === 0 ? (
+                                <div className="col-span-full rounded-[18px] border border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
+                                  Loading credit packages...
+                                </div>
+                              ) : (
+                                creditPackages.map((item) => {
+                                  const isSelected = selectedCreditPackage?.id === item.id;
+
+                                  return (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => setSelectedCreditPackageId(item.id)}
+                                      className={`relative min-h-[13rem] rounded-[20px] border p-4 text-left transition-all ${
+                                        isSelected
+                                          ? 'border-cyan-400 bg-cyan-50 shadow-[0_16px_40px_rgba(8,145,178,0.16)] dark:border-cyan-300/60 dark:bg-cyan-300/10'
+                                          : 'border-slate-200 bg-white hover:border-cyan-200 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-cyan-300/30'
+                                      }`}
+                                    >
+                                      {item.badge ? (
+                                        <span className="absolute right-3 top-3 rounded-full bg-slate-900 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white dark:bg-white dark:text-slate-950">
+                                          {item.badge}
+                                        </span>
+                                      ) : null}
+                                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950">
+                                        <CreditCard size={18} />
+                                      </div>
+                                      <div className="mt-4 text-lg font-black tracking-tight text-slate-950 dark:text-white">
+                                        {item.name}
+                                      </div>
+                                      <div className="mt-1 text-3xl font-black text-cyan-700 dark:text-cyan-200">
+                                        {item.credits}
+                                        <span className="ml-1 text-sm font-bold text-slate-400">credits</span>
+                                      </div>
+                                      <p className="mt-3 text-[12px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                                        {item.description}
+                                      </p>
+                                      <div className="mt-4 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+                                        {item.priceLabel}
+                                      </div>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            <div className="rounded-[22px] border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
+                              No real card, bank, or Stripe account is used here. The backend treats the confirmation like a payment provider webhook for demo purposes.
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                <ReceiptText size={14} />
+                                Order summary
+                              </div>
+                              <div className="mt-4 flex items-center justify-between gap-3">
+                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Current balance</span>
+                                <strong className="text-xl text-slate-950 dark:text-white">{auth.credits}</strong>
+                              </div>
+                              <div className="mt-3 flex items-center justify-between gap-3">
+                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Selected package</span>
+                                <strong className="text-right text-sm text-slate-950 dark:text-white">
+                                  {selectedCreditPackage ? `${selectedCreditPackage.credits} credits` : 'None'}
+                                </strong>
+                              </div>
+                              <div className="mt-3 flex items-center justify-between gap-3">
+                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Demo total</span>
+                                <strong className="text-right text-sm text-slate-950 dark:text-white">
+                                  {selectedCreditPackage?.priceLabel || '--'}
+                                </strong>
+                              </div>
+
+                              {creditCheckoutError ? (
+                                <div className="mt-4 flex items-start gap-2 rounded-[16px] border border-rose-200 bg-rose-50 p-3 text-[12px] font-bold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-100">
+                                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                                  {creditCheckoutError}
+                                </div>
+                              ) : null}
+
+                              {creditCheckoutSuccess ? (
+                                <div className="mt-4 flex items-start gap-2 rounded-[16px] border border-emerald-200 bg-emerald-50 p-3 text-[12px] font-bold text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-100">
+                                  <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                                  {creditCheckoutSuccess}
+                                </div>
+                              ) : null}
+
+                              <button
+                                type="button"
+                                onClick={handleDemoCreditPurchase}
+                                disabled={creditCheckoutLoading || !selectedCreditPackage}
+                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
+                              >
+                                {creditCheckoutLoading ? <LoaderCircle className="animate-spin" size={16} /> : <CreditCard size={16} />}
+                                Confirm demo payment
+                              </button>
+                            </div>
+
+                            <div className="rounded-[22px] border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                                  Credit history
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => refreshCreditTransactions().catch(() => undefined)}
+                                  className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300"
+                                >
+                                  Refresh
+                                </button>
+                              </div>
+                              <div className="grid gap-2">
+                                {creditTransactions.length === 0 ? (
+                                  <div className="rounded-[16px] border border-dashed border-slate-200 p-4 text-center text-[12px] font-bold text-slate-400 dark:border-white/10">
+                                    No credit history yet.
+                                  </div>
+                                ) : (
+                                  creditTransactions.slice(0, 6).map((transaction) => (
+                                    <div
+                                      key={transaction.id}
+                                      className="flex items-start justify-between gap-3 rounded-[16px] border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-slate-900/60"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="truncate text-[12px] font-black text-slate-900 dark:text-white">
+                                          {transaction.description}
+                                        </div>
+                                        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                          {formatCreditSource(transaction.source)} - {formatCreditDate(transaction.createdAt)}
+                                        </div>
+                                      </div>
+                                      <div className={`shrink-0 text-sm font-black ${transaction.amount >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
+                                        {formatCreditAmount(transaction.amount)}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
 
                 <AnimatePresence>
                   {isPreviewOpen && previewUrl ? (

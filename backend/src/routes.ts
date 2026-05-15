@@ -22,7 +22,12 @@ import { uploadAsset } from './services/storageService';
 import { processVideoJob } from './services/jobOrchestrator';
 import { localJobEvents } from './services/localEventBus';
 import { AuthenticatedRequest, getAuthenticatedUserId, requireAuth } from './auth';
-import { spendCredit } from './services/creditService';
+import {
+  completeDemoCreditPurchase,
+  getCreditTransactions,
+  listCreditPackages,
+  spendCredit
+} from './services/creditService';
 
 const router = express.Router();
 const supportedImageMimeTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
@@ -299,6 +304,34 @@ router.get('/health', (_req, res) => {
   res.json({ status: 'ok', project: 'AI Marketing Studio MVP' });
 });
 
+router.get('/credits/packages', requireAuth, (_req, res) => {
+  res.json({
+    data: listCreditPackages(),
+    mode: 'demo-checkout'
+  });
+});
+
+router.get('/credits/transactions', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    const transactions = await getCreditTransactions(userId, parseLimit(req.query.limit));
+    res.json({ data: transactions });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/credits/demo-purchase', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    const packageId = String(req.body.packageId || '').trim();
+    const purchase = await completeDemoCreditPurchase(userId, packageId);
+    res.status(201).json(purchase);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/jobs', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const userId = getAuthenticatedUserId(req);
@@ -357,7 +390,10 @@ router.post(
     const secondaryImagePath = primaryImage ? secondaryImage?.path || '' : '';
     const secondaryImageUrl = primaryImage ? secondaryImage?.url || '' : '';
 
-    const creditBalance = await spendCredit(userId);
+    const creditBalance = await spendCredit(userId, {
+      source: 'video-generation',
+      description: 'Spent 1 credit for a video campaign.'
+    });
 
     const job = await VideoJob.create({
       owner: userId,
@@ -514,7 +550,10 @@ router.post('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, ne
       decodedImages.push(decoded);
     }
 
-    const creditBalance = await spendCredit(userId);
+    const creditBalance = await spendCredit(userId, {
+      source: 'photo-ad-set',
+      description: 'Spent 1 credit for a photo ad set.'
+    });
 
     for (let index = 0; index < decodedImages.length; index += 1) {
       const decoded = decodedImages[index];

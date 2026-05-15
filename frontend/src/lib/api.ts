@@ -97,6 +97,28 @@ export interface AuthUser {
   creditsUsed: number;
 }
 
+export interface CreditPackage {
+  id: string;
+  name: string;
+  credits: number;
+  priceCents: number;
+  priceLabel: string;
+  description: string;
+  badge?: string;
+}
+
+export interface CreditTransaction {
+  id: string;
+  type: 'purchase' | 'spend' | 'refund' | 'adjustment';
+  amount: number;
+  balanceAfter: number;
+  source: string;
+  packageId?: string;
+  referenceId?: string;
+  description: string;
+  createdAt: string;
+}
+
 export interface PasswordResetResponse {
   message: string;
   user?: AuthUser;
@@ -200,6 +222,55 @@ export const fetchMe = async () => {
 
   const payload = await response.json();
   return payload.user as AuthUser;
+};
+
+export const fetchCreditPackages = async () => {
+  const response = await fetch(`${API_BASE}/credits/packages`, {
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Failed to load credit packages.');
+  }
+
+  const payload = await response.json();
+  return payload.data as CreditPackage[];
+};
+
+export const fetchCreditTransactions = async () => {
+  const response = await fetch(`${API_BASE}/credits/transactions`, {
+    headers: authHeaders(),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Failed to load credit history.');
+  }
+
+  const payload = await response.json();
+  return payload.data as CreditTransaction[];
+};
+
+export const createDemoCreditPurchase = async (packageId: string) => {
+  const response = await fetch(`${API_BASE}/credits/demo-purchase`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ packageId }),
+  });
+
+  if (!response.ok) {
+    throw await createApiError(response, 'Demo credit purchase failed.');
+  }
+
+  const payload = await response.json();
+  return payload as {
+    package: CreditPackage;
+    credits: number;
+    creditsUsed: number;
+    transaction: CreditTransaction;
+  };
 };
 
 export const createJob = async (payload: {
