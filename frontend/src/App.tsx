@@ -843,6 +843,9 @@ function App() {
     () => creditPackages.find((item) => item.id === selectedCreditPackageId) || creditPackages[0] || null,
     [creditPackages, selectedCreditPackageId]
   );
+  const projectedCreditBalance = selectedCreditPackage
+    ? auth.credits + selectedCreditPackage.credits
+    : auth.credits;
   const firstName = auth.email.split('@')[0] || 'creator';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
   const workspaceTabs =
@@ -2496,28 +2499,32 @@ function App() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/88 px-4 py-8"
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 py-8 backdrop-blur-sm"
                       onClick={() => setIsCreditsModalOpen(false)}
                     >
                       <motion.div
                         initial={{ scale: 0.96, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.96, opacity: 0 }}
-                        className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-950"
+                        className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-950"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        <div className="mb-5 flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-white/10">
-                          <div>
-                            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
-                              <Coins size={15} />
-                              Demo checkout
+                        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 dark:border-white/10">
+                          <div className="flex min-w-0 gap-4">
+                            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950 sm:flex">
+                              <Coins size={21} />
                             </div>
-                            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-                              Buy more credits
-                            </h3>
-                            <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">
-                              This university version simulates payment confirmation, then records the credit purchase in your account history.
-                            </p>
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
+                                Demo checkout
+                              </div>
+                              <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                                Buy more credits
+                              </h3>
+                              <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">
+                                Pick a package, confirm the demo payment, and the backend records it in your credit ledger.
+                              </p>
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -2530,8 +2537,25 @@ function App() {
                           </button>
                         </div>
 
-                        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+                        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
                           <div className="space-y-4">
+                            <div className="grid gap-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-3">
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Balance</div>
+                                <div className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{auth.credits}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Selected</div>
+                                <div className="mt-1 text-2xl font-black text-cyan-700 dark:text-cyan-200">
+                                  {selectedCreditPackage ? `+${selectedCreditPackage.credits}` : '+0'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">After checkout</div>
+                                <div className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{projectedCreditBalance}</div>
+                              </div>
+                            </div>
+
                             <div className="grid gap-3 md:grid-cols-3">
                               {creditPackages.length === 0 ? (
                                 <div className="col-span-full rounded-[18px] border border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
@@ -2546,19 +2570,22 @@ function App() {
                                       key={item.id}
                                       type="button"
                                       onClick={() => setSelectedCreditPackageId(item.id)}
-                                      className={`relative min-h-[13rem] rounded-[20px] border p-4 text-left transition-all ${
+                                      className={`group relative min-h-[12rem] overflow-hidden rounded-[20px] border p-4 text-left transition-all ${
                                         isSelected
-                                          ? 'border-cyan-400 bg-cyan-50 shadow-[0_16px_40px_rgba(8,145,178,0.16)] dark:border-cyan-300/60 dark:bg-cyan-300/10'
-                                          : 'border-slate-200 bg-white hover:border-cyan-200 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-cyan-300/30'
+                                          ? 'border-cyan-400 bg-white shadow-[0_18px_45px_rgba(8,145,178,0.18)] ring-1 ring-cyan-200 dark:border-cyan-300/60 dark:bg-white/[0.06] dark:ring-cyan-300/20'
+                                          : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-[0_14px_35px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-cyan-300/30'
                                       }`}
                                     >
+                                      {isSelected ? (
+                                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-400 via-cyan-500 to-blue-600" />
+                                      ) : null}
                                       {item.badge ? (
-                                        <span className="absolute right-3 top-3 rounded-full bg-slate-900 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white dark:bg-white dark:text-slate-950">
+                                        <span className="absolute right-3 top-3 rounded-full bg-slate-950 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white dark:bg-white dark:text-slate-950">
                                           {item.badge}
                                         </span>
                                       ) : null}
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950">
-                                        <CreditCard size={18} />
+                                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isSelected ? 'bg-cyan-600 text-white' : 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'}`}>
+                                        <CreditCard size={17} />
                                       </div>
                                       <div className="mt-4 text-lg font-black tracking-tight text-slate-950 dark:text-white">
                                         {item.name}
@@ -2570,8 +2597,11 @@ function App() {
                                       <p className="mt-3 text-[12px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
                                         {item.description}
                                       </p>
-                                      <div className="mt-4 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-                                        {item.priceLabel}
+                                      <div className="mt-4 flex items-center justify-between gap-3">
+                                        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+                                          {item.priceLabel}
+                                        </div>
+                                        <span className={`h-4 w-4 rounded-full border ${isSelected ? 'border-cyan-600 bg-cyan-600 shadow-[inset_0_0_0_4px_white]' : 'border-slate-300 dark:border-white/20'}`} />
                                       </div>
                                     </button>
                                   );
@@ -2579,25 +2609,33 @@ function App() {
                               )}
                             </div>
 
-                            <div className="rounded-[22px] border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100">
-                              No real card, bank, or Stripe account is used here. The backend treats the confirmation like a payment provider webhook for demo purposes.
+                            <div className="flex items-start gap-3 rounded-[18px] border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
+                              <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-500" />
+                              <span>
+                                No real card, bank, or Stripe account is used. For the university demo, confirmation behaves like a payment-provider callback.
+                              </span>
                             </div>
                           </div>
 
                           <div className="space-y-4">
-                            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
                               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                                 <ReceiptText size={14} />
                                 Order summary
                               </div>
-                              <div className="mt-4 flex items-center justify-between gap-3">
-                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Current balance</span>
-                                <strong className="text-xl text-slate-950 dark:text-white">{auth.credits}</strong>
+                              <div className="mt-4 rounded-[18px] bg-white p-4 dark:bg-slate-950/40">
+                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">New balance</div>
+                                <div className="mt-1 flex items-end justify-between gap-4">
+                                  <strong className="text-4xl font-black text-slate-950 dark:text-white">{projectedCreditBalance}</strong>
+                                  <span className="pb-1 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">
+                                    {selectedCreditPackage ? `+${selectedCreditPackage.credits} credits` : 'No package'}
+                                  </span>
+                                </div>
                               </div>
                               <div className="mt-3 flex items-center justify-between gap-3">
                                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Selected package</span>
                                 <strong className="text-right text-sm text-slate-950 dark:text-white">
-                                  {selectedCreditPackage ? `${selectedCreditPackage.credits} credits` : 'None'}
+                                  {selectedCreditPackage?.name || 'None'}
                                 </strong>
                               </div>
                               <div className="mt-3 flex items-center justify-between gap-3">
@@ -2625,7 +2663,7 @@ function App() {
                                 type="button"
                                 onClick={handleDemoCreditPurchase}
                                 disabled={creditCheckoutLoading || !selectedCreditPackage}
-                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
+                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
                               >
                                 {creditCheckoutLoading ? <LoaderCircle className="animate-spin" size={16} /> : <CreditCard size={16} />}
                                 Confirm demo payment
@@ -2661,7 +2699,7 @@ function App() {
                                           {transaction.description}
                                         </div>
                                         <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                                          {formatCreditSource(transaction.source)} - {formatCreditDate(transaction.createdAt)}
+                                          {formatCreditSource(transaction.source)} - Balance {transaction.balanceAfter} - {formatCreditDate(transaction.createdAt)}
                                         </div>
                                       </div>
                                       <div className={`shrink-0 text-sm font-black ${transaction.amount >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
