@@ -107,7 +107,7 @@ export const generateResetToken = async (email: string) => {
   const normalizedEmail = normalizeEmail(email);
   const user = await User.findOne({ email: normalizedEmail });
   if (!user) {
-    throw createHttpError('No user found with that email.', 404);
+    return null;
   }
 
   const resetToken = crypto.randomBytes(32).toString('hex');

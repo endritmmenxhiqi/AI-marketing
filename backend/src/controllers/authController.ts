@@ -7,9 +7,11 @@ import {
   registerUser,
   resetPassword as resetPasswordService
 } from '../services/authService';
+import { config } from '../config';
 import { sendResetEmail } from '../services/emailService';
 
 const isValidEmail = (email: string) => /^\S+@\S+\.\S+$/.test(email);
+const resetRequestMessage = 'If an account exists for that email, a reset link will arrive shortly.';
 
 const readBodyField = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
@@ -75,25 +77,16 @@ export const forgotPassword: RequestHandler = async (req, res, next) => {
     }
 
     const resetToken = await generateResetToken(email);
-    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-    const resetUrl = `${frontendBase}/reset-password/${resetToken}`;
-
-    try {
-      const { previewUrl } = await sendResetEmail(email, resetUrl);
-      res.status(200).json({
-        success: true,
-        message: 'Reset email sent.',
-        resetUrl,
-        previewUrl
-      });
-    } catch (sendError: any) {
-      res.status(200).json({
-        success: true,
-        message: 'Reset token generated, but email delivery failed.',
-        resetUrl,
-        error: sendError?.message || 'Unknown email delivery error.'
-      });
+    if (resetToken) {
+      const frontendBase = config.frontendUrl.replace(/\/$/, '');
+      const resetUrl = `${frontendBase}/reset-password/${resetToken}`;
+      await sendResetEmail(email, resetUrl).catch(() => undefined);
     }
+
+    res.status(200).json({
+      success: true,
+      message: resetRequestMessage
+    });
   } catch (error) {
     next(error);
   }
