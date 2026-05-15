@@ -645,6 +645,7 @@ function App() {
   const secondaryFileInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const photoPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const photoHistoryRef = useRef<HTMLDivElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const insertTextAtCursor = (
@@ -791,11 +792,18 @@ function App() {
   );
   const firstName = auth.email.split('@')[0] || 'creator';
   const jobsReady = jobs.filter((job) => job.status === 'completed').length;
-  const workspaceTabs = [
-    { id: 'overview' as const, label: 'Campaign', description: 'Brief and production health', icon: Target },
-    { id: 'preview' as const, label: 'Preview', description: 'Video player and trim export', icon: PlayCircle },
-    { id: 'history' as const, label: 'History', description: `${jobs.length} saved ${jobs.length === 1 ? 'job' : 'jobs'}`, icon: History },
-  ];
+  const workspaceTabs =
+    creatorMode === 'photo'
+      ? [
+          { id: 'overview' as const, label: 'Photo Set', description: 'Prompt, category, and style', icon: Camera },
+          { id: 'preview' as const, label: 'Gallery', description: 'Generated ad images', icon: FileImage },
+          { id: 'history' as const, label: 'History', description: `${photoAds.length} saved ${photoAds.length === 1 ? 'set' : 'sets'}`, icon: History },
+        ]
+      : [
+          { id: 'overview' as const, label: 'Campaign', description: 'Brief and production health', icon: Target },
+          { id: 'preview' as const, label: 'Preview', description: 'Video player and trim export', icon: PlayCircle },
+          { id: 'history' as const, label: 'History', description: `${jobs.length} saved ${jobs.length === 1 ? 'job' : 'jobs'}`, icon: History },
+        ];
   const jobsProcessing = jobs.filter((job) => job.status === 'processing').length;
   const previewSourceUrl = selectedJob?.output?.preview?.url || selectedJob?.output?.video?.url || '';
   const masterVideoUrl = selectedJob?.output?.video?.url || previewSourceUrl;
@@ -1094,6 +1102,7 @@ function App() {
 
   const applyPhotoPromptPreset = (preset: (typeof photoPromptPresets)[number]) => {
     setCreatorMode('photo');
+    setActiveWorkspaceTab('overview');
     setPhotoTitle(preset.title);
     setPhotoPrompt(preset.prompt);
     setProductCategory(preset.category);
@@ -1173,6 +1182,7 @@ function App() {
 
       setPhotoAds((current) => [nextSet, ...current]);
       setSelectedPhotoAdId(nextSet._id);
+      setActiveWorkspaceTab('preview');
       setPhotoProgressLabel('Photo set saved and ready.');
       setPhotoTitle('');
       setPhotoPrompt('');
@@ -1208,6 +1218,16 @@ function App() {
     setCreatorMode('video');
     setSelectedJobId(job._id);
     setActiveWorkspaceTab(job.output?.preview?.url || job.output?.video?.url ? 'preview' : 'overview');
+  };
+
+  const handleWorkspaceTabClick = (tabId: 'overview' | 'preview' | 'history') => {
+    setActiveWorkspaceTab(tabId);
+
+    if (creatorMode === 'photo' && tabId === 'history') {
+      requestAnimationFrame(() => {
+        photoHistoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   };
 
   const shellCard =
@@ -1257,11 +1277,8 @@ function App() {
                       <button
                         key={id}
                         type="button"
-                        onClick={() => {
-                          setCreatorMode('video');
-                          setActiveWorkspaceTab(id);
-                        }}
-                        className={`dashboard-sidebar-button ${creatorMode === 'video' && activeWorkspaceTab === id ? 'active' : ''} group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left`}
+                        onClick={() => handleWorkspaceTabClick(id)}
+                        className={`dashboard-sidebar-button ${activeWorkspaceTab === id ? 'active' : ''} group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left`}
                       >
                         <span className="dashboard-sidebar-icon flex h-9 w-9 items-center justify-center rounded-lg">
                           <TabIcon size={18} />
@@ -1279,7 +1296,10 @@ function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setCreatorMode('video')}
+                        onClick={() => {
+                          setCreatorMode('video');
+                          setActiveWorkspaceTab('overview');
+                        }}
                         className={`dashboard-mode-button ${creatorMode === 'video' ? 'active' : ''} flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] font-black`}
                       >
                         <Clapperboard size={15} />
@@ -1287,7 +1307,10 @@ function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCreatorMode('photo')}
+                        onClick={() => {
+                          setCreatorMode('photo');
+                          setActiveWorkspaceTab('overview');
+                        }}
                         className={`dashboard-mode-button ${creatorMode === 'photo' ? 'active' : ''} flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] font-black`}
                       >
                         <Camera size={15} />
@@ -2155,7 +2178,69 @@ function App() {
                       </AnimatePresence>
                       ) : (
                         <div className="space-y-4 pb-4">
-                          {selectedPhotoAd ? (
+                          {activeWorkspaceTab === 'history' ? (
+                            <div ref={photoHistoryRef} className="space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                                    Photo History
+                                  </div>
+                                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                                    Saved photo ad sets
+                                  </h3>
+                                </div>
+                                <div className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[10px] font-black text-cyan-700 dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-200">
+                                  {photoAds.length} total
+                                </div>
+                              </div>
+
+                              <div className="grid gap-3">
+                                {photoAds.length === 0 ? (
+                                  <div className="dashboard-empty-state flex min-h-[16rem] flex-col items-center justify-center gap-4 text-center">
+                                    <div className="rounded-full border border-slate-200 bg-white p-6 text-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-600">
+                                      <Camera size={34} />
+                                    </div>
+                                    <div>
+                                      <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                                        No photo history yet
+                                      </h3>
+                                      <p className="mt-2 max-w-[340px] text-sm font-medium text-slate-400">
+                                        Generate a photo ad set and it will appear here.
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  photoAds.map((item) => (
+                                    <button
+                                      key={item._id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPhotoAdId(item._id);
+                                        setActiveWorkspaceTab('preview');
+                                      }}
+                                      className={`dashboard-history-item ${selectedPhotoAdId === item._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 text-left transition-all duration-300`}
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">
+                                          {item.title}
+                                        </div>
+                                        <div className="mt-1 flex items-center gap-2">
+                                          <span className="truncate text-[9px] font-black uppercase tracking-widest opacity-30">
+                                            {formatCategoryLabel(item.productCategory || 'general-product')}
+                                          </span>
+                                          <div className="h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
+                                          <span className="text-[9px] font-black text-cyan-600 dark:text-cyan-300">
+                                            {item.images.length} images
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <ChevronRight size={18} className="text-slate-400 transition-transform group-hover:translate-x-1" />
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ) : selectedPhotoAd ? (
                             <>
                               <div className="grid gap-3.5 sm:grid-cols-3">
                                 <div className="dashboard-insight-card rounded-[24px] border border-cyan-500/10 bg-cyan-500/[0.03] p-[1.125rem] dark:bg-cyan-400/[0.05]">
@@ -2238,6 +2323,7 @@ function App() {
                                 ))}
                               </div>
 
+                              {activeWorkspaceTab === 'overview' ? (
                               <div className="space-y-3">
                                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
                                   Photo History
@@ -2247,7 +2333,10 @@ function App() {
                                     <button
                                       key={item._id}
                                       type="button"
-                                      onClick={() => setSelectedPhotoAdId(item._id)}
+                                      onClick={() => {
+                                        setSelectedPhotoAdId(item._id);
+                                        setActiveWorkspaceTab('preview');
+                                      }}
                                       className={`dashboard-history-item ${selectedPhotoAdId === item._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 text-left transition-all duration-300`}
                                     >
                                       <div className="min-w-0">
@@ -2269,6 +2358,7 @@ function App() {
                                   ))}
                                 </div>
                               </div>
+                              ) : null}
                             </>
                           ) : (
                             <div className="dashboard-empty-state flex min-h-[20rem] flex-col items-center justify-center gap-4 text-center">
