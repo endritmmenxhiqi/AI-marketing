@@ -30,7 +30,7 @@ export const createApp = () => {
   app.use('/api', router);
 
   app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const status = error.statusCode || 500;
+    const status = error.statusCode || (error.name === 'MulterError' ? 400 : 500);
     res.status(status).json({
       message: error.message || 'Unexpected server error.'
     });

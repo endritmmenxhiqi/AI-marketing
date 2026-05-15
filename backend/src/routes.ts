@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createWriteStream } from 'node:fs';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import express from 'express';
@@ -23,7 +25,30 @@ import { AuthenticatedRequest, getAuthenticatedUserId, requireAuth } from './aut
 import { spendCredit } from './services/creditService';
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const supportedImageMimeTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+const maxUploadBytes = 15 * 1024 * 1024;
+const maxPhotoAdImages = 3;
+const maxGeneratedImageBytes = 12 * 1024 * 1024;
+const createRequestError = (message: string, statusCode = 400) => {
+  const error = new Error(message) as Error & { statusCode?: number };
+  error.statusCode = statusCode;
+  return error;
+};
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: maxUploadBytes,
+    files: 2
+  },
+  fileFilter: (_req, file, callback) => {
+    if (supportedImageMimeTypes.has((file.mimetype || '').toLowerCase())) {
+      callback(null, true);
+      return;
+    }
+
+    callback(createRequestError('Only PNG, JPEG, and WEBP images are supported.'));
+  }
+});
 const defaultJobListLimit = 12;
 const maximumJobListLimit = 50;
 
@@ -156,7 +181,75 @@ const decodeImageDataUrl = (dataUrl: string) => {
   };
 };
 
-const supportedImageMimeTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+const isPrivateIpv4 = (address: string) => {
+  const parts = address.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return true;
+  }
+
+  const [first, second] = parts;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    first >= 224 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19))
+  );
+};
+
+const isPrivateIpv6 = (address: string) => {
+  const normalized = address.toLowerCase();
+  if (normalized.startsWith('::ffff:')) {
+    return isPrivateIpv4(normalized.replace('::ffff:', ''));
+  }
+
+  return (
+    normalized === '::1' ||
+    normalized === '::' ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('fe8') ||
+    normalized.startsWith('fe9') ||
+    normalized.startsWith('fea') ||
+    normalized.startsWith('feb')
+  );
+};
+
+const isPublicIpAddress = (address: string) => {
+  const version = net.isIP(address);
+  if (version === 4) {
+    return !isPrivateIpv4(address);
+  }
+
+  if (version === 6) {
+    return !isPrivateIpv6(address);
+  }
+
+  return false;
+};
+
+const assertPublicImageUrl = async (url: URL) => {
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+    throw new Error('Generated image URLs must point to public image hosts.');
+  }
+
+  if (net.isIP(hostname)) {
+    if (!isPublicIpAddress(hostname)) {
+      throw new Error('Generated image URLs must point to public image hosts.');
+    }
+    return;
+  }
+
+  const addresses = await dns.lookup(hostname, { all: true });
+  if (!addresses.length || addresses.some((entry) => !isPublicIpAddress(entry.address))) {
+    throw new Error('Generated image URLs must point to public image hosts.');
+  }
+};
 
 const decodeRemoteImageUrl = async (imageUrl: string) => {
   let url: URL;
@@ -170,7 +263,8 @@ const decodeRemoteImageUrl = async (imageUrl: string) => {
     return null;
   }
 
-  const response = await fetch(url);
+  await assertPublicImageUrl(url);
+  const response = await fetch(url, { redirect: 'manual' });
   if (!response.ok) {
     throw new Error(`Unable to download generated image (${response.status}).`);
   }
@@ -180,12 +274,21 @@ const decodeRemoteImageUrl = async (imageUrl: string) => {
     throw new Error(`Generated image URL returned unsupported content type: ${mimeType || 'unknown'}.`);
   }
 
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (contentLength > maxGeneratedImageBytes) {
+    throw new Error('Generated image URL returned an image that is too large to save.');
+  }
+
   const extension = mime.extension(mimeType) || (mimeType === 'image/jpeg' ? 'jpg' : 'png');
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > maxGeneratedImageBytes) {
+    throw new Error('Generated image URL returned an image that is too large to save.');
+  }
 
   return {
     mimeType,
     extension,
-    buffer: Buffer.from(await response.arrayBuffer())
+    buffer
   };
 };
 
@@ -373,6 +476,11 @@ router.post('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, ne
       return;
     }
 
+    if (imageDataUrls.length > maxPhotoAdImages) {
+      res.status(400).json({ message: `A maximum of ${maxPhotoAdImages} generated images can be saved.` });
+      return;
+    }
+
     const photoAd = new PhotoAd({
       owner: userId,
       title,
@@ -395,6 +503,11 @@ router.post('/photo-ads', requireAuth, async (req: AuthenticatedRequest, res, ne
       const decoded = await decodeGeneratedImage(imageSource);
       if (!decoded) {
         res.status(400).json({ message: `Image ${index + 1} is not a supported generated image.` });
+        return;
+      }
+
+      if (decoded.buffer.length > maxGeneratedImageBytes) {
+        res.status(400).json({ message: `Image ${index + 1} is too large to save.` });
         return;
       }
 
