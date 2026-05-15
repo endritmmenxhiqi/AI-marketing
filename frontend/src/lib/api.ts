@@ -23,12 +23,18 @@ export interface VideoJob {
   progress: number;
   message: string;
   error?: string;
+  title?: string;
   description: string;
   productCategory?: string;
   style: string;
-  enableStyleTransfer: boolean;
+  enableStyleTransfer?: boolean;
   imageUrl?: string;
+  imageUrls?: string[];
   secondaryImageUrl?: string;
+  audience?: string;
+  offer?: string;
+  proof?: string;
+  caption?: string;
   createdAt: string;
   script?: {
     title?: string;
@@ -66,6 +72,32 @@ export interface VideoJob {
         sceneRendering?: number;
       };
     };
+  };
+}
+
+export interface PhotoJob {
+  _id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  stage: string;
+  progress: number;
+  message: string;
+  error?: string;
+  title?: string;
+  description: string;
+  productCategory?: string;
+  style: string;
+  source?: 'upload' | 'prompt';
+  imagePath?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  caption?: string;
+  audience?: string;
+  offer?: string;
+  proof?: string;
+  createdAt: string;
+  output?: {
+    variants?: Array<{ url: string; localPath?: string }>;
+    final?: { url: string; localPath?: string };
   };
 }
 
@@ -276,22 +308,31 @@ export const createDemoCreditPurchase = async (packageId: string) => {
 export const createJob = async (payload: {
   image?: File | null;
   secondaryImage?: File | null;
+  images?: File[] | null;
+  title?: string;
   description: string;
   productCategory: string;
   style: string;
-  enableStyleTransfer: boolean;
+  enableStyleTransfer?: boolean;
 }) => {
   const formData = new FormData();
-  if (payload.image) {
-    formData.append('image', payload.image);
+  const images = payload.images || [];
+  const primaryImage = payload.image || images[0] || null;
+  const secondaryImage = payload.secondaryImage || images[1] || null;
+
+  if (primaryImage) {
+    formData.append('image', primaryImage);
   }
-  if (payload.secondaryImage) {
-    formData.append('secondaryImage', payload.secondaryImage);
+  if (secondaryImage) {
+    formData.append('secondaryImage', secondaryImage);
+  }
+  if (payload.title) {
+    formData.append('title', payload.title);
   }
   formData.append('description', payload.description);
   formData.append('productCategory', payload.productCategory);
   formData.append('style', payload.style);
-  formData.append('enableStyleTransfer', String(payload.enableStyleTransfer));
+  formData.append('enableStyleTransfer', String(payload.enableStyleTransfer || false));
 
   const response = await fetch(`${API_BASE}/jobs`, {
     method: 'POST',
@@ -304,7 +345,35 @@ export const createJob = async (payload: {
   }
 
   const payloadJson = await response.json();
-  return payloadJson as { data: VideoJob; credits?: number };
+  return payloadJson.data as VideoJob;
+};
+
+export const createPhotoJob = async (payload: {
+  images?: File[] | null;
+  title: string;
+  description: string;
+  productCategory: string;
+  style: string;
+}) => {
+  const created = await createJob({
+    images: payload.images,
+    title: payload.title,
+    description: payload.description,
+    productCategory: payload.productCategory,
+    style: payload.style,
+  });
+
+  return {
+    ...created,
+    title: payload.title,
+    source: payload.images?.length ? 'upload' : 'prompt',
+    output: created.output?.preview?.url
+      ? {
+          final: { url: created.output.preview.url },
+          variants: [{ url: created.output.preview.url }]
+        }
+      : undefined
+  } as PhotoJob;
 };
 
 export const fetchJobs = async () => {
@@ -312,10 +381,18 @@ export const fetchJobs = async () => {
     headers: authHeaders(),
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('UNAUTHORIZED');
+    }
     throw await createApiError(response, 'Failed to fetch jobs.');
   }
   const payload = await response.json();
-  return payload.data as VideoJob[];
+  const videoJobs = Array.isArray(payload.data) ? payload.data : payload.data?.videoJobs || [];
+  const photoJobs = Array.isArray(payload.data?.photoJobs) ? payload.data.photoJobs : [];
+  return {
+    videoJobs: videoJobs as VideoJob[],
+    photoJobs: photoJobs as PhotoJob[]
+  };
 };
 
 export const fetchJob = async (jobId: string) => {
@@ -397,6 +474,25 @@ export const trimJob = async (jobId: string, startSeconds: number, endSeconds: n
 
   const payload = await response.json();
   return payload.data;
+};
+
+export const completePhotoJob = async (jobId: string, imageBlob: Blob) => {
+  const imageDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Unable to read generated image.'));
+    reader.readAsDataURL(imageBlob);
+  });
+
+  return createPhotoAd({
+    title: 'Puter Generated Photo',
+    prompt: 'Browser-generated Puter photo campaign.',
+    aspectRatio: '1:1',
+    productCategory: 'general-product',
+    style: 'minimal',
+    source: 'puter',
+    imageDataUrls: [imageDataUrl],
+  });
 };
 
 export const getJobEventsUrl = (jobId: string) => {

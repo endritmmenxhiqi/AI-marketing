@@ -33,7 +33,7 @@ interface PuterGlobal {
 
 declare global {
   interface Window {
-    puter?: PuterGlobal;
+    puter?: any;
   }
 }
 
@@ -54,12 +54,13 @@ const PHOTO_DIMENSIONS: Record<string, { width: number; height: number }> = {
   '16:9': { width: 1280, height: 720 },
 };
 
-function getPuterFromWindow() {
-  if (!window.puter?.ai?.txt2img) {
+function getPuterFromWindow(): PuterGlobal {
+  const p = window.puter as PuterGlobal;
+  if (!p?.ai?.txt2img) {
     throw new Error('Puter image generation is not available yet.');
   }
 
-  return window.puter;
+  return p;
 }
 
 export async function ensurePuter() {
@@ -68,7 +69,7 @@ export async function ensurePuter() {
   }
 
   if (window.puter?.ai?.txt2img) {
-    return window.puter;
+    return window.puter as PuterGlobal;
   }
 
   if (puterPromise) {
@@ -160,6 +161,8 @@ export async function generatePhotoAdSet(
     title: string;
     prompt: string;
     aspectRatio: PhotoAspectRatio;
+    style: string;
+    productCategory: string;
   },
   onProgress?: (label: string) => void
 ) {
@@ -172,10 +175,12 @@ export async function generatePhotoAdSet(
     onProgress?.(`Generating concept ${index + 1} of ${PHOTO_VARIATIONS.length}`);
 
     const prompt = [
+      `Product Category: ${input.productCategory}.`,
+      `Creative Style: ${input.style}.`,
       input.title,
       input.prompt,
       'High-end commercial photography for an ad campaign.',
-      'Luxury brand feel, premium lighting, polished composition, rich detail, tasteful color grading.',
+      'Premium lighting, polished composition, rich detail, tasteful color grading.',
       variant,
     ].join(' ');
 

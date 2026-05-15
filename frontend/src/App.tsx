@@ -1,75 +1,59 @@
-import { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
-  AlertTriangle,
-  ArrowRight,
-  Activity,
-  Camera,
-  CheckCircle2,
-  ChevronRight,
-  Clapperboard,
-  Coins,
-  CreditCard,
-  Download,
-  ExternalLink,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ElementType,
+} from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import {
+  ChevronDown,
   Eye,
-  EyeOff,
-  FileImage,
+  Folder,
   History,
-  ImagePlus,
-  Layout,
-  LoaderCircle,
-  Lock,
+  LayoutDashboard,
   LogOut,
-  Mail,
   Moon,
-  Palette,
-  PenTool,
-  PlayCircle,
-  RefreshCcw,
-  ReceiptText,
-  Scissors,
+  Plus,
   Sparkles,
   Sun,
-  Target,
-  Trash2,
+  Upload,
   X,
-  Zap,
 } from 'lucide-react';
-import {
-  createDemoCreditPurchase,
-  createJob,
-  fetchJob,
-  createPhotoAd,
-  CreditPackage,
-  CreditTransaction,
-  fetchCreditPackages,
-  fetchCreditTransactions,
-  fetchJobs,
-  fetchPhotoAds,
-  fetchMe,
-  forgotPassword,
-  loginUser,
-  PhotoAd,
-  registerUser,
-  trimJob,
-  VideoJob
-} from './lib/api';
-import { ensurePuter, generatePhotoAdSet, type PhotoAspectRatio } from './lib/puter';
-import { useJobEvents } from './hooks/useJobEvents';
-import { useLanguage } from './context/LanguageContext';
+import logoWhite from './assets/logo-white.png';
+import { useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
-import ResetPasswordPage from './pages/ResetPasswordPage';
+import type { PhotoJob, VideoJob } from './lib/api';
 
-const styles = [
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import { useJobs, useCampaignForm, type CampaignKind, type DashboardJob } from './hooks';
+import { generatePhotoAdSet } from './lib/puter';
+import { createPhotoAd, fetchPhotoAds } from './lib/api';
+
+type SectionKey = 'dashboard' | 'create' | 'workspace' | 'history';
+type CreateFocus = CampaignKind | 'upload';
+type WorkspaceFocus = 'preview' | 'brief';
+
+const createModes: Array<{
+  kind: CampaignKind;
+  label: string;
+}> = [
+  { kind: 'video', label: 'Video' },
+  { kind: 'photo', label: 'Photo' },
+];
+
+const createStyles = [
   { value: 'energetic', label: 'Energetic', tone: 'Fast hook, bold cadence, punchy CTA' },
   { value: 'luxury', label: 'Luxury', tone: 'Premium tone, refined pacing, elegant product framing' },
   { value: 'minimal', label: 'Minimal', tone: 'Clean visuals, crisp copy, understated confidence' },
   { value: 'cinematic', label: 'Cinematic', tone: 'Atmospheric, emotive, brand-film energy' },
 ];
 
-const categories = [
+const productCategories = [
   { value: 'beauty-skincare', label: 'Beauty & Skincare' },
   { value: 'beverages-energy-drinks', label: 'Beverages & Energy Drinks' },
   { value: 'perfume-fragrance', label: 'Perfume & Fragrance' },
@@ -84,1151 +68,282 @@ const categories = [
   { value: 'pet-products', label: 'Pet Products' },
 ];
 
-const categoryLabelMap = new Map(categories.map((item) => [item.value, item.label]));
-
-const formatCategoryLabel = (value: string) =>
-  categoryLabelMap.get(value) ||
-  value
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-
-const quickBriefs = [
+const sidebarItems: Array<{
+  label: string;
+  description: string;
+  icon: ElementType;
+  action: SectionKey;
+}> = [
   {
-    id: 'sneakers',
-    label: 'Sneaker drop',
-    category: 'fashion-accessories',
-    style: 'cinematic',
-    description:
-      'Premium black sneakers for stylish young athletes. Show 5 scenes: shoe close-up, lacing up, city walk, fast footwork or running, final product shot with CTA. Keep the shoes visible in every scene and avoid generic luxury lifestyle filler.',
+    label: 'Dashboard',
+    description: 'Campaign overview',
+    icon: LayoutDashboard,
+    action: 'dashboard',
   },
   {
-    id: 'energy',
-    label: 'Energy launch',
-    category: 'beverages-energy-drinks',
-    style: 'energetic',
-    description:
-      'A bold energy drink for young adults who want cold refreshment, nightlife energy, and instant momentum. Focus on the can, condensation, ice, nightlife lifestyle, and a strong grab-it-now CTA.',
+    label: 'Create',
+    description: 'Video and photo campaigns',
+    icon: Plus,
+    action: 'create',
   },
   {
-    id: 'dessert',
-    label: 'Food craving',
-    category: 'food-dessert',
-    style: 'energetic',
-    description:
-      'A pistachio dessert box for people who want cafe-quality treats at home. Focus on texture, close-up indulgence, giftability, and a limited weekly drop.',
+    label: 'Workspace',
+    description: 'Preview and brief',
+    icon: Folder,
+    action: 'workspace',
   },
   {
-    id: 'tech',
-    label: 'Tech utility',
-    category: 'tech-gadgets',
-    style: 'minimal',
-    description:
-      'A pocket-size wireless charger for remote workers who need clean desk setups and reliable battery backup while traveling. Emphasize convenience, portability, and daily use.',
-  },
-  {
-    id: 'esports',
-    label: 'Esports hype',
-    category: 'gaming-esports',
-    style: 'cinematic',
-    description:
-      'A cinematic esports tournament promo inspired by Counter-Strike 2. Show arena lights, focused players at PCs, keyboard and mouse closeups, headset comms, roaring crowds, trophy moments, and a high-stakes final match atmosphere.',
-  },
-  {
-    id: 'football',
-    label: 'Match hype',
-    category: 'sports-football',
-    style: 'cinematic',
-    description:
-      'A cinematic, high-intensity short-form video for a major soccer match. Show stadium lights, fans chanting, kickoff, fast dribbles, tackles, goal celebrations, and a bold final CTA to watch the highlights.',
+    label: 'History',
+    description: 'Recent jobs and queue status',
+    icon: History,
+    action: 'history',
   },
 ];
 
-const photoPromptPresets = [
-  {
-    id: 'luxury-product',
-    label: 'Luxury product',
-    title: 'Midnight Elixir',
-    category: 'beauty-skincare',
-    style: 'luxury',
-    prompt: 'Create a premium skincare campaign around a black glass serum bottle with gold details, moody reflections, soft haze, and elevated luxury beauty direction.',
-  },
-  {
-    id: 'dessert-editorial',
-    label: 'Dessert editorial',
-    title: 'Pistachio Velvet',
-    category: 'food-dessert',
-    style: 'energetic',
-    prompt: 'Generate a refined dessert campaign with pistachio textures, elegant plating, creamy layers, and rich editorial food photography for a premium launch.',
-  },
-  {
-    id: 'tech-launch',
-    label: 'Tech launch',
-    title: 'Orbit Charge',
-    category: 'tech-gadgets',
-    style: 'minimal',
-    prompt: 'Design a high-end product ad for a compact wireless charger with sculpted shadows, brushed materials, clean surfaces, and crisp modern lighting.',
-  },
-];
-
-const photoAspectRatios: Array<{ value: PhotoAspectRatio; label: string }> = [
-  { value: '1:1', label: 'Square' },
-  { value: '4:5', label: 'Portrait' },
-  { value: '16:9', label: 'Landscape' },
-];
-
-type CreatorMode = 'video' | 'photo';
-
-const stageLabels: Record<string, string> = {
-  'queued': 'Queued',
-  'writing-script': 'Writing script...',
-  'finding-media': 'Finding media...',
-  'generating-voice': 'Generating voice...',
-  'rendering-video': 'Rendering video...',
-  'uploading-assets': 'Uploading assets...',
-  'completed': 'Ready',
-  'failed': 'Failed',
-};
-const stageSequence = ['writing-script', 'generating-voice', 'finding-media', 'rendering-video', 'uploading-assets', 'completed'];
-const stageDescriptions: Record<string, string> = {
-  'writing-script': 'OpenAI script package and scene story are being assembled.',
-  'generating-voice': 'Voice timing is generated while the pipeline prepares scene assets.',
-  'finding-media': 'Pexels and fallbacks are sourcing stronger visuals scene by scene.',
-  'rendering-video': 'FFmpeg is rendering scene clips in parallel before the final master.',
-  'uploading-assets': 'The master video, voice track, and scene exports are being published.',
-  'completed': 'Everything is ready for preview, export, and trimming.',
+const getStatusLabel = (status: DashboardJob['status']) => {
+  if (status === 'completed') return 'Ready';
+  if (status === 'processing' || status === 'queued') return 'Queued';
+  return 'Draft';
 };
 
-const DESCRIPTION_MAX_LENGTH = 2000;
-
-const formatSeconds = (value: number) => `${value.toFixed(1)}s`;
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(0)} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+const getStatusTone = (status: DashboardJob['status']) => {
+  if (status === 'completed') return 'ready';
+  if (status === 'processing' || status === 'queued') return 'queued';
+  return 'draft';
 };
 
-const formatPhotoErrorMessage = (error: unknown) => {
-  if (error instanceof Error && error.message) {
-    const message = error.message.trim();
-
-    if (/popup|sign-?in|permission/i.test(message)) {
-      return 'Puter needs a popup sign-in first. Allow the popup, complete the Puter connect step, and try again.';
-    }
-
-    if (/load puter|connection/i.test(message)) {
-      return 'Puter could not load in the browser. Check your connection, disable strict blockers for this page, and try again.';
-    }
-
-    return message;
-  }
-
-  return 'Unable to generate photo ads right now. If Puter opened or tried to open a popup, allow it and try again.';
-};
-
-const buildPhotoDownloadName = (title: string, index: number) =>
-  `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'photo-ad'}-${index + 1}.png`;
-
-const formatCreditAmount = (amount: number) => `${amount > 0 ? '+' : ''}${amount}`;
-
-const formatCreditDate = (value: string) => {
+const formatDate = (value?: string) => {
+  if (!value) return 'Today';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'Just now';
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const formatCreditSource = (source: string) =>
-  source
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+const getInitials = (email?: string) => {
+  if (!email) return 'AL';
+  const [name] = email.split('@');
+  const parts = name.split(/[._-]+/).filter(Boolean);
 
-const mergeJobProgress = (job: VideoJob, payload: Partial<VideoJob> & { videoUrl?: string; previewUrl?: string; trimUrl?: string }) => ({
-  ...job,
-  ...payload,
-  output: {
-    ...job.output,
-    ...(payload.output || {}),
-    video: payload.videoUrl
-      ? {
-          ...job.output?.video,
-          url: payload.videoUrl
-        }
-      : job.output?.video,
-    preview: payload.previewUrl
-      ? {
-          ...job.output?.preview,
-          url: payload.previewUrl
-        }
-      : job.output?.preview,
-    trim: payload.trimUrl
-      ? {
-          ...job.output?.trim,
-          asset: {
-            ...job.output?.trim?.asset,
-            url: payload.trimUrl
-          }
-        }
-      : job.output?.trim
+  if (parts.length === 0) {
+    return name.slice(0, 2).toUpperCase() || 'AL';
   }
-});
 
-function AuthScreen({
-  initialError = '',
-  onAuthenticated,
-}: {
-  initialError?: string;
-  onAuthenticated: (payload: { email: string; token: string; credits: number }) => void;
-}) {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot-password'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [focused, setFocused] = useState('');
-  const { t } = useLanguage();
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'AL';
+};
+
+function DashboardPage() {
   const { theme, toggleTheme } = useTheme();
+  const { logout, user, loading, refreshUser } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    setError(initialError);
-  }, [initialError]);
-
-  // Password strength
-  const calcStrength = (p: string) => {
-    let s = 0;
-    if (!p) return s;
-    if (p.length > 5) s++;
-    if (p.length > 8) s++;
-    if (/[A-Z]/.test(p)) s++;
-    if (/[0-9]/.test(p)) s++;
-    if (/[^a-zA-Z0-9]/.test(p)) s++;
-    return Math.min(s, 4);
-  };
-  const strength = calcStrength(password);
-  const strengthColors = ['#ef4444', '#f59e0b', '#22c55e', '#22c55e'];
-  const strengthLabels = ['Weak', 'Fair', 'Good', 'Strong'];
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
-
-    const isForgot = mode === 'forgot-password';
-    if (!email || (!isForgot && !password)) {
-      setError(t('errorRequired'));
-      return;
+    if (!loading && user) {
+      refreshUser();
+      fetchPhotoAds().then(res => setPhotoAds(res)).catch(() => {});
     }
-
-    if (mode === 'forgot-password' && !/^\S+@\S+\.\S+$/.test(email)) {
-      setError(t('errorEmail'));
-      return;
-    }
-
-    if (mode === 'register' && password !== confirmPassword) {
-      setError(t('errorPassMatch'));
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError('');
-      setSuccessMessage('');
-
-      if (mode === 'forgot-password') {
-        const payload = await forgotPassword(email);
-        setSuccessMessage(payload.message || 'Reset link sent! Please check your inbox.');
-      } else {
-        const payload =
-          mode === 'login'
-            ? await loginUser(email, password)
-            : await registerUser(email, password);
-
-        localStorage.setItem('token', payload.token);
-        localStorage.setItem('user_email', payload.user.email);
-        localStorage.setItem('user_credits', String(payload.user.credits));
-        onAuthenticated({ email: payload.user.email, token: payload.token, credits: payload.user.credits });
-      }
-    } catch (nextError: any) {
-      setError(nextError.message || 'Authentication failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="auth-scene">
-      {/* Animated background orbs */}
-      <div className="auth-orb auth-orb--1" />
-      <div className="auth-orb auth-orb--2" />
-      <div className="auth-orb auth-orb--3" />
-
-      {/* Top-right controls */}
-      <div className="auth-controls-row">
-        <button
-          className="auth-theme-toggle"
-          onClick={toggleTheme}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
-      </div>
-
-      {/* Glass card */}
-      <div className="auth-glass-card">
-        <div className="auth-card-accent" />
-        <div className="auth-card-body">
-
-          {/* Brand */}
-          <div className="auth-brand-row">
-            <div className="auth-icon-badge">
-              <Sparkles size={20} />
-            </div>
-            <div>
-              <h1 className="auth-heading">{t('appName')}</h1>
-              <p className="auth-subheading">
-                {mode === 'forgot-password' ? t('forgotTitle') : (mode === 'login' ? t('loginGreeting') : t('registerGreeting'))}
-              </p>
-            </div>
-          </div>
-
-          {mode !== 'forgot-password' && (
-            <p className="auth-subheading" style={{ marginBottom: '1.5rem', opacity: 0.8 }}>
-              {mode === 'login' ? t('loginTitle') : t('registerTitle')}
-            </p>
-          )}
-
-          {mode === 'forgot-password' && (
-            <p className="auth-subheading" style={{ marginBottom: '1.5rem', opacity: 0.9 }}>
-              {t('forgotSubtitle')}
-            </p>
-          )}
-
-          {/* Mode tabs */}
-          {mode !== 'forgot-password' && (
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-              {(['login', 'register'] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => { setMode(item); setError(''); setSuccessMessage(''); }}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem 0',
-                    borderRadius: '10px',
-                    border: mode === item ? '1.5px solid #6366f1' : '1.5px solid var(--border-subtle)',
-                    background: mode === item ? 'rgba(99,102,241,0.12)' : 'transparent',
-                    color: mode === item ? '#6366f1' : 'var(--text-muted)',
-                    fontWeight: mode === item ? 700 : 500,
-                    fontSize: '0.875rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {item === 'login' ? t('loginTab') : t('registerTab')}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="auth-divider" />
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} noValidate className="auth-form">
-
-            {/* Email */}
-            <div className={`auth-field ${focused === 'email' ? 'auth-field--focused' : ''}`}>
-              <label htmlFor="auth-email" className="auth-field-label">{t('emailLabel')}</label>
-              <div className="auth-field-inner">
-                <Mail size={16} className="auth-field-icon" />
-                <input
-                  id="auth-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onFocus={() => setFocused('email')}
-                  onBlur={() => setFocused('')}
-                  placeholder={t('emailPlaceholder')}
-                  autoComplete="email"
-                  className="auth-field-input"
-                />
-              </div>
-            </div>
-
-            {/* Password */}
-            {mode !== 'forgot-password' && (
-              <div className={`auth-field ${focused === 'password' ? 'auth-field--focused' : ''}`}>
-                <div className="auth-field-label-row">
-                  <label htmlFor="auth-password" className="auth-field-label">{t('passwordLabel')}</label>
-                  {mode === 'login' && (
-                    <button
-                      type="button"
-                      className="auth-forgot-link"
-                      onClick={() => { setMode('forgot-password'); setError(''); setSuccessMessage(''); }}
-                    >
-                      {t('forgotPasswordLink')}
-                    </button>
-                  )}
-                </div>
-                <div className="auth-field-inner">
-                  <Lock size={16} className="auth-field-icon" />
-                  <input
-                    id="auth-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onFocus={() => setFocused('password')}
-                    onBlur={() => setFocused('')}
-                    placeholder={t('passwordPlaceholder')}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    className="auth-field-input"
-                  />
-                  <button
-                    type="button"
-                    className="auth-eye-btn"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {/* Strength bar (register only) */}
-                {mode === 'register' && password && (
-                  <div className="auth-strength-wrap">
-                    <div className="auth-strength-bars">
-                      {[1, 2, 3, 4].map((lvl) => (
-                        <div
-                          key={lvl}
-                          className="auth-strength-bar"
-                          style={{
-                            backgroundColor: lvl <= strength
-                              ? strengthColors[strength - 1]
-                              : 'var(--border-subtle)',
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <span
-                      className="auth-strength-label"
-                      style={{ color: strength > 0 ? strengthColors[strength - 1] : 'var(--text-muted)' }}
-                    >
-                      {strength > 0 ? strengthLabels[strength - 1] : ''}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Confirm Password (register only) */}
-            {mode === 'register' && (
-              <div className={`auth-field ${focused === 'confirm' ? 'auth-field--focused' : ''}`}>
-                <label htmlFor="auth-confirm" className="auth-field-label">{t('confirmPasswordLabel')}</label>
-                <div className="auth-field-inner">
-                  <Lock size={16} className="auth-field-icon" />
-                  <input
-                    id="auth-confirm"
-                    type={showConfirm ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    onFocus={() => setFocused('confirm')}
-                    onBlur={() => setFocused('')}
-                    placeholder={t('passwordPlaceholder')}
-                    autoComplete="new-password"
-                    className="auth-field-input"
-                  />
-                  <button
-                    type="button"
-                    className="auth-eye-btn"
-                    onClick={() => setShowConfirm(!showConfirm)}
-                  >
-                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Error/Success Messages */}
-            {error && (
-              <div className="auth-error-bar">
-                <span>{error}</span>
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="auth-success-bar" style={{
-                background: 'rgba(52, 211, 153, 0.1)',
-                color: '#34d399',
-                border: '1px solid rgba(52, 211, 153, 0.25)',
-                borderRadius: '10px',
-                padding: '0.65rem 0.875rem',
-                fontSize: '0.8125rem',
-                marginBottom: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
-                <CheckCircle2 size={16} />
-                <span>{successMessage}</span>
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="auth-submit-btn"
-              id="auth-submit"
-            >
-              {loading ? (
-                <span className="auth-spinner" />
-              ) : (
-                <>
-                  <span>
-                    {mode === 'forgot-password' ? t('forgotButton') : (mode === 'login' ? t('signInAction') : t('createAccountAction'))}
-                  </span>
-                  <ArrowRight size={18} className="auth-btn-arrow" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Footer */}
-          <div className="auth-switch-text" style={{ marginTop: '1.5rem' }}>
-            {mode === 'forgot-password' ? (
-              <button
-                type="button"
-                onClick={() => { setMode('login'); setError(''); setSuccessMessage(''); }}
-                className="auth-switch-link"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', gap: '0.4rem' }}
-              >
-                <RefreshCcw size={14} />
-                {t('backToLogin')}
-              </button>
-            ) : (
-              <>
-                {mode === 'login' ? `${t('noAccount')} ` : `${t('hasAccount')} `}
-                <button
-                  type="button"
-                  onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setSuccessMessage(''); }}
-                  className="auth-switch-link"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
-                >
-                  {mode === 'login' ? t('createOne') : t('signInInstead')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function App() {
-  const { theme, toggleTheme } = useTheme();
-  const [creatorMode, setCreatorMode] = useState<CreatorMode>('video');
-  const [auth, setAuth] = useState(() => ({
-    token: localStorage.getItem('token') || '',
-    email: localStorage.getItem('user_email') || '',
-    credits: Number(localStorage.getItem('user_credits') || 0),
-  }));
-  const [jobs, setJobs] = useState<VideoJob[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [description, setDescription] = useState('');
-  const [productCategory, setProductCategory] = useState('food-dessert');
-  const [style, setStyle] = useState('energetic');
-  const [enableStyleTransfer, setEnableStyleTransfer] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [secondaryFile, setSecondaryFile] = useState<File | null>(null);
-  const [secondaryPreviewUrl, setSecondaryPreviewUrl] = useState<string | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
-  const [trimLoading, setTrimLoading] = useState(false);
-  const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'overview' | 'preview' | 'history'>('overview');
-  const [photoTitle, setPhotoTitle] = useState('');
-  const [photoPrompt, setPhotoPrompt] = useState('');
-  const [photoAspectRatio, setPhotoAspectRatio] = useState<PhotoAspectRatio>('1:1');
-  const [photoGenerating, setPhotoGenerating] = useState(false);
-  const [photoProgressLabel, setPhotoProgressLabel] = useState('');
-  const [photoAds, setPhotoAds] = useState<PhotoAd[]>([]);
-  const [selectedPhotoAdId, setSelectedPhotoAdId] = useState<string | null>(null);
-  const [creditPackages, setCreditPackages] = useState<CreditPackage[]>([]);
-  const [creditTransactions, setCreditTransactions] = useState<CreditTransaction[]>([]);
-  const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
-  const [selectedCreditPackageId, setSelectedCreditPackageId] = useState('');
-  const [creditCheckoutLoading, setCreditCheckoutLoading] = useState(false);
-  const [creditCheckoutError, setCreditCheckoutError] = useState('');
-  const [creditCheckoutSuccess, setCreditCheckoutSuccess] = useState('');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const secondaryFileInputRef = useRef<HTMLInputElement | null>(null);
-  const descriptionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const photoPromptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const photoHistoryRef = useRef<HTMLDivElement | null>(null);
-  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  const insertTextAtCursor = (
-    textarea: HTMLTextAreaElement,
-    nextText: string,
-    setter: (value: string) => void
-  ) => {
-    const { selectionStart, selectionEnd, value } = textarea;
-    const updatedValue = `${value.slice(0, selectionStart)}${nextText}${value.slice(selectionEnd)}`;
-    const nextCursor = selectionStart + nextText.length;
-    setter(updatedValue);
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(nextCursor, nextCursor);
-    });
-  };
-
-  const handleTextareaPaste = (
-    event: ClipboardEvent<HTMLTextAreaElement>,
-    setter: (value: string) => void
-  ) => {
-    const text = event.clipboardData.getData('text/plain');
-    if (!text) {
-      return;
-    }
-
-    event.preventDefault();
-    insertTextAtCursor(event.currentTarget, text, setter);
-  };
-
-  const pasteFromClipboard = async (
-    textarea: HTMLTextAreaElement | null,
-    setter: (value: string) => void
-  ) => {
-    if (!textarea) {
-      return;
-    }
-
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text) {
-        setError('Clipboard is empty or does not contain text.');
-        return;
-      }
-
-      setError('');
-      insertTextAtCursor(textarea, text, setter);
-    } catch (nextError) {
-      console.error('Clipboard paste failed:', nextError);
-      setError('Clipboard access was blocked. Click into the field and try Ctrl+V or Cmd+V again.');
-    }
-  };
-
-  const clearAuthSession = (message = '') => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('user_credits');
-    setAuth({ token: '', email: '', credits: 0 });
-    setJobs([]);
-    setSelectedJobId(null);
-    setPhotoAds([]);
-    setSelectedPhotoAdId(null);
-    setCreditPackages([]);
-    setCreditTransactions([]);
-    setIsCreditsModalOpen(false);
-    setError('');
-    setAuthError(message);
-  };
-
-  useEffect(() => {
-    let isActive = true;
-
-    if (!auth.token) {
-      setJobs([]);
-      setSelectedJobId(null);
-      setPhotoAds([]);
-      setSelectedPhotoAdId(null);
-      return () => {
-        isActive = false;
-      };
-    }
-
-    Promise.all([fetchJobs(), fetchPhotoAds(), fetchMe(), fetchCreditPackages(), fetchCreditTransactions()])
-      .then(([jobsData, photoAdsData, user, packagesData, creditTransactionsData]) => {
-        if (!isActive) {
-          return;
-        }
-
-        localStorage.setItem('user_email', user.email);
-        localStorage.setItem('user_credits', String(user.credits));
-        setAuth((current) => ({
-          ...current,
-          email: user.email,
-          credits: user.credits,
-        }));
-        setJobs(jobsData);
-        setSelectedJobId((current) =>
-          current && jobsData.some((job) => job._id === current) ? current : jobsData[0]?._id || null
-        );
-        setPhotoAds(photoAdsData);
-        setSelectedPhotoAdId((current) =>
-          current && photoAdsData.some((item) => item._id === current) ? current : photoAdsData[0]?._id || null
-        );
-        setCreditPackages(packagesData);
-        setSelectedCreditPackageId((current) =>
-          current && packagesData.some((item) => item.id === current)
-            ? current
-            : packagesData[1]?.id || packagesData[0]?.id || ''
-        );
-        setCreditTransactions(creditTransactionsData);
-      })
-      .catch((nextError: any) => {
-        if (!isActive) {
-          return;
-        }
-
-        if (nextError?.status === 401) {
-          clearAuthSession('Your session expired. Please sign in again.');
-          return;
-        }
-
-        setJobs([]);
-        setSelectedJobId(null);
-        setPhotoAds([]);
-        setSelectedPhotoAdId(null);
-        setCreditTransactions([]);
-        setError(nextError.message || 'Unable to load your studio data.');
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [auth.token]);
-
-  useEffect(() => {
-    setSelectedPhotoAdId((current) =>
-      current && photoAds.some((item) => item._id === current) ? current : photoAds[0]?._id || null
-    );
-  }, [photoAds]);
-
-  useEffect(() => {
-    if (creatorMode === 'video') {
-      setPhotoProgressLabel('');
-    }
-  }, [creatorMode]);
-
-  const selectedJob = useMemo(
-    () => jobs.find((job) => job._id === selectedJobId) || null,
-    [jobs, selectedJobId]
-  );
-  const selectedPhotoAd = useMemo(
-    () => photoAds.find((item) => item._id === selectedPhotoAdId) || null,
-    [photoAds, selectedPhotoAdId]
-  );
-  const selectedCreditPackage = useMemo(
-    () => creditPackages.find((item) => item.id === selectedCreditPackageId) || creditPackages[0] || null,
-    [creditPackages, selectedCreditPackageId]
-  );
-  const projectedCreditBalance = selectedCreditPackage
-    ? auth.credits + selectedCreditPackage.credits
-    : auth.credits;
-  const firstName = auth.email.split('@')[0] || 'creator';
-  const jobsReady = jobs.filter((job) => job.status === 'completed').length;
-  const workspaceTabs =
-    creatorMode === 'photo'
-      ? [
-          { id: 'overview' as const, label: 'Photo Set', description: 'Prompt, category, and style', icon: Camera },
-          { id: 'preview' as const, label: 'Gallery', description: 'Generated ad images', icon: FileImage },
-          { id: 'history' as const, label: 'History', description: `${photoAds.length} saved ${photoAds.length === 1 ? 'set' : 'sets'}`, icon: History },
-        ]
-      : [
-          { id: 'overview' as const, label: 'Campaign', description: 'Brief and production health', icon: Target },
-          { id: 'preview' as const, label: 'Preview', description: 'Video player and trim export', icon: PlayCircle },
-          { id: 'history' as const, label: 'History', description: `${jobs.length} saved ${jobs.length === 1 ? 'job' : 'jobs'}`, icon: History },
-        ];
-  const jobsProcessing = jobs.filter((job) => job.status === 'processing').length;
-  const previewSourceUrl = selectedJob?.output?.preview?.url || selectedJob?.output?.video?.url || '';
-  const masterVideoUrl = selectedJob?.output?.video?.url || previewSourceUrl;
-  const dashboardStats =
-    creatorMode === 'video'
-      ? [
-          {
-            label: 'Jobs created',
-            value: jobs.length,
-          },
-          {
-            label: 'Ready exports',
-            value: jobsReady,
-          },
-          {
-            label: jobsProcessing > 0 ? 'In production' : 'Current style',
-            value: jobsProcessing > 0 ? jobsProcessing : (styles.find((item) => item.value === style)?.label || style),
-          },
-        ]
-      : [
-          {
-            label: 'Photo sets',
-            value: photoAds.length,
-          },
-          {
-            label: 'Images generated',
-            value: photoAds.reduce((total, item) => total + item.images.length, 0),
-          },
-          {
-            label: 'Current mode',
-            value: 'Photo ads',
-          },
-        ];
-  const sceneReadiness = useMemo(
-    () =>
-      (selectedJob?.script?.scenes || []).map((scene, index) => ({
-        id: `${scene.sceneNumber}-${scene.headline}`,
-        title: scene.headline || `Scene ${scene.sceneNumber}`,
-        media: scene.media?.source ? `${scene.media.source}${scene.media?.kind ? ` • ${scene.media.kind}` : ''}` : 'Queued',
-        duration: scene.voiceDuration ? formatSeconds(scene.voiceDuration) : 'Syncing',
-        reason: scene.media?.selectionReason || stageDescriptions[selectedJob?.stage || 'finding-media'],
-        visualQuery: scene.media?.query || scene.pexelsKeywords?.[0] || 'creative brief',
-        index,
-      })),
-    [selectedJob]
-  );
-  const stageTimeline = useMemo(
-    () =>
-      stageSequence.map((stageId, index) => {
-        const currentIndex = stageSequence.indexOf(selectedJob?.stage || 'queued');
-        const state =
-          selectedJob?.status === 'completed' || currentIndex > index
-            ? 'done'
-            : currentIndex === index || (selectedJob?.stage === 'queued' && index === 0)
-              ? 'active'
-              : 'pending';
-
-        return {
-          id: stageId,
-          label: stageLabels[stageId] || stageId,
-          description: stageDescriptions[stageId] || 'Processing step',
-          state,
-        };
-      }),
-    [selectedJob?.stage, selectedJob?.status]
-  );
-  const briefChecklist = [
-    'Problem and audience: who should care and what pain is urgent?',
-    'Offer and CTA: discount, drop, bundle, waitlist, or conversion moment.',
-    'Visual anchors: what must appear on screen so stock media stays on-brief?',
-  ];
-  const marketingHighlights = [
-    'OpenAI script, Deepgram voice, and media sourcing now run with less idle waiting.',
-    'Scene renders are processed in parallel before final assembly to cut long render stalls.',
-    'The workspace now surfaces timing, stage health, and scene-level readiness instead of only a percent bar.',
-  ];
-
-  useEffect(() => {
-    if (!selectedJob) return;
-    setTrimStart(Number(selectedJob.output?.trim?.startSeconds ?? 0) || 0);
-    const persistedEnd = Number(selectedJob.output?.trim?.endSeconds ?? 0) || 0;
-    const duration = Number(selectedJob.metadata?.durationSeconds ?? 0) || 0;
-    setTrimEnd(persistedEnd > 0 ? persistedEnd : duration);
-  }, [selectedJobId, selectedJob?.metadata?.durationSeconds]);
-
-  useEffect(() => {
-    if (!previewDurationSeconds) return;
-    setTrimEnd((current) => (current > 0 ? current : previewDurationSeconds));
-  }, [previewDurationSeconds]);
-
-  useEffect(() => {
-    void ensurePuter().catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    setPreviewDurationSeconds(0);
-  }, [selectedJobId]);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-      if (secondaryPreviewUrl) {
-        URL.revokeObjectURL(secondaryPreviewUrl);
-      }
-    };
-  }, [previewUrl, secondaryPreviewUrl]);
-
-  useJobEvents(
-    selectedJobId,
-    auth.token,
-    (payload) => {
-      setJobs((current) =>
-        current.map((job) => (job._id === selectedJobId ? mergeJobProgress(job, payload) : job))
-      );
-
-      if (payload?.status === 'completed' || payload?.status === 'failed') {
-        void fetchJob(selectedJobId!).then((freshJob) => {
-          setJobs((current) => current.map((job) => (job._id === freshJob._id ? freshJob : job)));
-        }).catch(() => undefined);
-      }
-    },
-    Boolean(selectedJobId)
-  );
-
-  const handleFileChange = (nextFile: File | null, slot: 'primary' | 'secondary' = 'primary') => {
-    if (slot === 'primary') {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-      setFile(nextFile);
-      setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
-    } else {
-      if (secondaryPreviewUrl) {
-        URL.revokeObjectURL(secondaryPreviewUrl);
-      }
-      setSecondaryFile(nextFile);
-      setSecondaryPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+    if (!loading && !user) {
+      navigate('/login');
     }
-    setIsPreviewOpen(false);
-  };
-
-  const onDrop = (event: DragEvent<HTMLDivElement>, slot: 'primary' | 'secondary' = 'primary') => {
-    event.preventDefault();
-    const droppedFile = event.dataTransfer.files?.[0];
-    if (droppedFile) {
-      handleFileChange(droppedFile, slot);
-    }
-  };
-
-  const onSelectFile = (event: ChangeEvent<HTMLInputElement>, slot: 'primary' | 'secondary' = 'primary') => {
-    const nextFile = event.target.files?.[0] || null;
-    handleFileChange(nextFile, slot);
-  };
-
-  const openFilePicker = (slot: 'primary' | 'secondary' = 'primary') => {
-    if (slot === 'primary') {
-      fileInputRef.current?.click();
-      return;
-    }
-
-    secondaryFileInputRef.current?.click();
-  };
-
-  const clearSelectedFile = (slot: 'primary' | 'secondary' = 'primary') => {
-    handleFileChange(null, slot);
-    const input = slot === 'primary' ? fileInputRef.current : secondaryFileInputRef.current;
-    if (input) {
-      input.value = '';
-    }
-  };
-
-  const clearProductFiles = () => {
-    clearSelectedFile('primary');
-    clearSelectedFile('secondary');
-  };
-
-  const refreshCredits = async () => {
-    const user = await fetchMe();
-    localStorage.setItem('user_credits', String(user.credits));
-    setAuth((current) => ({
-      ...current,
-      email: user.email,
-      credits: user.credits,
-    }));
-    return user.credits;
-  };
-
-  const refreshCreditTransactions = async () => {
-    const transactions = await fetchCreditTransactions();
-    setCreditTransactions(transactions);
-    return transactions;
-  };
-
-  const openCreditsModal = () => {
-    setCreditCheckoutError('');
-    setCreditCheckoutSuccess('');
-    setIsCreditsModalOpen(true);
-  };
-
-  const handleDemoCreditPurchase = async () => {
-    if (!selectedCreditPackage) {
-      setCreditCheckoutError('Choose a credit package first.');
-      return;
-    }
-
-    try {
-      setCreditCheckoutLoading(true);
-      setCreditCheckoutError('');
-      setCreditCheckoutSuccess('');
-
-      const result = await createDemoCreditPurchase(selectedCreditPackage.id);
-      localStorage.setItem('user_credits', String(result.credits));
-      setAuth((current) => ({ ...current, credits: result.credits || 0 }));
-      setCreditTransactions((current) => [result.transaction, ...current].slice(0, 12));
-      setCreditCheckoutSuccess(`${result.package.credits} credits added to your account.`);
-    } catch (nextError: any) {
-      if (nextError?.status === 401) {
-        clearAuthSession('Your session expired. Please sign in again.');
-        return;
-      }
-
-      setCreditCheckoutError(nextError.message || 'Unable to complete the demo checkout.');
-    } finally {
-      setCreditCheckoutLoading(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!description.trim()) {
-      setError('Add a product description first.');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      setError('');
-      const availableCredits = await refreshCredits();
-      if (availableCredits <= 0) {
-        setError('You are out of credits. Buy more credits to create another video.');
-        openCreditsModal();
-        return;
-      }
-
-      const result = await createJob({
-        image: file,
-        secondaryImage: secondaryFile,
-        description,
-        productCategory,
-        style,
-        enableStyleTransfer,
-      });
-      const job = result.data;
-      if (typeof result.credits === 'number') {
-        localStorage.setItem('user_credits', String(result.credits));
-        setAuth((current) => ({ ...current, credits: result.credits || 0 }));
-      }
-
-      setJobs((current) => [job, ...current]);
-      setSelectedJobId(job._id);
-      setActiveWorkspaceTab('overview');
-      setDescription('');
-      clearProductFiles();
-      refreshCreditTransactions().catch(() => undefined);
-    } catch (nextError: any) {
-      if (nextError?.status === 401) {
-        clearAuthSession('Your session expired. Please sign in again.');
-        return;
-      }
-      if (nextError?.status === 402) {
-        localStorage.setItem('user_credits', '0');
-        setAuth((current) => ({ ...current, credits: 0 }));
-        openCreditsModal();
-      }
-
-      setError(nextError.message || 'Unable to create a video job.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleTrim = async () => {
-    if (!selectedJobId) return;
-
-    try {
-      setTrimLoading(true);
-      setError('');
-      const maxSeconds = Number(selectedJob?.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
-      if (!maxSeconds || !Number.isFinite(maxSeconds) || maxSeconds <= 0) {
-        throw new Error('Video duration not loaded yet. Start playback once, then try trimming again.');
-      }
-
-      const safeStart = Math.max(0, Math.min(Number(trimStart) || 0, maxSeconds));
-      const safeEnd = Math.max(0, Math.min(Number(trimEnd) || maxSeconds, maxSeconds));
-      if (safeEnd <= safeStart + 0.05) {
-        throw new Error('Out-point must be after in-point.');
-      }
-
-      setTrimStart(safeStart);
-      setTrimEnd(safeEnd);
-      const result = await trimJob(selectedJobId, safeStart, safeEnd);
-      setJobs((current) =>
-        current.map((job) =>
-          job._id === selectedJobId
-            ? {
-              ...job,
-              output: {
-                ...job.output,
-                trim: result.trim,
-              },
-            }
-            : job
-        )
-      );
-    } catch (nextError: any) {
-      if (nextError?.status === 401) {
-        clearAuthSession('Your session expired. Please sign in again.');
-        return;
-      }
-
-      setError(nextError.message || 'Unable to trim the video.');
-    } finally {
-      setTrimLoading(false);
-    }
-  };
+  }, [user, loading, navigate]);
 
   const handleLogout = () => {
-    clearAuthSession('');
+    logout();
+    navigate('/login');
   };
 
-  const applyQuickBrief = (preset: (typeof quickBriefs)[number]) => {
-    setCreatorMode('video');
-    setDescription(preset.description);
-    setProductCategory(preset.category);
-    setStyle(preset.style);
-    setError('');
-  };
+  const [createMode, setCreateMode] = useState<CampaignKind>('video');
+  const [historyMode, setHistoryMode] = useState<CampaignKind>('video');
+  const [activeSection, setActiveSection] = useState<SectionKey>('dashboard');
+  const [expandedSection, setExpandedSection] = useState<SectionKey | null>('create');
+  const [createFocus, setCreateFocus] = useState<CreateFocus>('video');
+  const [workspaceFocus, setWorkspaceFocus] = useState<WorkspaceFocus>('preview');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [photoAds, setPhotoAds] = useState<any[]>([]);
+  const [selectedPhotoAdId, setSelectedPhotoAdId] = useState<string | null>(null);
+  const [photoTitle, setPhotoTitle] = useState('');
+  const [photoPrompt, setPhotoPrompt] = useState('');
+  const [photoAspectRatio, setPhotoAspectRatio] = useState('1:1');
+  const [photoGenerating, setPhotoGenerating] = useState(false);
+  const [photoProgressLabel, setPhotoProgressLabel] = useState('');
+  const [error, setError] = useState('');
+  const [selectedPhotoImageIdx, setSelectedPhotoImageIdx] = useState<number | null>(null);
+  const [briefTab, setBriefTab] = useState<'audience' | 'offer' | 'proof'>('audience');
 
-  const applyPhotoPromptPreset = (preset: (typeof photoPromptPresets)[number]) => {
-    setCreatorMode('photo');
-    setActiveWorkspaceTab('overview');
-    setPhotoTitle(preset.title);
-    setPhotoPrompt(preset.prompt);
-    setProductCategory(preset.category);
-    setStyle(preset.style);
-    setError('');
-  };
+  const {
+    jobs,
+    combinedJobs,
+    isLoading: isLoadingJobs,
+    error: loadError,
+    loadJobs
+  } = useJobs(selectedJobId);
 
-  const handleDownloadPhoto = async (imageUrl: string, fileName: string) => {
-    try {
-      setError('');
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        throw new Error('Unable to download this image right now.');
-      }
+  const dashboardSectionRef = useRef<HTMLElement | null>(null);
+  const createSectionRef = useRef<HTMLElement | null>(null);
+  const workspaceSectionRef = useRef<HTMLElement | null>(null);
+  const historySectionRef = useRef<HTMLElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(objectUrl);
-    } catch (nextError: any) {
-      setError(nextError?.message || 'Unable to download this image right now.');
+  const activeJob = useMemo(() => {
+    // Try to find in combinedJobs first (Video/Photo Jobs)
+    const job = combinedJobs.find((j) => j._id === selectedJobId);
+    if (job) return job;
+
+    // Then try to find in photoAds
+    const ad = photoAds.find((a) => a._id === selectedJobId || a._id === selectedPhotoAdId);
+    if (ad) {
+      return {
+        ...ad,
+        kind: 'photo',
+        description: ad.prompt || ad.description, // PhotoAds use 'prompt' for description
+      };
     }
+
+    return combinedJobs[0] || null;
+  }, [combinedJobs, photoAds, selectedJobId, selectedPhotoAdId]);
+
+  useEffect(() => {
+    if (combinedJobs.length === 0) {
+      setSelectedJobId(null);
+      return;
+    }
+
+    const stillExists = combinedJobs.some((job) => job._id === selectedJobId);
+    if (!selectedJobId || !stillExists) {
+      setSelectedJobId(combinedJobs[0]._id);
+    }
+  }, [combinedJobs, selectedJobId]);
+
+  useEffect(() => {
+    if (photoAds.length > 0 && !selectedPhotoAdId) {
+      setSelectedPhotoAdId(photoAds[0]._id);
+    }
+  }, [photoAds, selectedPhotoAdId]);
+
+  const {
+    form,
+    setForm,
+    isSubmitting,
+    error: submitError,
+    handleFileChange,
+    handleSubmit: handleCreateSubmit
+  } = useCampaignForm(
+    createMode,
+    (jobId) => {
+      setSelectedJobId(jobId);
+      setHistoryMode(createMode);
+      setWorkspaceFocus('preview');
+      setActiveSection('history');
+      setExpandedSection('history');
+      refreshUser();
+    },
+    loadJobs
+  );
+
+  const videoCount = jobs.videoJobs.length;
+  const photoCount = jobs.photoJobs.length + photoAds.length;
+  const totalCount = combinedJobs.length + photoAds.length;
+  const readyCount = combinedJobs.filter((job) => job.status === 'completed').length + photoAds.length;
+  const queuedCount = combinedJobs.filter(
+    (job) => job.status === 'processing' || job.status === 'queued'
+  ).length;
+  const selectedHistory = combinedJobs.filter((job) => job.kind === historyMode).slice(0, 8);
+  const activeProgress =
+    activeJob?.progress ?? (activeJob?.status === 'completed' ? 100 : activeJob?.status ? 20 : 0);
+  const [puterStatus, setPuterStatus] = useState<string>('');
+  useEffect(() => {
+    (window as any).onPuterStatus = (msg: string) => setPuterStatus(msg);
+    return () => { (window as any).onPuterStatus = null; };
+  }, []);
+  const userInitials = getInitials(user?.email);
+  const userLabel = user?.email?.split('@')[0] || 'AI Studio';
+
+  const createCopy =
+    createMode === 'video'
+      ? {
+          tag: 'VIDEO',
+          title: 'Create a Video Campaign',
+          description: 'Turn a short brief into a polished video asset with style, category, and upload controls ready.',
+          submit: 'QUEUE VIDEO',
+        }
+      : {
+          tag: 'PHOTO',
+          title: 'Create a Photo Campaign',
+          description: 'Generate still campaign visuals from the same brief, style, category, and source image setup.',
+          submit: 'QUEUE PHOTO',
+        };
+
+  const focusItems = [
+    { label: 'Mode', value: createMode === 'video' ? 'Video' : 'Photo' },
+    { label: 'Style', value: createStyles.find(s => s.value === form.style)?.label || form.style },
+    { label: 'Category', value: productCategories.find(c => c.value === form.productCategory)?.label || form.productCategory },
+    { label: 'Images', value: form.images.length > 0 ? `${form.images.length} selected` : 'None' },
+    { label: 'Queue', value: isSubmitting ? 'Sending' : 'Ready' },
+  ];
+
+  const activeOutputUrl = useMemo(() => {
+    if (!activeJob) return '';
+
+    if (activeJob.kind === 'video') {
+      const job = activeJob as VideoJob;
+      return job.output?.preview?.url || job.output?.video?.url || '';
+    }
+
+    const job = activeJob as PhotoJob;
+    return job.output?.final?.url || job.output?.variants?.[0]?.url || '';
+  }, [activeJob]);
+
+  const handleSidebarSelect = (section: SectionKey) => {
+    if (section === 'create') {
+      selectCreateMode('video');
+      return;
+    }
+    
+    setActiveSection(section);
+    setExpandedSection(section);
+
+    if (section === 'dashboard') {
+      setExpandedSection(null);
+      navigate('/dashboard', { replace: true });
+    }
+  };
+
+  const selectCreateMode = (mode: CampaignKind) => {
+    setCreateMode(mode);
+    setHistoryMode(mode);
+    setCreateFocus(mode);
+    setCreatorMode(mode);
+    setActiveSection('create');
+    setExpandedSection('create');
+  };
+
+  const selectWorkspaceFocus = (focus: WorkspaceFocus) => {
+    setWorkspaceFocus(focus);
+    setActiveSection('workspace');
+    setExpandedSection('workspace');
+  };
+
+  const selectHistoryMode = (mode: CampaignKind) => {
+    setHistoryMode(mode);
+    setCreatorMode(mode);
+    setActiveSection('history');
+    setExpandedSection('history');
+  };
+
+  const handlePhotoCardClick = (ad: any) => {
+    setSelectedJobId(null);
+    setCreatorMode('photo');
+    setSelectedPhotoAdId(ad._id);
+    setSelectedPhotoImageIdx(null);
+    setActiveWorkspaceTab('preview');
+    setActiveSection('workspace');
+    setExpandedSection('workspace');
+    setWorkspaceFocus('preview');
   };
 
   const handlePhotoGenerate = async () => {
@@ -1246,19 +361,14 @@ function App() {
       setPhotoGenerating(true);
       setPhotoProgressLabel('Connecting to Puter...');
       setError('');
-      const availableCredits = await refreshCredits();
-      if (availableCredits <= 0) {
-        setError('You are out of credits. Buy more credits to create another photo ad set.');
-        setPhotoProgressLabel('');
-        openCreditsModal();
-        return;
-      }
 
       const imageDataUrls = await generatePhotoAdSet(
         {
           title: photoTitle.trim(),
           prompt: photoPrompt.trim(),
-          aspectRatio: photoAspectRatio,
+          aspectRatio: photoAspectRatio as any,
+          style: form.style,
+          productCategory: form.productCategory,
         },
         setPhotoProgressLabel
       );
@@ -1269,1500 +379,1104 @@ function App() {
         title: photoTitle.trim(),
         prompt: photoPrompt.trim(),
         aspectRatio: photoAspectRatio,
-        productCategory,
-        style,
+        productCategory: form.productCategory,
+        style: form.style,
         source: 'puter',
         imageDataUrls,
       });
+
       const nextSet = result.data;
       if (typeof result.credits === 'number') {
         localStorage.setItem('user_credits', String(result.credits));
-        setAuth((current) => ({ ...current, credits: result.credits || 0 }));
+        refreshUser();
       }
 
       setPhotoAds((current) => [nextSet, ...current]);
+      setSelectedJobId(null);
       setSelectedPhotoAdId(nextSet._id);
-      setActiveWorkspaceTab('preview');
       setPhotoProgressLabel('Photo set saved and ready.');
       setPhotoTitle('');
       setPhotoPrompt('');
-      refreshCreditTransactions().catch(() => undefined);
+      
+      // Navigate to workspace
+      setActiveSection('workspace');
+      setExpandedSection('workspace');
+      setWorkspaceFocus('preview');
+      setCreatorMode('photo');
     } catch (nextError: any) {
       console.error('Photo ad generation failed:', nextError);
-      if (nextError?.status === 401) {
-        clearAuthSession('Your session expired. Please sign in again.');
-        return;
-      }
-      if (nextError?.status === 402) {
-        localStorage.setItem('user_credits', '0');
-        setAuth((current) => ({ ...current, credits: 0 }));
-        openCreditsModal();
-      }
-      setError(formatPhotoErrorMessage(nextError));
+      setError(nextError?.message || 'Photo generation failed.');
       setPhotoProgressLabel('');
     } finally {
       setPhotoGenerating(false);
     }
   };
 
-  const handleRegenerate = (job: typeof jobs[number]) => {
-    setCreatorMode('video');
-    setDescription(job.description || '');
-    setProductCategory(job.productCategory || 'food-dessert');
-    setStyle(job.style || 'energetic');
-    setActiveWorkspaceTab('overview');
-    setError('');
-    // Scroll to top of creation section
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const selectedPhotoAd = useMemo(() => {
+    return photoAds.find((ad) => ad._id === selectedPhotoAdId) || null;
+  }, [photoAds, selectedPhotoAdId]);
 
-  const openJobWorkspace = (job: VideoJob) => {
-    setCreatorMode('video');
+  const [creatorMode, setCreatorMode] = useState<'video' | 'photo'>('video');
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'preview' | 'brief' | 'overview'>('overview');
+  const [isOutputViewerOpen, setIsOutputViewerOpen] = useState(false);
+
+  const handleHistoryCardClick = (job: DashboardJob) => {
+    setSelectedPhotoAdId(null);
     setSelectedJobId(job._id);
-    setActiveWorkspaceTab(job.output?.preview?.url || job.output?.video?.url ? 'preview' : 'overview');
+    setHistoryMode(job.kind);
+    setCreatorMode(job.kind);
+    setWorkspaceFocus('preview');
+    setActiveSection('workspace');
+    setExpandedSection('workspace');
   };
 
-  const handleWorkspaceTabClick = (tabId: 'overview' | 'preview' | 'history') => {
-    setActiveWorkspaceTab(tabId);
 
-    if (creatorMode === 'photo' && tabId === 'history') {
-      requestAnimationFrame(() => {
-        photoHistoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
+  const handleFileChangeLocal = (event: ChangeEvent<HTMLInputElement>) => {
+    handleFileChange(event);
+    setCreateFocus('upload');
+    setActiveSection('create');
+    setExpandedSection('create');
   };
 
-  const shellCard =
-    'dashboard-shell-card rounded-[28px] border border-slate-200/80 bg-white/85 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-slate-950/55 dark:shadow-glow';
-  const getStatusBadgeClass = (status?: string) => {
-    if (status === 'completed') {
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200';
-    }
-
-    if (status === 'failed') {
-      return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-200';
-    }
-
-    return 'border-slate-200 bg-slate-100 text-slate-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200';
+  const openOutput = () => {
+    if (!activeOutputUrl) return;
+    setIsOutputViewerOpen(true);
   };
+
+  useEffect(() => {
+    if (!isOutputViewerOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOutputViewerOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.classList.add('is-output-viewer-open');
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.classList.remove('is-output-viewer-open');
+    };
+  }, [isOutputViewerOpen]);
+
+  const overviewCards = [
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      title: 'Campaign work at a glance',
+      detail: 'Track generated assets, queued jobs, and ready outputs from one focused dashboard.',
+      stat: isLoadingJobs ? '...' : `${totalCount} jobs`,
+      actionLabel: 'Open overview',
+      onClick: () => handleSidebarSelect('dashboard'),
+      icon: LayoutDashboard,
+    },
+    {
+      key: 'create',
+      label: 'Create',
+      title: 'Build video or photo campaigns',
+      detail: 'Choose the format, write the brief, set the visual direction, and queue the job.',
+      stat: createMode === 'video' ? 'Video flow' : 'Photo flow',
+      actionLabel: 'Open create',
+      onClick: () => handleSidebarSelect('create'),
+      icon: Plus,
+    },
+    {
+      key: 'workspace',
+      label: 'Workspace',
+      title: 'Review every active output',
+      detail: 'Open the selected asset, follow progress, and keep the campaign brief close.',
+      stat: (creatorMode === 'photo' && selectedPhotoAd) ? 'Photo set active' : (activeJob ? getStatusLabel(activeJob.status) : 'No active asset'),
+      actionLabel: 'Open workspace',
+      onClick: () => handleSidebarSelect('workspace'),
+      icon: Folder,
+    },
+    {
+      key: 'history',
+      label: 'History',
+      title: 'Recent jobs grouped by type',
+      detail: 'Browse recent video and photo work with status, dates, and backend notes.',
+      stat: isLoadingJobs ? '...' : `${totalCount} items`,
+      actionLabel: 'Open history',
+      onClick: () => handleSidebarSelect('history'),
+      icon: History,
+    },
+  ];
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          !auth.token ? (
-            <AuthScreen
-              initialError={authError}
-              onAuthenticated={(payload) => {
-                setAuthError('');
-                setError('');
-                setAuth(payload);
-              }}
-            />
-          ) : (
-            <div className="studio-dashboard min-h-screen text-slate-900 transition-colors dark:text-white">
-              <div className="studio-dashboard__inner dashboard-app-shell mx-auto grid min-h-screen max-w-[1480px] gap-4 px-4 py-4 lg:grid-cols-[264px_minmax(0,1fr)] lg:px-5">
-                <aside className={`${shellCard} dashboard-sidebar flex flex-col gap-5`}>
-                  <div className="dashboard-sidebar-brand flex items-center gap-3">
-                    <div className="dashboard-brand-mark flex h-11 w-11 items-center justify-center rounded-xl text-white">
-                      <Sparkles size={20} />
+    <div className={`studio-page ${theme === 'dark' ? 'is-dark' : ''}`}>
+      <aside className="studio-sidebar">
+        <div className="studio-sidebar__top">
+          <div className="sidebar-brand">
+            <img className="sidebar-logo" src={logoWhite} alt="AI Marketing Studio" />
+            <div className="sidebar-brand__copy">
+              <span>AI Marketing</span>
+              <small>Campaign workspace</small>
+            </div>
+          </div>
+
+          <nav className="sidebar-nav" aria-label="Primary">
+            {sidebarItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.action;
+              const isExpandable = item.action !== 'dashboard';
+              const isExpanded = expandedSection === item.action;
+
+              return (
+                <div key={item.label} className="sidebar-nav-group">
+                  <button
+                    type="button"
+                    className={`sidebar-nav-item${isActive ? ' is-active' : ''}`}
+                    onClick={() => handleSidebarSelect(item.action)}
+                    aria-expanded={isExpandable ? isExpanded : undefined}
+                  >
+                    <span className="sidebar-nav-item__icon">
+                      <Icon size={18} strokeWidth={2} />
+                    </span>
+                    <span className="sidebar-nav-item__copy">
+                      <strong>{item.label}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                    {isExpandable ? (
+                      <ChevronDown
+                        size={15}
+                        className={`nav-caret${isExpanded ? ' is-open' : ''}`}
+                      />
+                    ) : null}
+                  </button>
+
+                  {item.action === 'create' && isExpanded ? (
+                    <div className="sidebar-dropdown" role="menu" aria-label="Create options">
+                      <button
+                        type="button"
+                        className={`sidebar-dropdown-item${createMode === 'video' && createFocus !== 'upload' ? ' is-active' : ''}`}
+                        onClick={() => selectCreateMode('video')}
+                      >
+                        <span>Video Campaign</span>
+                        <small>Brief, style and queue</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={`sidebar-dropdown-item${createMode === 'photo' && createFocus !== 'upload' ? ' is-active' : ''}`}
+                        onClick={() => selectCreateMode('photo')}
+                      >
+                        <span>Photo Campaign</span>
+                        <small>Separate still-image flow</small>
+                      </button>
                     </div>
-                    <div className="min-w-0">
-                      <h1 className="text-[1.08rem] font-black text-slate-950 dark:text-white">AI Marketing Studio</h1>
-                      <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">Campaign workspace</p>
+                  ) : null}
+
+                  {item.action === 'workspace' && isExpanded ? (
+                    <div className="sidebar-dropdown" role="menu" aria-label="Workspace options">
+                      <button
+                        type="button"
+                        className={`sidebar-dropdown-item${workspaceFocus === 'preview' ? ' is-active' : ''}`}
+                        onClick={() => selectWorkspaceFocus('preview')}
+                      >
+                        <span>Live Preview</span>
+                        <small>Output, progress and controls</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={`sidebar-dropdown-item${workspaceFocus === 'brief' ? ' is-active' : ''}`}
+                        onClick={() => selectWorkspaceFocus('brief')}
+                      >
+                        <span>Campaign Brief</span>
+                        <small>Message, chips and context</small>
+                      </button>
                     </div>
+                  ) : null}
+
+                  {item.action === 'history' && isExpanded ? (
+                    <div className="sidebar-dropdown" role="menu" aria-label="History options">
+                      <button
+                        type="button"
+                        className={`sidebar-dropdown-item${historyMode === 'video' ? ' is-active' : ''}`}
+                        onClick={() => selectHistoryMode('video')}
+                      >
+                        <span>Video History</span>
+                        <small>Queued and completed videos</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={`sidebar-dropdown-item${historyMode === 'photo' ? ' is-active' : ''}`}
+                        onClick={() => selectHistoryMode('photo')}
+                      >
+                        <span>Photo History</span>
+                        <small>Rendered still campaigns</small>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-footer__row">
+            <div className="user-pill">
+              <span>{userInitials}</span>
+            </div>
+            <div className="sidebar-footer__identity">
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <strong>{userLabel}</strong>
+                <span style={{ 
+                  fontSize: '10px', 
+                  color: '#f59e0b', 
+                  background: 'rgba(245, 158, 11, 0.15)', 
+                  padding: '2px 6px', 
+                  borderRadius: '4px',
+                  fontWeight: 700,
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  {user?.credits ?? 0} CREDITS
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <small>Workspace owner</small>
+              </div>
+            </div>
+            <button type="button" className="icon-pill" aria-label="Toggle theme" onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun size={16} strokeWidth={2.2} /> : <Moon size={16} strokeWidth={2.2} />}
+            </button>
+          </div>
+
+          <button type="button" className="logout-button" onClick={handleLogout}>
+            <LogOut size={14} strokeWidth={2.2} />
+            <span>Log Out</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="studio-main">
+        <div className="studio-main__inner">
+          {activeSection === 'dashboard' && (
+            <>
+              <header className="studio-hero" ref={dashboardSectionRef}>
+                <div className="studio-hero__copy">
+                  <div className="panel-kicker">DASHBOARD</div>
+                  <h1>Campaign asset studio.</h1>
+                  <p>
+                    Create video and photo campaigns, review outputs, and keep every marketing job
+                    organized in one focused workspace.
+                  </p>
+                </div>
+
+                <div className="studio-hero__stats">
+                  <div className="hero-stat">
+                    <span className="hero-stat__label">Total Jobs</span>
+                    <strong>{isLoadingJobs ? '...' : totalCount}</strong>
                   </div>
-
-                  <nav className="dashboard-sidebar-nav grid gap-2" aria-label="Workspace">
-                    {workspaceTabs.map(({ id, label, description, icon: TabIcon }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => handleWorkspaceTabClick(id)}
-                        className={`dashboard-sidebar-button ${activeWorkspaceTab === id ? 'active' : ''} group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left`}
-                      >
-                        <span className="dashboard-sidebar-icon flex h-9 w-9 items-center justify-center rounded-lg">
-                          <TabIcon size={18} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-black">{label}</span>
-                          <span className="block truncate text-[11px] font-semibold opacity-60">{description}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </nav>
-
-                  <div className="dashboard-sidebar-mode space-y-2">
-                    <div className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">Create type</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreatorMode('video');
-                          setActiveWorkspaceTab('overview');
-                        }}
-                        className={`dashboard-mode-button ${creatorMode === 'video' ? 'active' : ''} flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] font-black`}
-                      >
-                        <Clapperboard size={15} />
-                        Video
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreatorMode('photo');
-                          setActiveWorkspaceTab('overview');
-                        }}
-                        className={`dashboard-mode-button ${creatorMode === 'photo' ? 'active' : ''} flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[12px] font-black`}
-                      >
-                        <Camera size={15} />
-                        Photo
-                      </button>
-                    </div>
+                  <div className="hero-stat">
+                    <span className="hero-stat__label">Ready Assets</span>
+                    <strong>{isLoadingJobs ? '...' : readyCount}</strong>
                   </div>
+                  <div className="hero-stat">
+                    <span className="hero-stat__label">Queued</span>
+                    <strong>{isLoadingJobs ? '...' : queuedCount}</strong>
+                  </div>
+                </div>
+              </header>
 
-                  <div className="dashboard-sidebar-account mt-auto space-y-4">
-                    <div>
-                      <div className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300">Account</div>
-                      <h2 className="mt-1 truncate text-[1.25rem] font-black capitalize text-slate-950 dark:text-white">{firstName}</h2>
-                      <p className="truncate text-[12px] font-semibold text-slate-500 dark:text-slate-400">{auth.email}</p>
-                    </div>
+              {loadError ? (
+                <section className="studio-banner studio-banner--error" role="status">
+                  <Eye size={14} strokeWidth={2.2} />
+                  <span>{loadError}</span>
+                </section>
+              ) : null}
 
-                    <div className="dashboard-account-rows grid gap-2 text-[12px] font-bold">
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Credits</span>
-                        <strong>{auth.credits}</strong>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Style</span>
-                        <strong>{styles.find(s => s.value === style)?.label || style}</strong>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Category</span>
-                        <strong className="truncate">{formatCategoryLabel(productCategory)}</strong>
-                      </div>
-                    </div>
+              <section className="feature-overview">
+                {overviewCards.map((card) => {
+                  const Icon = card.icon;
 
+                  return (
+                    <article key={card.key} className="feature-card">
+                      <div className="feature-card__head">
+                        <span className="feature-card__icon">
+                          <Icon size={18} strokeWidth={2.1} />
+                        </span>
+                        <span className="feature-card__label">{card.label}</span>
+                      </div>
+                      <h2>{card.title}</h2>
+                      <p>{card.detail}</p>
+                      <div className="feature-card__footer">
+                        <span className="feature-card__stat">{card.stat}</span>
+                        <button type="button" className="mini-button mini-button--ghost" onClick={card.onClick}>
+                          {card.actionLabel}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </section>
+            </>
+          )}
+
+          {activeSection === 'create' && (
+            <section className="feature-section" ref={createSectionRef}>
+              <div className="feature-section__header">
+                <div>
+                  <div className="panel-kicker">CREATE</div>
+                  <h2>Build the next campaign asset</h2>
+                  <p>
+                    Choose video or photo, write the brief, set the style, and attach a source image when
+                    the campaign needs one.
+                  </p>
+                </div>
+
+                <div className="chip-switch">
+                  {createModes.map((mode) => (
                     <button
+                      key={mode.kind}
                       type="button"
-                      onClick={openCreditsModal}
-                      className="dashboard-action-btn dashboard-action-btn--primary flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      className={`chip-switch__item${createMode === mode.kind ? ' is-active' : ''}`}
+                      onClick={() => selectCreateMode(mode.kind)}
                     >
-                      <CreditCard size={15} />
-                      Buy credits
+                      {mode.label.toUpperCase()}
                     </button>
+                  ))}
+                </div>
+              </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        className="dashboard-icon-button flex h-11 items-center justify-center rounded-lg"
-                        onClick={toggleTheme}
-                        aria-label="Toggle theme"
-                        title="Toggle theme"
-                      >
-                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="dashboard-icon-button dashboard-logout-btn flex h-11 items-center justify-center rounded-lg"
-                        aria-label="Sign out"
-                        title="Sign out"
-                      >
-                        <LogOut size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </aside>
+              <div className="feature-section__body feature-section__body--create">
+                <article className={`panel panel--create ${createFocus !== 'upload' ? 'is-emphasis' : ''}`}>
+                  <div className="panel-kicker">{createCopy.tag}</div>
 
-                <div className="dashboard-content flex min-w-0 flex-col gap-4">
-                  <header className={`${shellCard} dashboard-topbar`}>
-                    <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="max-w-2xl">
-                        <div className="text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-300">Command center</div>
-                        <h2 className="mt-1 text-[1.8rem] font-black text-slate-950 dark:text-white md:text-[2.15rem]">
-                          Build, preview, and ship short-form ads.
-                        </h2>
-                        <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-                          A cleaner workspace for briefs, production status, video review, and export history.
-                        </p>
-                      </div>
-
-                      <div className="dashboard-topbar-stats grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
-                        {dashboardStats.map((item) => (
-                          <div key={item.label} className="dashboard-topbar-stat rounded-xl px-4 py-3">
-                            <div className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">
-                              {item.label}
-                            </div>
-                            <div className="mt-1 truncate text-[1.45rem] font-black leading-none text-slate-950 dark:text-white">{item.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </header>
-
-                  <main className="studio-dashboard__main dashboard-board grid gap-4 xl:grid-cols-[minmax(390px,0.82fr)_minmax(0,1.18fr)]">
-                  {/* LEFT COLUMN: Creation Section */}
-                  <section className={`${shellCard} dashboard-builder-card flex flex-col gap-[1.125rem]`}>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h2 className="text-[1.6rem] font-bold tracking-tight text-slate-900 dark:text-white">New Campaign</h2>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select a template or start from scratch</p>
-                      </div>
-                      <div className="flex -space-x-2">
-                        {[1, 2, 3].map(i => (
-                          <div key={i} className="dashboard-step-dot flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[7px] font-bold text-slate-400 dark:border-slate-900 dark:bg-slate-800">
-                            {i}
-                          </div>
-                        ))}
-                      </div>
+                  <form
+                    className="campaign-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (createMode === 'video') {
+                        handleCreateSubmit(event);
+                      } else {
+                        handlePhotoGenerate();
+                      }
+                    }}
+                  >
+                    <div className="panel-copy">
+                      <h3>{createMode === 'video' ? createCopy.title : 'Photo Studio'}</h3>
+                      <p>{createMode === 'video' ? createCopy.description : 'Generate high-end AI visuals for your brand.'}</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setCreatorMode('video')}
-                        className={`dashboard-tab rounded-2xl border px-4 py-3 text-left transition-all ${
-                          creatorMode === 'video'
-                            ? 'border-cyan-300/80 bg-cyan-500/10 text-slate-900 dark:border-cyan-300/30 dark:bg-cyan-300/10 dark:text-white'
-                            : 'border-slate-200 bg-white/60 text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 text-sm font-black">
-                          <Clapperboard size={16} />
-                          Video Ads
-                        </div>
-                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] opacity-60">
-                          Script, media, voice, export
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCreatorMode('photo')}
-                        className={`dashboard-tab rounded-2xl border px-4 py-3 text-left transition-all ${
-                          creatorMode === 'photo'
-                            ? 'border-cyan-300/80 bg-cyan-500/10 text-slate-900 dark:border-cyan-300/30 dark:bg-cyan-300/10 dark:text-white'
-                            : 'border-slate-200 bg-white/60 text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 text-sm font-black">
-                          <Camera size={16} />
-                          Photo Ads
-                        </div>
-                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] opacity-60">
-                          Title, prompt, three premium shots
-                        </div>
-                      </button>
-                    </div>
-
-                    {/* Error Banner */}
-                    {error && (
-                      <div className="dashboard-error-banner flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
-                        <span className="mt-0.5 shrink-0 text-rose-500">⚠</span>
-                        <div className="flex-1">
-                          <div className="font-bold">Campaign Error</div>
-                          <div className="opacity-80">{error}</div>
-                        </div>
-                        <button onClick={() => setError('')} className="shrink-0 opacity-50 hover:opacity-100 text-lg leading-none">×</button>
-                      </div>
-                    )}
-
-                    {creatorMode === 'video' ? (
+                    {createMode === 'video' ? (
                       <>
-                    <div className="dashboard-preset-grid grid gap-2.5 sm:grid-cols-3">
-                      {quickBriefs.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => applyQuickBrief(preset)}
-                          className="dashboard-preset-card group relative flex min-h-[7.25rem] flex-col items-start justify-between rounded-2xl border border-slate-200 bg-white/40 p-4 text-left transition-all hover:border-cyan-500/40 hover:bg-white hover:shadow-xl hover:shadow-cyan-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-cyan-300/30"
-                        >
-                          <div className="dashboard-preset-copy">
-                            <div className="dashboard-preset-title">{preset.label}</div>
-                            <div className="dashboard-preset-category">{formatCategoryLabel(preset.category)}</div>
-                            <div className="dashboard-preset-style">
-                                {styles.find((item) => item.value === preset.style)?.label || preset.style}
-                            </div>
-                          </div>
-                          <div className="dashboard-preset-icon" aria-hidden="true">
-                            <Zap size={12} />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={(event) => onDrop(event, 'primary')}
-                          className="dashboard-upload-zone flex min-h-[12rem] flex-col items-center justify-center gap-3 rounded-[26px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-5 backdrop-blur-sm transition-all hover:border-cyan-500/35 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-cyan-300/30 dark:hover:bg-white/[0.03]"
-                        >
-                          {file ? (
-                            <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
-                              <div className="flex min-w-0 items-center gap-4">
-                                <div className="rounded-2xl bg-cyan-600 p-3 text-white shadow-lg shadow-cyan-500/20 dark:bg-cyan-300 dark:text-slate-950 dark:shadow-cyan-300/10">
-                                  <FileImage size={20} />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{file.name}</div>
-                                  <div className="text-[10px] font-black opacity-40 uppercase tracking-tighter">{formatFileSize(file.size)}</div>
-                                </div>
-                              </div>
-                              <button type="button" onClick={() => clearSelectedFile('primary')} className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="rounded-3xl bg-white p-3.5 text-slate-300 shadow-sm dark:bg-white/5 dark:text-slate-600">
-                                <ImagePlus size={26} />
-                              </div>
-                              <div className="text-center space-y-1">
-                                <div className="text-[15px] font-bold text-slate-900 dark:text-white">Product Asset 1</div>
-                                <p className="text-xs font-medium text-slate-400">Opening hero image</p>
-                              </div>
-                              <button type="button" onClick={() => openFilePicker('primary')} className="mt-1 rounded-full bg-slate-900 px-[1.125rem] py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:bg-slate-700 active:scale-95 dark:bg-white dark:text-slate-900">
-                                Select File
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        <div
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={(event) => onDrop(event, 'secondary')}
-                          className="dashboard-upload-zone flex min-h-[12rem] flex-col items-center justify-center gap-3 rounded-[26px] border-2 border-dashed border-slate-200 bg-slate-50/50 p-5 backdrop-blur-sm transition-all hover:border-cyan-500/35 hover:bg-white dark:border-white/5 dark:bg-white/[0.01] dark:hover:border-cyan-300/30 dark:hover:bg-white/[0.03]"
-                        >
-                          {secondaryFile ? (
-                            <div className="flex w-full items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
-                              <div className="flex min-w-0 items-center gap-4">
-                                <div className="rounded-2xl bg-amber-500 p-3 text-white shadow-lg shadow-amber-500/20 dark:bg-amber-300 dark:text-slate-950 dark:shadow-amber-300/10">
-                                  <FileImage size={20} />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{secondaryFile.name}</div>
-                                  <div className="text-[10px] font-black opacity-40 uppercase tracking-tighter">{formatFileSize(secondaryFile.size)}</div>
-                                </div>
-                              </div>
-                              <button type="button" onClick={() => clearSelectedFile('secondary')} className="p-3 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="rounded-3xl bg-white p-3.5 text-slate-300 shadow-sm dark:bg-white/5 dark:text-slate-600">
-                                <ImagePlus size={26} />
-                              </div>
-                              <div className="text-center space-y-1">
-                                <div className="text-[15px] font-bold text-slate-900 dark:text-white">Product Asset 2</div>
-                                <p className="text-xs font-medium text-slate-400">Optional closing hero</p>
-                              </div>
-                              <button type="button" onClick={() => openFilePicker('secondary')} className="mt-1 rounded-full bg-slate-900 px-[1.125rem] py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:bg-slate-700 active:scale-95 dark:bg-white dark:text-slate-900">
-                                Select File
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => onSelectFile(event, 'primary')} />
-                        <input ref={secondaryFileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => onSelectFile(event, 'secondary')} />
-                      </div>
-
-                      <div className="grid gap-3.5 md:grid-cols-2">
-                        <div className="space-y-2.5">
-                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
-                            <Target size={12} />
-                            Product Category
-                          </label>
-                          <select
-                            value={productCategory}
-                            onChange={(event) => setProductCategory(event.target.value)}
-                            className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-cyan-500/45 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-cyan-300/35"
-                          >
-                            {categories.map((item) => (
-                              <option
-                                key={item.value}
-                                value={item.value}
-                                className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
-                              >
-                                {item.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
-                            <Palette size={12} />
-                            Visual Style
-                          </label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {styles.map((item) => (
-                              <button
-                                key={item.value}
-                                type="button"
-                                onClick={() => setStyle(item.value)}
-                                aria-pressed={style === item.value}
-                                title={item.tone}
-                                className={`style-btn rounded-xl border p-2 text-center transition-all ${style === item.value ? 'selected' : ''}`}
-                              >
-                                <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2.5">
-                        <label className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 ml-1">
-                          <div className="flex items-center gap-2">
-                            <PenTool size={12} />
-                            Proprietary Brief
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void pasteFromClipboard(descriptionTextareaRef.current, setDescription)}
-                              className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 transition-all hover:border-cyan-400 hover:text-cyan-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-cyan-300/40 dark:hover:text-cyan-200"
-                            >
-                              Paste
-                            </button>
-                            <span className={`${description.length > DESCRIPTION_MAX_LENGTH - 250 ? 'text-amber-500' : 'opacity-40'}`}>{description.length}/{DESCRIPTION_MAX_LENGTH}</span>
-                          </div>
+                        <label className="field">
+                          <span className="field__label">Campaign Title</span>
+                          <input
+                            type="text"
+                            className="field__control"
+                            placeholder="e.g. Summer Skincare Launch"
+                            value={form.title}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, title: event.target.value }))
+                            }
+                          />
                         </label>
-                        <textarea
-                          ref={descriptionTextareaRef}
-                          value={description}
-                          onChange={(event) => setDescription(event.target.value)}
-                          onPaste={(event) => handleTextareaPaste(event, setDescription)}
-                          rows={4}
-                          maxLength={DESCRIPTION_MAX_LENGTH}
-                          className="dashboard-field campaign-textarea w-full rounded-[24px] border border-slate-200 bg-white/50 px-4 py-3.5 text-[13px] font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-cyan-500/45 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-cyan-300/35 dark:placeholder:text-slate-600"
-                          placeholder="Describe the product, target audience, and the problem you solve..."
-                        />
-                      </div>
 
-                      <div className="pt-1">
-                        <button type="button" onClick={handleSubmit} disabled={submitting} className="dashboard-submit dashboard-action-btn dashboard-action-btn--primary group relative w-full overflow-hidden rounded-[22px] bg-slate-900 py-4 text-[12px] font-black uppercase tracking-[0.18em] text-white transition-all hover:scale-[1.01] hover:bg-slate-800 active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
-                          <div className="relative z-10 flex items-center justify-center gap-3">
-                            {submitting ? <LoaderCircle className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                            <span>{submitting ? 'Creating Studio Magic...' : 'Generate Campaign'}</span>
-                          </div>
-                          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-600 dark:from-cyan-300 dark:to-blue-300" />
-                        </button>
-                      </div>
-                    </div>
+                        <label className="field">
+                          <span className="field__label">Brief</span>
+                          <textarea
+                            className="field__control field__control--textarea"
+                            placeholder="Describe your video ad campaign goal..."
+                            value={form.description}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, description: event.target.value }))
+                            }
+                            rows={4}
+                          />
+                        </label>
                       </>
                     ) : (
-                      <div className="space-y-4">
-                              <div className="grid gap-2.5 sm:grid-cols-3">
-                          {photoPromptPresets.map((preset) => (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              onClick={() => applyPhotoPromptPreset(preset)}
-                              className="dashboard-preset-card group relative flex min-h-[7.25rem] flex-col items-start justify-between rounded-2xl border border-slate-200 bg-white/40 p-4 text-left transition-all hover:border-cyan-500/40 hover:bg-white hover:shadow-xl hover:shadow-cyan-500/5 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-cyan-300/30"
-                            >
-                              <div className="dashboard-preset-copy">
-                                <div className="dashboard-preset-title">{preset.label}</div>
-                                <div className="dashboard-preset-category">{preset.title}</div>
-                                <div className="dashboard-preset-style">
-                                  {formatCategoryLabel(preset.category)} • {styles.find((item) => item.value === preset.style)?.label || preset.style}
-                                </div>
-                              </div>
-                              <div className="dashboard-preset-icon" aria-hidden="true">
-                                <Camera size={12} />
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                      <>
+                        <label className="field">
+                          <span className="field__label">Photo Campaign Title</span>
+                          <input
+                            type="text"
+                            className="field__control"
+                            placeholder="e.g. Luxury Watch Hero Shot"
+                            value={photoTitle}
+                            onChange={(event) => setPhotoTitle(event.target.value)}
+                          />
+                        </label>
 
-                        <div className="grid gap-3.5 md:grid-cols-2">
-                          <div className="space-y-2.5">
-                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                              <Sparkles size={12} />
-                              Campaign Name
-                            </label>
-                            <input
-                              value={photoTitle}
-                              onChange={(event) => setPhotoTitle(event.target.value)}
-                              className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-cyan-500/45 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-cyan-300/35"
-                              placeholder="Ex: Midnight Elixir launch"
-                            />
-                          </div>
-
-                          <div className="space-y-2.5">
-                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                              <Target size={12} />
-                              Product Category
-                            </label>
-                            <select
-                              value={productCategory}
-                              onChange={(event) => setProductCategory(event.target.value)}
-                              className="dashboard-field w-full rounded-2xl border border-slate-200 bg-white/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-cyan-500/45 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:text-slate-100 dark:focus:border-cyan-300/35"
-                            >
-                              {categories.map((item) => (
-                                <option
-                                  key={item.value}
-                                  value={item.value}
-                                  className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
-                                >
-                                  {item.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3.5 md:grid-cols-2">
-                          <div className="space-y-2.5">
-                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                              <Palette size={12} />
-                              Visual Style
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {styles.map((item) => (
-                                <button
-                                  key={item.value}
-                                  type="button"
-                                  onClick={() => setStyle(item.value)}
-                                  aria-pressed={style === item.value}
-                                  title={item.tone}
-                                  className={`style-btn rounded-xl border p-2 text-center transition-all ${style === item.value ? 'selected' : ''}`}
-                                >
-                                  <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="space-y-2.5">
-                            <label className="ml-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                              <Layout size={12} />
-                              Aspect Ratio
-                            </label>
-                            <div className="grid grid-cols-3 gap-2">
-                              {photoAspectRatios.map((item) => (
-                                <button
-                                  key={item.value}
-                                  type="button"
-                                  onClick={() => setPhotoAspectRatio(item.value)}
-                                  aria-pressed={photoAspectRatio === item.value}
-                                  className={`style-btn rounded-xl border p-2 text-center transition-all ${photoAspectRatio === item.value ? 'selected' : ''}`}
-                                >
-                                  <span className="text-[10px] font-black uppercase tracking-tight">{item.label}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          <label className="ml-1 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-                            <div className="flex items-center gap-2">
-                              <PenTool size={12} />
-                              Photo Prompt
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void pasteFromClipboard(photoPromptTextareaRef.current, setPhotoPrompt)}
-                                className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 transition-all hover:border-cyan-400 hover:text-cyan-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-cyan-300/40 dark:hover:text-cyan-200"
-                              >
-                                Paste
-                              </button>
-                              <span className={`${photoPrompt.length > DESCRIPTION_MAX_LENGTH - 250 ? 'text-amber-500' : 'opacity-40'}`}>{photoPrompt.length}/{DESCRIPTION_MAX_LENGTH}</span>
-                            </div>
-                          </label>
+                        <label className="field">
+                          <span className="field__label">Photo Prompt</span>
                           <textarea
-                            ref={photoPromptTextareaRef}
+                            className="field__control field__control--textarea"
+                            placeholder="Describe the scene, mood, materials, camera angle, lighting..."
                             value={photoPrompt}
                             onChange={(event) => setPhotoPrompt(event.target.value)}
-                            onPaste={(event) => handleTextareaPaste(event, setPhotoPrompt)}
                             rows={5}
-                            maxLength={DESCRIPTION_MAX_LENGTH}
-                            className="dashboard-field campaign-textarea w-full rounded-[24px] border border-slate-200 bg-white/50 px-4 py-3.5 text-[13px] font-medium leading-relaxed outline-none transition-all placeholder:text-slate-400 focus:border-cyan-500/45 focus:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:focus:border-cyan-300/35 dark:placeholder:text-slate-600"
-                            placeholder="Describe the scene, mood, materials, camera angle, lighting, and luxury ad feel you want across the photos..."
                           />
-                        </div>
-
-                        <div className="rounded-[24px] border border-slate-200/80 bg-white/60 px-4 py-3 text-[12px] font-medium text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
-                          Puter runs this feature in the browser. The first time you use it, Puter may ask you to connect or sign in before it generates the images.
-                        </div>
-
-                        <div className="space-y-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={handlePhotoGenerate}
-                            disabled={photoGenerating}
-                            className="dashboard-submit dashboard-action-btn dashboard-action-btn--primary group relative w-full overflow-hidden rounded-[22px] bg-slate-900 py-4 text-[12px] font-black uppercase tracking-[0.18em] text-white transition-all hover:scale-[1.01] hover:bg-slate-800 active:scale-[0.99] disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                        </label>
+                        
+                        <label className="field">
+                          <span className="field__label">Aspect Ratio</span>
+                          <select
+                            className="field__control"
+                            value={photoAspectRatio}
+                            onChange={(event) => setPhotoAspectRatio(event.target.value)}
                           >
-                            <div className="relative z-10 flex items-center justify-center gap-3">
-                              {photoGenerating ? <LoaderCircle className="animate-spin" size={20} /> : <Camera size={20} />}
-                              <span>{photoGenerating ? (photoProgressLabel || 'Generating premium photos...') : 'Generate 3 Photo Ads'}</span>
-                            </div>
-                            <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-amber-400 via-cyan-500 to-blue-600 dark:from-amber-300 dark:to-blue-300" />
-                          </button>
-                          {photoProgressLabel ? (
-                            <div className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                              {photoProgressLabel}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
+                            <option value="1:1">1:1 Square</option>
+                            <option value="4:5">4:5 Portrait</option>
+                            <option value="16:9">16:9 Landscape</option>
+                          </select>
+                        </label>
+                      </>
                     )}
-                  </section>
 
-                  {/* RIGHT COLUMN: Studio Workspace */}
-                  <section className={`${shellCard} dashboard-workspace-card flex flex-col gap-4 bg-white/60 dark:bg-slate-950/40 backdrop-blur-2xl border-l border-slate-200 dark:border-white/5`}>
-                    <div className="flex flex-col gap-3.5">
-                      <div className="dashboard-workspace-head flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
-                        <div className="space-y-1">
-                          <h2 className="text-[1.6rem] font-black tracking-tight text-slate-900 dark:text-white">
-                            {creatorMode === 'video' ? 'Studio Workspace' : 'Photo Studio'}
-                          </h2>
-                          <div className="flex items-center gap-2">
-                            {creatorMode === 'video' && selectedJob ? (
-                              <div className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadgeClass(selectedJob.status)}`}>
-                                {selectedJob.status}
-                              </div>
-                            ) : null}
-                            {creatorMode === 'photo' ? (
-                              <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-700 shadow-sm dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-200">
-                                {photoGenerating ? 'Generating' : 'Photo mode'}
-                              </div>
-                            ) : null}
-                            <span className="text-xs font-bold text-slate-400 truncate max-w-[200px]">
-                              {creatorMode === 'video'
-                                ? selectedJob?.script?.title || 'No active workspace'
-                                : selectedPhotoAd?.title || 'No photo set selected'}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="dashboard-workspace-icon flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-400 dark:bg-white/5">
-                          {creatorMode === 'video' ? <Layout size={18} /> : <Camera size={18} />}
-                        </div>
-                      </div>
+                    <div className="field-grid">
+                      <label className="field">
+                        <span className="field__label">Style</span>
+                        <select
+                          className="field__control"
+                          value={form.style}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, style: event.target.value }))
+                          }
+                        >
+                          {createStyles.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
 
+                      <label className="field">
+                        <span className="field__label">Category</span>
+                        <select
+                          className="field__control"
+                          value={form.productCategory}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, productCategory: event.target.value }))
+                          }
+                        >
+                          {productCategories.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar">
-                      {creatorMode === 'video' ? (
-                      <AnimatePresence mode="wait">
-                        {activeWorkspaceTab === 'overview' && (
-                          <motion.div
-                            key="overview"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-4 pb-3"
+                    {submitError || error ? (
+                      <div className="studio-banner studio-banner--error">{submitError || error}</div>
+                    ) : null}
+
+                    <button 
+                      type="submit" 
+                      className="submit-button" 
+                      disabled={createMode === 'video' ? isSubmitting : photoGenerating}
+                    >
+                      {createMode === 'video' 
+                        ? (isSubmitting ? 'QUEUEING...' : 'QUEUE VIDEO') 
+                        : (photoGenerating ? (photoProgressLabel || 'GENERATING...') : 'GENERATE 3 PHOTOS')}
+                    </button>
+                    {photoGenerating && photoProgressLabel && (
+                      <div style={{ textAlign: 'center', fontSize: '10px', marginTop: '8px', fontWeight: 'bold', color: '#6366f1' }}>
+                        {photoProgressLabel}
+                      </div>
+                    )}
+                  </form>
+                </article>
+
+                <div className="feature-stack">
+                  <article className="panel panel--focus">
+                    <div className="panel-kicker">CURRENT FOCUS</div>
+                    <div className="focus-list">
+                      {focusItems.map((item) => (
+                        <div key={item.label} className="focus-row">
+                          <span className="focus-row__label">{item.label}</span>
+                          <span className="focus-row__value">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+
+                  {createMode === 'video' && (
+                    <article className={`panel panel--upload ${createFocus === 'upload' ? 'is-emphasis' : ''}`}>
+                      <div className="panel-kicker">ASSET UPLOAD</div>
+                      <div className="drop-zone">
+                        <Upload size={34} strokeWidth={1.8} />
+                        <div className="drop-zone__title">
+                          {form.images.length === 0 && 'Drop or pick up to 2 photos'}
+                          {form.images.length === 1 && '1 photo selected — add 1 more for the closing scene'}
+                          {form.images.length >= 2 && '2 photos selected ✓'}
+                        </div>
+                        <div className="drop-zone__meta">
+                          {form.images.length > 0
+                            ? form.images.map((f, i) => `${i === 0 ? 'Start' : 'End'}: ${f.name}`).join(' · ')
+                            : 'Photo 1 → opens video · Photo 2 → closes video'}
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden-file-input"
+                          onChange={handleFileChangeLocal}
+                        />
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            className="mini-button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={form.images.length >= 2}
                           >
-                            {selectedJob ? (
-                              <>
-                                <div className="grid gap-3.5 sm:grid-cols-2">
-                                  <div className="dashboard-insight-card dashboard-insight-card--stage rounded-[24px] border border-amber-500/15 bg-amber-500/[0.04] p-[1.125rem] dark:border-amber-300/10 dark:bg-amber-300/[0.04]">
-                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-amber-600 opacity-70 dark:text-amber-300">
-                                      <Activity size={14} />
-                                      Production Stage
-                                    </div>
-                                    <div className="mt-2.5 text-[1.55rem] font-black leading-none text-slate-900 dark:text-white">
-                                      {stageLabels[selectedJob.stage] || selectedJob.stage}
-                                    </div>
-                                  </div>
+                            {form.images.length === 0 ? 'SELECT PHOTOS' : form.images.length === 1 ? 'ADD CLOSING PHOTO' : '2 / 2 SELECTED'}
+                          </button>
+                          {form.images.length > 0 && (
+                            <button
+                              type="button"
+                              className="mini-button mini-button--ghost"
+                              onClick={() => setForm((c) => ({ ...c, images: [] }))}
+                            >
+                              CLEAR ALL
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
 
-                                  <div className="dashboard-insight-card dashboard-insight-card--progress rounded-[24px] border border-emerald-500/10 bg-emerald-500/[0.03] p-[1.125rem] dark:bg-emerald-500/[0.06]">
-                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-cyan-600 opacity-70 dark:text-cyan-300">
-                                      <Zap size={14} />
-                                      Live Progress
-                                    </div>
-                                    <div className="mt-2 flex items-end gap-2">
-                                      <div className="text-[1.9rem] font-black leading-none text-slate-900 dark:text-white">{selectedJob.progress}%</div>
-                                    </div>
-                                    <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/5">
-                                      <motion.div
-                                        className="h-full bg-cyan-500 shadow-[0_0_12px_rgba(14,165,233,0.35)]"
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${selectedJob.progress}%` }}
-                                        transition={{ duration: 1, ease: "easeOut" }}
-                                      />
-                                    </div>
+          {activeSection === 'workspace' && (
+            <section className="feature-section" ref={workspaceSectionRef}>
+              <div className="feature-section__header">
+                <div>
+                  <div className="panel-kicker">WORKSPACE</div>
+                  <h2>Preview the selected output</h2>
+                  <p>
+                    Review the active asset, monitor progress, and keep the original campaign brief close
+                    while the job moves through the queue.
+                  </p>
+                </div>
+
+                <div className="chip-switch">
+                  <button
+                    type="button"
+                    className={`chip-switch__item${workspaceFocus === 'preview' ? ' is-active' : ''}`}
+                    onClick={() => selectWorkspaceFocus('preview')}
+                  >
+                    PREVIEW
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-switch__item${workspaceFocus === 'brief' ? ' is-active' : ''}`}
+                    onClick={() => selectWorkspaceFocus('brief')}
+                  >
+                    BRIEF
+                  </button>
+                </div>
+              </div>
+
+              <div className="feature-section__body feature-section__body--workspace">
+                <article className={`panel panel--workspace ${workspaceFocus === 'preview' ? 'is-emphasis' : ''}`}>
+                  <div className="panel-kicker">LIVE PREVIEW</div>
+                  <div className="player">
+                    <div className="player__topline">
+                      <div className="player__label">
+                        <Sparkles size={14} strokeWidth={2.4} />
+                        <span>
+                          {creatorMode === 'video' 
+                            ? (activeJob?.title || 'VIDEO REEL')
+                            : (selectedPhotoAd?.title || 'PHOTO STUDIO')
+                          }
+                        </span>
+                      </div>
+                      <div className="player__badge">
+                        {creatorMode === 'video' 
+                          ? (activeJob ? formatDate(activeJob.createdAt) : 'NO JOB')
+                          : (selectedPhotoAd ? formatDate(selectedPhotoAd.createdAt) : 'NO SET')
+                        }
+                      </div>
+                    </div>
+
+                    <div className="player__body">
+                      <div className="player__title">
+                        {(() => {
+                          if (creatorMode === 'photo') {
+                            if (!selectedPhotoAd) return 'Select a photo set from history';
+                            return <div className="post-preview">{selectedPhotoAd.prompt}</div>;
+                          }
+                          if (!activeJob) return 'No job selected yet';
+                          if (activeJob.kind === 'video') {
+                            const vJob = activeJob as VideoJob;
+                            if (vJob.caption) {
+                              return <div className="post-preview">{vJob.caption}</div>;
+                            }
+                            if (vJob.script) {
+                              return (
+                                <div className="post-preview">
+                                  <div className="post-preview__body">
+                                    {vJob.script.hook || vJob.script.title || vJob.description} {vJob.script.cta}
+                                  </div>
+                                  <div className="post-preview__tags">
+                                    {(vJob.script.hashtags || []).map((tag) => (
+                                      <span key={tag}>#{tag.replace(/^#/, '')}</span>
+                                    ))}
                                   </div>
                                 </div>
+                              );
+                            }
+                          } else {
+                            const pJob = activeJob as PhotoJob;
+                            if (pJob.caption) {
+                              return <div className="post-preview">{pJob.caption}</div>;
+                            }
+                          }
+                          return activeJob.description;
+                        })()}
+                      </div>
+                    </div>
 
-                                <div className="dashboard-blueprint-card space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-white/[0.02]">
-                                  <div className="flex items-center justify-between border-b border-slate-50 pb-3 dark:border-white/5">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content Blueprint</div>
-                                    <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-cyan-300" />
-                                  </div>
+                    <div className="player__timing">
+                      <div className="player__timing-head">
+                        <span>PROGRESS</span>
+                        <span>{Math.min(100, Math.max(0, activeProgress || 0)).toFixed(0)}%</span>
+                      </div>
+                      <div className="player__bar">
+                        <div
+                          className="player__knob"
+                          style={{ left: `${Math.min(100, Math.max(0, activeProgress || 0))}%` }}
+                        />
+                      </div>
+                    </div>
 
-                                  <div className="space-y-[1.125rem]">
-                                    <div>
-                                      <span className="inline-block px-3 py-1 rounded-lg bg-slate-50 dark:bg-white/5 text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
-                                        Campaign Title
-                                      </span>
-                                      <h3 className="text-[1.45rem] font-black tracking-tight text-slate-900 dark:text-white leading-tight">
-                                        {selectedJob.script?.title || 'Drafting...'}
-                                      </h3>
-                                    </div>
-
-                                    <div className="grid gap-[1.125rem]">
-                                      <div className="space-y-2">
-                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-20">The Hook</span>
-                                        <p className="text-[15px] font-bold italic leading-relaxed text-slate-700 dark:text-slate-300">
-                                          "{selectedJob.script?.hook}"
-                                        </p>
-                                      </div>
-                                      <div className="h-px bg-slate-50 dark:bg-white/5" />
-                                      <div className="space-y-2">
-                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-20">Call to Action</span>
-                                        <p className="text-[1.05rem] font-black tracking-tight text-cyan-700 dark:text-cyan-300">
-                                          {selectedJob.script?.cta}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                {previewSourceUrl ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveWorkspaceTab('preview')}
-                                    className="dashboard-action-btn dashboard-action-btn--primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-4 text-[11px] font-black uppercase tracking-[0.18em]"
-                                  >
-                                    <PlayCircle size={17} />
-                                    Open video preview
-                                  </button>
-                                ) : null}
-                              </>
-                            ) : (
-                              <div className="dashboard-empty-state flex flex-col items-center justify-center py-16 text-center">
-                                <div className="relative mb-6">
-                                  <div className="absolute inset-0 rounded-full bg-cyan-500/15 blur-3xl animate-pulse dark:bg-cyan-300/10" />
-                                  <div className="relative rounded-full border border-slate-200 bg-white p-6 text-slate-200 dark:border-white/10 dark:bg-white/5 dark:text-white/5">
-                                    <Sparkles size={36} />
-                                  </div>
-                                </div>
-                                <h3 className="text-lg font-black uppercase tracking-tight text-slate-900 dark:text-white">System Ready</h3>
-                                <p className="mt-2.5 max-w-[280px] text-sm font-bold leading-relaxed text-slate-400">
-                                  Launch your first campaign briefly to activate the high-fidelity studio dashboard.
-                                </p>
-                              </div>
-                            )}
-                          </motion.div>
-                        )}
-
-                        {activeWorkspaceTab === 'preview' && (
-                          <motion.div
-                            key="preview"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-6 pb-3"
-                          >
-                            {previewSourceUrl ? (
-                              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                                <div className="dashboard-preview-stage relative group mx-auto w-full max-w-[320px]">
-                                  <div className="absolute -inset-6 bg-cyan-500/10 blur-[60px] opacity-0 transition-opacity duration-1000 group-hover:opacity-100 dark:bg-cyan-300/10" />
-                                  <div className="dashboard-preview-frame relative overflow-hidden rounded-[40px] border-[10px] border-slate-950 bg-black shadow-2xl dark:border-slate-900">
-                                    <video
-                                      ref={previewVideoRef}
-                                      controls
-                                      playsInline
-                                      src={previewSourceUrl}
-                                      onLoadedMetadata={(event) => {
-                                        const duration = Number(event.currentTarget.duration || 0) || 0;
-                                        if (duration > 0 && Number.isFinite(duration)) {
-                                          setPreviewDurationSeconds(duration);
+                    <div className={`player__preview${creatorMode === 'photo' ? ' player__preview--photo' : ''}`}>
+                      <div className={`player__preview-surface${creatorMode === 'photo' ? ' player__preview-surface--photo' : ''}`}>
+                        {creatorMode === 'photo' ? (
+                          selectedPhotoAd ? (
+                            <div className="photo-studio-preview">
+                              {/* 3 Photos Horizontal with Save/Download buttons */}
+                              <div className="photo-concepts-grid">
+                                {selectedPhotoAd.images.map((image: any, index: number) => (
+                                  <div key={index} className="photo-concept-card">
+                                    <div className="photo-concept-label">Concept {index + 1}</div>
+                                    <img
+                                      src={image.url}
+                                      alt={`Concept ${index + 1}`}
+                                      className="photo-concept-img"
+                                    />
+                                    <a
+                                      href={image.url}
+                                      download={`${(selectedPhotoAd.title || 'photo').replace(/\s+/g, '-')}-concept-${index + 1}.jpg`}
+                                      className="photo-concept-save"
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        try {
+                                          const res = await fetch(image.url);
+                                          const blob = await res.blob();
+                                          const url = URL.createObjectURL(blob);
+                                          const a = document.createElement('a');
+                                          a.href = url;
+                                          a.download = `${(selectedPhotoAd.title || 'photo').replace(/\s+/g, '-')}-concept-${index + 1}.jpg`;
+                                          a.click();
+                                          URL.revokeObjectURL(url);
+                                        } catch {
+                                          window.open(image.url, '_blank');
                                         }
                                       }}
-                                      className="aspect-[9/16] w-full bg-black object-contain shadow-inner"
-                                    />
-                                  </div>
-                                  <div className="mt-4 flex justify-center">
-                                    <a
-                                      href={previewSourceUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="dashboard-pill-btn inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition-all hover:border-cyan-200 hover:text-cyan-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                                     >
-                                      <ExternalLink size={14} />
-                                      Open video
-                                    </a>
-                                  </div>
-                                </div>
-
-                                <div className="dashboard-segment-card rounded-[30px] border border-slate-200 bg-white p-6 text-slate-900 shadow-[0_20px_60px_rgba(99,102,241,0.12)] dark:border dark:border-white/10 dark:bg-slate-900/50 dark:text-white dark:shadow-[0_20px_60px_rgba(255,209,102,0.06)] dark:backdrop-blur-xl">
-                                  <div className="mb-6 flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <div className="rounded-xl border border-cyan-100 bg-cyan-50 p-2 dark:border-transparent dark:bg-cyan-300/10">
-                                        <Scissors size={20} className="text-cyan-700 dark:text-cyan-300" />
-                                      </div>
-                                      <span className="text-base font-black tracking-tight uppercase">Segment Studio</span>
-                                    </div>
-                                    <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:border-transparent dark:bg-amber-300/10 dark:text-amber-300">
-                                      {formatSeconds(Math.max(0, trimEnd - trimStart))} Segment
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-7">
-                                    <div className="space-y-3.5">
-                                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
-                                        <span>In-point</span>
-                                        <span className="text-cyan-700 dark:text-cyan-300">{formatSeconds(trimStart)}</span>
-                                      </div>
-                                      <div className="flex items-center justify-end gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentTime = previewVideoRef.current?.currentTime;
-                                            if (currentTime == null) return;
-                                            const nextStart = Number(currentTime) || 0;
-                                            setTrimStart(nextStart);
-                                            setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
-                                          }}
-                                          className="dashboard-pill-btn rounded-full border border-slate-200 bg-slate-100 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
-                                        >
-                                          Set from playhead
-                                        </button>
-                                      </div>
-                                      <input
-                                        type="range"
-                                        min={0}
-                                        max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
-                                        step={0.1}
-                                        value={trimStart}
-                                        onChange={(event) => {
-                                          const nextStart = Number(event.target.value) || 0;
-                                          setTrimStart(nextStart);
-                                          setTrimEnd((current) => (current > nextStart + 0.05 ? current : nextStart + 0.5));
-                                        }}
-                                        className="w-full accent-cyan-600 dark:accent-cyan-300"
-                                      />
-                                    </div>
-                                    <div className="space-y-3.5">
-                                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
-                                        <span>Out-point</span>
-                                        <span className="text-cyan-700 dark:text-cyan-300">{formatSeconds(trimEnd)}</span>
-                                      </div>
-                                      <div className="flex items-center justify-end gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentTime = previewVideoRef.current?.currentTime;
-                                            if (currentTime == null) return;
-                                            const maxSeconds = Number(selectedJob.metadata?.durationSeconds ?? previewDurationSeconds ?? 0) || 0;
-                                            const nextEnd = Math.max(0, Math.min(Number(currentTime) || 0, maxSeconds || Number(currentTime) || 0));
-                                            setTrimEnd(nextEnd);
-                                          }}
-                                          className="dashboard-pill-btn rounded-full border border-slate-200 bg-slate-100 px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/15 dark:hover:border-white/20"
-                                        >
-                                          Set from playhead
-                                        </button>
-                                      </div>
-                                      <input
-                                        type="range"
-                                        min={0}
-                                        max={selectedJob.metadata?.durationSeconds || previewDurationSeconds || 0}
-                                        step={0.1}
-                                        value={trimEnd}
-                                        onChange={(event) => {
-                                          const nextEnd = Number(event.target.value) || 0;
-                                          setTrimEnd(nextEnd);
-                                          setTrimStart((current) => (nextEnd > current + 0.05 ? current : Math.max(0, nextEnd - 0.5)));
-                                        }}
-                                        className="w-full accent-cyan-600 dark:accent-cyan-300"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="mt-8 grid grid-cols-2 gap-3">
-                                    <button disabled={trimLoading} onClick={handleTrim} className="dashboard-action-btn dashboard-action-btn--primary rounded-2xl bg-cyan-600 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 dark:bg-gradient-to-r dark:from-cyan-300 dark:to-blue-300 dark:text-slate-900 shadow-[0_8px_24px_rgba(14,165,233,0.3)] dark:shadow-[0_8px_24px_rgba(103,232,249,0.18)]">
-                                      {trimLoading ? 'Processing...' : 'Export Clip'}
-                                    </button>
-                                    <a href={masterVideoUrl} target="_blank" rel="noreferrer" className="dashboard-action-btn dashboard-action-btn--secondary flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white py-4 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 transition-all hover:border-cyan-200 hover:bg-slate-50 hover:text-cyan-700 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:border-cyan-300/20 dark:hover:bg-white/20 dark:hover:text-white">
-                                      <Download size={16} />
-                                      Full Master
-                                    </a>
-                                  </div>
-
-                                  {selectedJob.output?.trim?.asset?.url ? (
-                                    <div className="dashboard-export-card mt-6 space-y-3.5 rounded-[24px] border border-slate-200 bg-slate-50 p-[1.125rem] dark:border-white/10 dark:bg-white/5">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/60">
-                                          Latest exported clip
-                                        </div>
-                                        <a
-                                          href={selectedJob.output.trim.asset.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          download={`clip-${Math.round(trimStart * 10) / 10}-${Math.round(trimEnd * 10) / 10}.mp4`}
-                                          className="dashboard-pill-btn inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition-all hover:border-cyan-200 hover:bg-slate-50 hover:text-cyan-700 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:border-cyan-300/20 dark:hover:bg-white/15 dark:hover:text-white"
-                                        >
-                                          <Download size={14} />
-                                          Download clip
-                                        </a>
-                                      </div>
-                                      <video
-                                        controls
-                                        playsInline
-                                        src={selectedJob.output.trim.asset.url}
-                                        className="aspect-[9/16] w-full rounded-[22px] bg-black object-contain"
-                                      />
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="dashboard-preview-empty flex flex-col items-center justify-center py-16 text-center text-slate-400">
-                                <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                                  className="mb-5 rounded-full bg-slate-50 p-6 dark:bg-white/5"
-                                >
-                                  <Clapperboard size={36} className="opacity-20" />
-                                </motion.div>
-                                <h4 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-tight">Finalizing Assets</h4>
-                                <p className="mt-2 text-sm font-medium opacity-50">Visual data is being processed in the background.</p>
-                              </div>
-                            )}
-                          </motion.div>
-                        )}
-
-                        {activeWorkspaceTab === 'history' && (
-                          <motion.div
-                            key="history"
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            className="space-y-4 pb-4"
-                          >
-                            <div className="grid gap-3">
-                              {jobs.length === 0 ? (
-                                <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">Zero Records found.</div>
-                              ) : (
-                                jobs.map((job) => (
-                                  <button
-                                    key={job._id}
-                                    onClick={() => openJobWorkspace(job)}
-                                    className={`dashboard-history-item ${selectedJobId === job._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 transition-all duration-300`}
-                                  >
-                                    <div className="flex min-w-0 flex-1 items-center gap-4">
-                                      <div className={`shrink-0 h-2.5 w-2.5 rounded-full shadow-sm ${job.status === 'completed' ? 'bg-emerald-500 shadow-emerald-500/40' :
-                                          job.status === 'failed' ? 'bg-rose-500 shadow-rose-500/40 animate-pulse' :
-                                            'bg-amber-400 shadow-amber-400/40 animate-pulse'
-                                        }`} />
-                                      <div className="text-left min-w-0">
-                                        <div className="max-w-[200px] truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">
-                                          {job.script?.title || job.style}
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-1">
-                                          <span className="text-[9px] font-black uppercase opacity-30 tracking-widest truncate">
-                                            {formatCategoryLabel(job.productCategory || 'general-product')}
-                                          </span>
-                                          <div className="shrink-0 h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
-                                          <span className={`text-[9px] font-black ${job.status === 'completed' ? 'text-emerald-500' :
-                                              job.status === 'failed' ? 'text-rose-500' :
-                                                'text-cyan-600 dark:text-cyan-300'
-                                            }`}>
-                                            {job.status === 'completed' ? 'Ready' : job.status === 'failed' ? 'Failed' : `${job.progress}% Sync`}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {job.status === 'failed' && (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => { e.stopPropagation(); handleRegenerate(job); }}
-                                          className="dashboard-pill-btn rounded-xl bg-cyan-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-700 transition-all hover:bg-cyan-600 hover:text-white dark:bg-cyan-300/10 dark:text-cyan-300 dark:hover:bg-cyan-300 dark:hover:text-slate-900"
-                                        >
-                                          Retry
-                                        </button>
-                                      )}
-                                      <div className="flex h-9 w-9 translate-x-2 items-center justify-center rounded-2xl bg-slate-50 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 dark:bg-white/5">
-                                        <ChevronRight size={18} className="text-slate-400" />
-                                      </div>
-                                    </div>
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                      ) : (
-                        <div className="space-y-4 pb-4">
-                          {activeWorkspaceTab === 'history' ? (
-                            <div ref={photoHistoryRef} className="space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                                    Photo History
-                                  </div>
-                                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">
-                                    Saved photo ad sets
-                                  </h3>
-                                </div>
-                                <div className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[10px] font-black text-cyan-700 dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-200">
-                                  {photoAds.length} total
-                                </div>
-                              </div>
-
-                              <div className="grid gap-3">
-                                {photoAds.length === 0 ? (
-                                  <div className="dashboard-empty-state flex min-h-[16rem] flex-col items-center justify-center gap-4 text-center">
-                                    <div className="rounded-full border border-slate-200 bg-white p-6 text-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-600">
-                                      <Camera size={34} />
-                                    </div>
-                                    <div>
-                                      <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
-                                        No photo history yet
-                                      </h3>
-                                      <p className="mt-2 max-w-[340px] text-sm font-medium text-slate-400">
-                                        Generate a photo ad set and it will appear here.
-                                      </p>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  photoAds.map((item) => (
-                                    <button
-                                      key={item._id}
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedPhotoAdId(item._id);
-                                        setActiveWorkspaceTab('preview');
-                                      }}
-                                      className={`dashboard-history-item ${selectedPhotoAdId === item._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 text-left transition-all duration-300`}
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">
-                                          {item.title}
-                                        </div>
-                                        <div className="mt-1 flex items-center gap-2">
-                                          <span className="truncate text-[9px] font-black uppercase tracking-widest opacity-30">
-                                            {formatCategoryLabel(item.productCategory || 'general-product')}
-                                          </span>
-                                          <div className="h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
-                                          <span className="text-[9px] font-black text-cyan-600 dark:text-cyan-300">
-                                            {item.images.length} images
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <ChevronRight size={18} className="text-slate-400 transition-transform group-hover:translate-x-1" />
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          ) : selectedPhotoAd ? (
-                            <>
-                              <div className="grid gap-3.5 sm:grid-cols-3">
-                                <div className="dashboard-insight-card rounded-[24px] border border-cyan-500/10 bg-cyan-500/[0.03] p-[1.125rem] dark:bg-cyan-400/[0.05]">
-                                  <div className="text-[9px] font-black uppercase tracking-widest text-cyan-600 opacity-70 dark:text-cyan-300">
-                                    Campaign Name
-                                  </div>
-                                  <div className="mt-2.5 text-[1.2rem] font-black leading-tight text-slate-900 dark:text-white">
-                                    {selectedPhotoAd.title}
-                                  </div>
-                                </div>
-                                <div className="dashboard-insight-card rounded-[24px] border border-amber-500/10 bg-amber-500/[0.03] p-[1.125rem] dark:bg-amber-300/[0.05]">
-                                  <div className="text-[9px] font-black uppercase tracking-widest text-amber-600 opacity-70 dark:text-amber-300">
-                                    Category
-                                  </div>
-                                  <div className="mt-2.5 text-[1.2rem] font-black leading-tight text-slate-900 dark:text-white">
-                                    {formatCategoryLabel(selectedPhotoAd.productCategory || 'general-product')}
-                                  </div>
-                                </div>
-                                <div className="dashboard-insight-card rounded-[24px] border border-emerald-500/10 bg-emerald-500/[0.03] p-[1.125rem] dark:bg-emerald-400/[0.05]">
-                                  <div className="text-[9px] font-black uppercase tracking-widest text-emerald-600 opacity-70 dark:text-emerald-300">
-                                    Output
-                                  </div>
-                                  <div className="mt-2.5 text-[1.2rem] font-black leading-tight text-slate-900 dark:text-white">
-                                    {selectedPhotoAd.images.length} luxury frames
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="dashboard-blueprint-card space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-white/[0.02]">
-                                <div className="flex items-center justify-between border-b border-slate-50 pb-3 dark:border-white/5">
-                                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Photo Brief</div>
-                                  <div className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-700 dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-200">
-                                    {selectedPhotoAd.aspectRatio}
-                                  </div>
-                                </div>
-                                <p className="text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                                  {selectedPhotoAd.prompt}
-                                </p>
-                              </div>
-
-                              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                                {selectedPhotoAd.images.map((image, index) => (
-                                  <div
-                                    key={`${selectedPhotoAd._id}-${index + 1}`}
-                                    className="dashboard-export-card overflow-hidden rounded-[26px] border border-slate-200 bg-white p-3 transition-transform hover:-translate-y-1 dark:border-white/10 dark:bg-white/[0.03]"
-                                  >
-                                    <div className="mb-3 flex items-center justify-between">
-                                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                                        Concept 0{index + 1}
-                                      </span>
-                                      <div className="flex items-center gap-2">
-                                        <a
-                                          href={image.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="dashboard-pill-btn inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600 transition-all hover:border-cyan-200 hover:text-cyan-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-white"
-                                        >
-                                          <ExternalLink size={12} />
-                                          Open
-                                        </a>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDownloadPhoto(image.url || '', buildPhotoDownloadName(selectedPhotoAd.title, index))}
-                                          className="dashboard-pill-btn inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600 transition-all hover:border-cyan-200 hover:text-cyan-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-white"
-                                          title="Download image"
-                                        >
-                                          <Download size={12} />
-                                          Save
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <a href={image.url} target="_blank" rel="noreferrer">
-                                      <img
-                                        src={image.url}
-                                        alt={`${selectedPhotoAd.title} concept ${index + 1}`}
-                                        className="aspect-square w-full rounded-[18px] object-cover"
-                                      />
+                                      ⬇ SAVE PHOTO
                                     </a>
                                   </div>
                                 ))}
                               </div>
 
-                              {activeWorkspaceTab === 'overview' ? (
-                              <div className="space-y-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                                  Photo History
-                                </div>
-                                <div className="grid gap-3">
-                                  {photoAds.map((item) => (
-                                    <button
-                                      key={item._id}
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedPhotoAdId(item._id);
-                                        setActiveWorkspaceTab('preview');
-                                      }}
-                                      className={`dashboard-history-item ${selectedPhotoAdId === item._id ? 'selected' : ''} group relative flex items-center justify-between rounded-[24px] border p-4 text-left transition-all duration-300`}
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="truncate text-sm font-black tracking-tight text-slate-900 dark:text-white">
-                                          {item.title}
-                                        </div>
-                                        <div className="mt-1 flex items-center gap-2">
-                                          <span className="truncate text-[9px] font-black uppercase tracking-widest opacity-30">
-                                            {formatCategoryLabel(item.productCategory || 'general-product')}
-                                          </span>
-                                          <div className="h-1 w-1 rounded-full bg-slate-300 dark:bg-white/20" />
-                                          <span className="text-[9px] font-black text-cyan-600 dark:text-cyan-300">
-                                            {item.images.length} images
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <ChevronRight size={18} className="text-slate-400 transition-transform group-hover:translate-x-1" />
-                                    </button>
+                              {/* Social Caption + Hashtags — below photos */}
+                              <div className="photo-caption-block">
+                                <p className="photo-caption-text">{selectedPhotoAd.prompt}</p>
+                                <div className="photo-caption-tags">
+                                  {(selectedPhotoAd.title || '').split(' ').filter(Boolean).slice(0, 4).map((w: string, i: number) => (
+                                    <span key={i} className="photo-caption-tag">#{w.toLowerCase().replace(/[^a-z0-9]/g, '')}</span>
                                   ))}
+                                  {selectedPhotoAd.style && <span className="photo-caption-tag">#{selectedPhotoAd.style}</span>}
+                                  {selectedPhotoAd.productCategory && <span className="photo-caption-tag">#{selectedPhotoAd.productCategory.replace(/-/g, '')}</span>}
+                                  <span className="photo-caption-tag">#aimarketing</span>
+                                  <span className="photo-caption-tag">#brand</span>
+                                  <span className="photo-caption-tag">#contentcreator</span>
                                 </div>
                               </div>
-                              ) : null}
-                            </>
+                            </div>
                           ) : (
-                            <div className="dashboard-empty-state flex min-h-[20rem] flex-col items-center justify-center gap-4 text-center">
-                              <div className="rounded-full border border-slate-200 bg-white p-6 text-slate-300 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-600">
-                                <Camera size={34} />
+                            <div className="player__empty-state">
+                              <span>No photo set selected</span>
+                              <small>Generate a set or pick one from history</small>
+                            </div>
+                          )
+                        ) : activeOutputUrl ? (
+                          activeJob?.kind === 'photo' ? (
+                            <img
+                              className="player__asset"
+                              src={activeOutputUrl}
+                              alt={activeJob.description || 'Campaign output'}
+                            />
+                          ) : (
+                            <video
+                              id="main-video-player"
+                              key={activeOutputUrl}
+                              className="player__asset"
+                              controls
+                              playsInline
+                              loop
+                              autoPlay
+                              preload="auto"
+                              crossOrigin="anonymous"
+                              onLoadedData={(e) => {
+                                e.currentTarget.play().catch(() => {});
+                              }}
+                            >
+                              <source src={activeOutputUrl.replace('localhost', '127.0.0.1')} type="video/mp4" />
+                              <source src={activeOutputUrl} type="video/mp4" />
+                              Your browser does not support the video tag.
+                            </video>
+                          )
+                        ) : (
+                          <div className="player__empty-state">
+                            {puterStatus ? (
+                              <div className="puter-loader">
+                                <Sparkles className="puter-loader__icon" size={32} />
+                                <span>{puterStatus}</span>
+                                <small>Please wait, AI is painting your vision...</small>
                               </div>
-                              <div>
-                                <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
-                                  Photo studio ready
-                                </h3>
-                                <p className="mt-2 max-w-[340px] text-sm font-medium text-slate-400">
-                                  Add a campaign name and a rich prompt, then the studio will generate three polished ad photo concepts for you.
-                                </p>
-                              </div>
+                            ) : (
+                              <>
+                                <span>No preview yet</span>
+                                <small>Select a job or queue a new campaign</small>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {activeJob?.kind === 'video' && (activeJob as VideoJob).caption && (
+                        <div className="photo-caption-block" style={{ marginTop: '20px' }}>
+                          <p className="photo-caption-text">{(activeJob as VideoJob).caption}</p>
+                          {(activeJob as VideoJob).script?.hashtags && (activeJob as VideoJob).script!.hashtags!.length > 0 && (
+                            <div className="photo-caption-tags">
+                              {(activeJob as VideoJob).script!.hashtags!.map(tag => (
+                                <span key={tag} className="photo-caption-tag">
+                                  {tag.startsWith('#') ? tag : `#${tag}`}
+                                </span>
+                              ))}
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                  </section>
-                </main>
+
+                    <div className="player__actions" style={creatorMode === 'photo' ? { display: 'none' } : {}}>
+                      <button
+                        type="button"
+                        className="player-button player-button--solid"
+                        onClick={openOutput}
+                        disabled={!activeOutputUrl}
+                      >
+                        {activeOutputUrl ? 'OPEN ASSET' : 'NO OUTPUT'}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+
+                <div className="feature-stack">
+                  <article className={`panel panel--brief ${workspaceFocus === 'brief' ? 'is-emphasis' : ''}`}>
+                    <div className="brief-head">
+                      <div className="panel-kicker">CAMPAIGN BRIEF</div>
+                      <div className="brief-count">{activeJob?.description?.length || 0}/800</div>
+                    </div>
+                    <div className="brief-editor">
+                      <div className="brief-editor__content">
+                        {briefTab === 'audience' && (
+                          <>
+                            <div className="brief-editor__line brief-editor__line--main" style={{ color: '#8b5cf6' }}>TARGET AUDIENCE</div>
+                            <div className="brief-editor__line">
+                              {activeJob?.audience 
+                                ? activeJob.audience 
+                                : activeJob 
+                                  ? `Primary target: High-intent consumers interested in ${activeJob.style || 'modern'} ${activeJob.productCategory || 'products'}.`
+                                  : 'Define who this campaign is for (e.g., "Luxury watch enthusiasts aged 25-45").'}
+                            </div>
+                          </>
+                        )}
+                        {briefTab === 'offer' && (
+                          <>
+                            <div className="brief-editor__line brief-editor__line--main" style={{ color: '#6366f1' }}>THE OFFER</div>
+                            <div className="brief-editor__line">
+                              {activeJob?.offer 
+                                ? activeJob.offer 
+                                : activeJob 
+                                  ? `The core promise: High-end ${activeJob.title || 'product'} visual storytelling with ${activeJob.style} aesthetics.`
+                                  : 'What are you selling? (e.g., "Limited edition ceramic timepiece with free shipping").'}
+                            </div>
+                          </>
+                        )}
+                        {briefTab === 'proof' && (
+                          <>
+                            <div className="brief-editor__line brief-editor__line--main" style={{ color: '#ec4899' }}>PROOF & VALUE</div>
+                            <div className="brief-editor__line">
+                              {activeJob?.proof 
+                                ? activeJob.proof 
+                                : activeJob 
+                                  ? `Value Proposition: Professional grade AI-rendered assets optimized for social conversion.`
+                                  : 'Why should they trust you? (e.g., "Swiss-made movement, scratch-resistant sapphire").'}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="brief-chips">
+                      <button 
+                        type="button"
+                        className={`brief-chip ${briefTab === 'audience' ? 'is-active' : ''}`}
+                        onClick={() => setBriefTab('audience')}
+                      >
+                        AUDIENCE
+                      </button>
+                      <button 
+                        type="button"
+                        className={`brief-chip ${briefTab === 'offer' ? 'is-active' : ''}`}
+                        onClick={() => setBriefTab('offer')}
+                      >
+                        OFFER
+                      </button>
+                      <button 
+                        type="button"
+                        className={`brief-chip ${briefTab === 'proof' ? 'is-active' : ''}`}
+                        onClick={() => setBriefTab('proof')}
+                      >
+                        PROOF
+                      </button>
+                    </div>
+                  </article>
+
+                  <article className="panel panel--metrics">
+                    <div className="panel-kicker">WORKSPACE SNAPSHOT</div>
+                    <div className="metrics-grid">
+                      <div className="metric">
+                        <div className="metric__number">{isLoadingJobs ? '...' : videoCount}</div>
+                        <div className="metric__copy">
+                          <div className="metric__label">Videos</div>
+                          <div className="metric__sub">current backend jobs</div>
+                        </div>
+                      </div>
+                      <div className="metric metric--split">
+                        <div className="metric__number">{isLoadingJobs ? '...' : photoCount}</div>
+                        <div className="metric__copy">
+                          <div className="metric__label">Photos</div>
+                          <div className="metric__sub">rendered still campaigns</div>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeSection === 'history' && (
+            <section className="feature-section feature-section--history" ref={historySectionRef}>
+              <div className="feature-section__header">
+                <div>
+                  <div className="panel-kicker">HISTORY</div>
+                  <h2>{historyMode === 'video' ? 'Video history' : 'Photo history'}</h2>
+                  <p>
+                    Move through recent campaign jobs by format, then open any item to inspect its brief,
+                    status, and generated output.
+                  </p>
                 </div>
 
-                <AnimatePresence>
-                  {isCreditsModalOpen ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 py-8 backdrop-blur-sm"
-                      onClick={() => setIsCreditsModalOpen(false)}
+                <div className="history-switch">
+                  {createModes.map((mode) => (
+                    <button
+                      key={mode.kind}
+                      type="button"
+                      className={`history-switch__item${historyMode === mode.kind ? ' is-active' : ''}`}
+                      onClick={() => selectHistoryMode(mode.kind)}
                     >
-                      <motion.div
-                        initial={{ scale: 0.96, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.96, opacity: 0 }}
-                        className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-950"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 dark:border-white/10">
-                          <div className="flex min-w-0 gap-4">
-                            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950 sm:flex">
-                              <Coins size={21} />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
-                                Demo checkout
-                              </div>
-                              <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-                                Buy more credits
-                              </h3>
-                              <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">
-                                Pick a package, confirm the demo payment, and the backend records it in your credit ledger.
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setIsCreditsModalOpen(false)}
-                            className="dashboard-icon-button flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-                            aria-label="Close credit checkout"
-                            title="Close"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-
-                        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-                          <div className="space-y-4">
-                            <div className="grid gap-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-3">
-                              <div>
-                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Balance</div>
-                                <div className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{auth.credits}</div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Selected</div>
-                                <div className="mt-1 text-2xl font-black text-cyan-700 dark:text-cyan-200">
-                                  {selectedCreditPackage ? `+${selectedCreditPackage.credits}` : '+0'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">After checkout</div>
-                                <div className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{projectedCreditBalance}</div>
-                              </div>
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-3">
-                              {creditPackages.length === 0 ? (
-                                <div className="col-span-full rounded-[18px] border border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
-                                  Loading credit packages...
-                                </div>
-                              ) : (
-                                creditPackages.map((item) => {
-                                  const isSelected = selectedCreditPackage?.id === item.id;
-
-                                  return (
-                                    <button
-                                      key={item.id}
-                                      type="button"
-                                      onClick={() => setSelectedCreditPackageId(item.id)}
-                                      className={`group relative min-h-[12rem] overflow-hidden rounded-[20px] border p-4 text-left transition-all ${
-                                        isSelected
-                                          ? 'border-cyan-400 bg-white shadow-[0_18px_45px_rgba(8,145,178,0.18)] ring-1 ring-cyan-200 dark:border-cyan-300/60 dark:bg-white/[0.06] dark:ring-cyan-300/20'
-                                          : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-[0_14px_35px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-cyan-300/30'
-                                      }`}
-                                    >
-                                      {isSelected ? (
-                                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-400 via-cyan-500 to-blue-600" />
-                                      ) : null}
-                                      {item.badge ? (
-                                        <span className="absolute right-3 top-3 rounded-full bg-slate-950 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white dark:bg-white dark:text-slate-950">
-                                          {item.badge}
-                                        </span>
-                                      ) : null}
-                                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isSelected ? 'bg-cyan-600 text-white' : 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'}`}>
-                                        <CreditCard size={17} />
-                                      </div>
-                                      <div className="mt-4 text-lg font-black tracking-tight text-slate-950 dark:text-white">
-                                        {item.name}
-                                      </div>
-                                      <div className="mt-1 text-3xl font-black text-cyan-700 dark:text-cyan-200">
-                                        {item.credits}
-                                        <span className="ml-1 text-sm font-bold text-slate-400">credits</span>
-                                      </div>
-                                      <p className="mt-3 text-[12px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-                                        {item.description}
-                                      </p>
-                                      <div className="mt-4 flex items-center justify-between gap-3">
-                                        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-                                          {item.priceLabel}
-                                        </div>
-                                        <span className={`h-4 w-4 rounded-full border ${isSelected ? 'border-cyan-600 bg-cyan-600 shadow-[inset_0_0_0_4px_white]' : 'border-slate-300 dark:border-white/20'}`} />
-                                      </div>
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-
-                            <div className="flex items-start gap-3 rounded-[18px] border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
-                              <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-500" />
-                              <span>
-                                No real card, bank, or Stripe account is used. For the university demo, confirmation behaves like a payment-provider callback.
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
-                              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                                <ReceiptText size={14} />
-                                Order summary
-                              </div>
-                              <div className="mt-4 rounded-[18px] bg-white p-4 dark:bg-slate-950/40">
-                                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">New balance</div>
-                                <div className="mt-1 flex items-end justify-between gap-4">
-                                  <strong className="text-4xl font-black text-slate-950 dark:text-white">{projectedCreditBalance}</strong>
-                                  <span className="pb-1 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300">
-                                    {selectedCreditPackage ? `+${selectedCreditPackage.credits} credits` : 'No package'}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="mt-3 flex items-center justify-between gap-3">
-                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Selected package</span>
-                                <strong className="text-right text-sm text-slate-950 dark:text-white">
-                                  {selectedCreditPackage?.name || 'None'}
-                                </strong>
-                              </div>
-                              <div className="mt-3 flex items-center justify-between gap-3">
-                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Demo total</span>
-                                <strong className="text-right text-sm text-slate-950 dark:text-white">
-                                  {selectedCreditPackage?.priceLabel || '--'}
-                                </strong>
-                              </div>
-
-                              {creditCheckoutError ? (
-                                <div className="mt-4 flex items-start gap-2 rounded-[16px] border border-rose-200 bg-rose-50 p-3 text-[12px] font-bold text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-100">
-                                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-                                  {creditCheckoutError}
-                                </div>
-                              ) : null}
-
-                              {creditCheckoutSuccess ? (
-                                <div className="mt-4 flex items-start gap-2 rounded-[16px] border border-emerald-200 bg-emerald-50 p-3 text-[12px] font-bold text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-300/10 dark:text-emerald-100">
-                                  <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
-                                  {creditCheckoutSuccess}
-                                </div>
-                              ) : null}
-
-                              <button
-                                type="button"
-                                onClick={handleDemoCreditPurchase}
-                                disabled={creditCheckoutLoading || !selectedCreditPackage}
-                                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition-all hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
-                              >
-                                {creditCheckoutLoading ? <LoaderCircle className="animate-spin" size={16} /> : <CreditCard size={16} />}
-                                Confirm demo payment
-                              </button>
-                            </div>
-
-                            <div className="rounded-[22px] border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                              <div className="mb-3 flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                                  Credit history
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => refreshCreditTransactions().catch(() => undefined)}
-                                  className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-300"
-                                >
-                                  Refresh
-                                </button>
-                              </div>
-                              <div className="grid gap-2">
-                                {creditTransactions.length === 0 ? (
-                                  <div className="rounded-[16px] border border-dashed border-slate-200 p-4 text-center text-[12px] font-bold text-slate-400 dark:border-white/10">
-                                    No credit history yet.
-                                  </div>
-                                ) : (
-                                  creditTransactions.slice(0, 6).map((transaction) => (
-                                    <div
-                                      key={transaction.id}
-                                      className="flex items-start justify-between gap-3 rounded-[16px] border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-slate-900/60"
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="truncate text-[12px] font-black text-slate-900 dark:text-white">
-                                          {transaction.description}
-                                        </div>
-                                        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                                          {formatCreditSource(transaction.source)} - Balance {transaction.balanceAfter} - {formatCreditDate(transaction.createdAt)}
-                                        </div>
-                                      </div>
-                                      <div className={`shrink-0 text-sm font-black ${transaction.amount >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
-                                        {formatCreditAmount(transaction.amount)}
-                                      </div>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                  {isPreviewOpen && previewUrl ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/88 px-4 py-8"
-                      onClick={() => setIsPreviewOpen(false)}
-                    >
-                      <motion.div
-                        initial={{ scale: 0.96, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.96, opacity: 0 }}
-                        className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-slate-900 p-5 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <div className="mb-4 flex items-center justify-between gap-4">
-                          <div>
-                            <div className="text-sm font-medium text-white">{file?.name || 'Selected image'}</div>
-                            <div className="text-xs text-slate-400">Quick preview only. The studio keeps the upload compact in the form.</div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setIsPreviewOpen(false)}
-                            className="rounded-full border border-white/10 px-4 py-2 text-sm text-white"
-                          >
-                            Close
-                          </button>
-                        </div>
-
-                        <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black">
-                          <img src={previewUrl} alt="Selected product preview" className="max-h-[70vh] w-full object-contain" />
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                      {mode.label.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              <div className="panel panel--history">
+                {historyMode === 'video' ? (
+                  selectedHistory.length > 0 ? (
+                    <div className="history-grid">
+                      {selectedHistory.map((job) => (
+                        <button
+                          key={job._id}
+                          type="button"
+                          className={`history-card${selectedJobId === job._id ? ' is-active' : ''}`}
+                          onClick={() => handleHistoryCardClick(job)}
+                        >
+                          <div className="history-card__top">
+                            <span className="history-card__title">{job.title || job.description || 'Untitled job'}</span>
+                            <span className="history-card__date">{formatDate(job.createdAt)}</span>
+                          </div>
+                          <div className="history-card__meta">
+                            <span className={`history-pill history-pill--${getStatusTone(job.status)}`}>
+                              {getStatusLabel(job.status)}
+                            </span>
+                            <span className="history-card__note">{job.message || 'Backend job item.'}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="history-empty">
+                      {isLoadingJobs ? 'Loading backend jobs...' : 'No video jobs found.'}
+                    </div>
+                  )
+                ) : (
+                  photoAds.length > 0 ? (
+                    <div className="history-grid">
+                      {photoAds.map((ad) => (
+                        <button
+                          key={ad._id}
+                          type="button"
+                          className={`history-card${selectedPhotoAdId === ad._id ? ' is-active' : ''}`}
+                          onClick={() => handlePhotoCardClick(ad)}
+                        >
+                          <div className="history-card__top">
+                            <span className="history-card__title">{ad.title || 'Untitled photo set'}</span>
+                            <span className="history-card__date">{formatDate(ad.createdAt)}</span>
+                          </div>
+                          <div className="history-card__meta">
+                            <span className="history-pill history-pill--ready">READY</span>
+                            <span className="history-card__note">{ad.images.length} concepts · {ad.aspectRatio}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="history-empty">
+                      No photo sets found. Generate one in the Create section.
+                    </div>
+                  )
+                )}
+              </div>
+            </section>
+          )}
+
+          <div className="studio-footer-note">
+            <Eye size={14} strokeWidth={2.2} />
+            <span>Video, photo, upload, preview, brief, and history tools are ready in this workspace.</span>
+          </div>
+        </div>
+      </main>
+
+      {isOutputViewerOpen && activeOutputUrl && (
+        <div
+          className="output-viewer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Campaign output preview"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsOutputViewerOpen(false);
+            }
+          }}
+        >
+          <div className="output-viewer__panel">
+            <div className="output-viewer__topbar">
+              <span>Output preview</span>
+              <button
+                type="button"
+                className="output-viewer__close"
+                aria-label="Close output preview"
+                onClick={() => setIsOutputViewerOpen(false)}
+              >
+                <X size={18} strokeWidth={2.4} />
+              </button>
             </div>
-          )
-        }
-      />
-      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+
+            <div className="output-viewer__frame">
+              <video
+                key={`viewer-${activeOutputUrl}`}
+                className="output-viewer__asset"
+                controls
+                playsInline
+                autoPlay
+                loop
+                preload="auto"
+                crossOrigin="anonymous"
+              >
+                <source src={activeOutputUrl.replace('localhost', '127.0.0.1')} type="video/mp4" />
+                <source src={activeOutputUrl} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-export default App;
+function ProtectedRoute({ children }: { children: JSX.Element }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function PublicRoute({ children }: { children: JSX.Element }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <LoginPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicRoute>
+            <RegisterPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPasswordPage />
+          </PublicRoute>
+        }
+      />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}
