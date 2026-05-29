@@ -15,6 +15,11 @@ import { config } from '../config';
 import { mapWithConcurrency } from '../utils/async';
 import { ensureDir, relativeFrom } from '../utils/files';
 import { mergeJobMetadata } from '../utils/jobMetadata';
+import {
+  gamingHardwareProductTokens,
+  hasGamingHardwareProduct,
+  isEsportsBrief
+} from '../utils/briefIntent';
 
 const TARGET_ASPECT_RATIO = 9 / 16;
 const genericQueryTokens = new Set([
@@ -141,15 +146,21 @@ const esportsMismatchTokens = new Set([
   'smartphone',
   'vr'
 ]);
-const esportsBriefTokens = [
-  'counter strike',
-  'counter-strike',
+const gamingProductMismatchTokens = new Set([
+  'arena',
+  'counter',
   'cs2',
-  'esports',
-  'e sports',
-  'gaming tournament',
-  'major finals'
-];
+  'crowd',
+  'finals',
+  'friends',
+  'major',
+  'match',
+  'stage',
+  'strike',
+  'team',
+  'tournament',
+  'trophy'
+]);
 const perfumeProductSceneTokens = new Set([
   'atomizer',
   'bottle',
@@ -215,11 +226,6 @@ type MediaSelectionState = {
   usedMediaKeys: Set<string>;
   usedQuerySignatures: string[][];
   usedCreatorKeys: Map<string, number>;
-};
-
-const isEsportsBrief = (description: string, productCategory: string) => {
-  const normalized = `${productCategory} ${description}`.toLowerCase();
-  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
 };
 
 const tokenize = (value: string) =>
@@ -594,6 +600,43 @@ const buildMediaStrategy = (description: string, productCategory: string): Media
     };
   }
 
+  if (productCategory === 'gaming-esports') {
+    const hardwareProductBrief = hasGamingHardwareProduct(description);
+    const anchors = Array.from(
+      new Set([
+        ...descriptionTokens.filter((token) =>
+          [
+            ...gamingHardwareProductTokens,
+            'gamer',
+            'gaming',
+            'hardware',
+            'mechanical',
+            'product'
+          ].includes(token)
+        ),
+        ...(descriptionTokens.some((token) => ['keyboard', 'keyboards', 'keycap', 'keycaps', 'switch', 'switches'].includes(token))
+          ? ['keyboard', 'mechanical', 'rgb']
+          : []),
+        ...(descriptionTokens.some((token) => ['mouse', 'mice'].includes(token)) ? ['mouse'] : []),
+        ...(descriptionTokens.some((token) => ['headset', 'headsets'].includes(token)) ? ['headset'] : []),
+        'gaming',
+        'setup',
+        'hardware'
+      ])
+    );
+
+    return {
+      anchors,
+      avoidTokens: Array.from(gamingProductMismatchTokens),
+      preferStillImages: hardwareProductBrief,
+      requireAnchorMatch: hardwareProductBrief,
+      minimumVideoDurationRatio: 0.8,
+      minimumVideoSeconds: 4,
+      useHeroUploadForFirstScene: true,
+      useHeroUploadForLastScene: true
+    };
+  }
+
   return {
     anchors: descriptionTokens.slice(0, 6),
     avoidTokens: [],
@@ -633,7 +676,10 @@ const scoreCandidate = ({
       )
     )
   );
-  const categoryTokens = Array.from(new Set(tokenize(productCategory.replace(/-/g, ' '))));
+  const categoryTokens =
+    productCategory === 'gaming-esports' && !isEsportsBrief(description, productCategory)
+      ? ['gaming', 'hardware', 'setup']
+      : Array.from(new Set(tokenize(productCategory.replace(/-/g, ' '))));
   const queryTokens = Array.from(new Set(tokenize(candidate.query)));
   const descriptionTokens = Array.from(new Set(tokenize(description)));
   const anchorTokens = strategy.anchors.length ? strategy.anchors : descriptionTokens.slice(0, 6);

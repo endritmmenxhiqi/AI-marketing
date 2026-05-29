@@ -2,6 +2,7 @@ import { ScriptPackage } from '../types';
 import { config } from '../config';
 import { getCache, setCache } from './cacheService';
 import { sha256 } from '../utils/files';
+import { isEsportsBrief } from '../utils/briefIntent';
 
 const blockedKeywordTokens = new Set([
   'abstract',
@@ -24,21 +25,7 @@ const blockedKeywordTokens = new Set([
   'viral'
 ]);
 
-const SCRIPT_PROMPT_VERSION = 'v5';
-const esportsBriefTokens = [
-  'counter strike',
-  'counter-strike',
-  'cs2',
-  'esports',
-  'e sports',
-  'gaming tournament',
-  'major finals'
-];
-
-const isEsportsBrief = (description: string, productCategory: string) => {
-  const normalized = `${productCategory} ${description}`.toLowerCase();
-  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
-};
+const SCRIPT_PROMPT_VERSION = 'v6';
 
 const scriptSchema = {
   name: 'marketing_video_script',
@@ -253,6 +240,13 @@ export const generateScriptPackage = async (
               'Avoid drifting into generic tech product shots, coding desks, office work, server rooms, mobile gaming, console controllers, or abstract RGB gadget footage unless the brief explicitly asks for them.',
               'Do not promise official Counter-Strike majors footage, team logos, or branded tournament assets. Keep the visuals generic, premium, and clearly esports-driven.'
             ].join(' ')
+        : productCategory === 'gaming-esports'
+          ? [
+              'For gaming product ads, treat Gaming & Esports as a category hint, not permission to invent a tournament.',
+              'The product description is the source of truth. If it names a keyboard, mouse, headset, monitor, PC, chair, controller, or setup, keep that exact product central in the story and visuals.',
+              'Prefer stock-searchable product visuals such as gaming keyboard close up, RGB keyboard hands, gaming mouse close up, headset on desk, PC gaming setup, gamer desk setup, and hands using gaming gear.',
+              'Avoid friends casually playing games, CS2 matches, arenas, crowds, trophies, team logos, and tournament-stage footage unless the brief explicitly asks for those.'
+            ].join(' ')
         : '';
 
   const repairInstruction = [
@@ -287,6 +281,7 @@ export const generateScriptPackage = async (
               'Every response is for a real product advertisement designed to convert on TikTok, Reels, or Shorts.',
               'Use buyer psychology: hook, pain/desire, product mechanism, proof, offer, CTA.',
               'Scenes must feel filmable and specific, with visuals that can be searched on stock sites.',
+              'The user product description is the highest-priority source of truth. Use category and style only as supporting hints.',
               'Never rely on vague stock concepts like innovation, success, social media, marketing, business meeting, abstract background, or generic lifestyle filler unless the product literally requires them.',
               'Voiceover should sound human, persuasive, concise, and purchase-intent driven.',
               categoryGuidance
@@ -298,6 +293,8 @@ export const generateScriptPackage = async (
             `Product description: ${description}`,
             `Creative style: ${style}`,
             `Product category: ${productCategory}`,
+            'If the product description and selected category point in different directions, follow the product description.',
+            'Do not add category-specific subjects that are not in the brief. For example, do not add esports tournaments, CS2, gaming rooms, or friends playing games just because the selected category is Gaming & Esports.',
             'Return a script package for a 30-45 second 9:16 marketing video with exactly 4-6 scenes.',
             'Target a total runtime of 30-45 seconds. Do NOT produce videos shorter than 28 seconds.',
             'This tool is for marketing creatives only. Treat the input as a product advertisement brief.',

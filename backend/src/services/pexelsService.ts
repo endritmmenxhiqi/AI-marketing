@@ -1,5 +1,6 @@
 import { MediaCandidate, ScriptScene } from '../types';
 import { config } from '../config';
+import { isEsportsBrief } from '../utils/briefIntent';
 
 const TARGET_ASPECT_RATIO = 9 / 16;
 const PEXELS_VIDEO_RESULTS_PER_QUERY = 8;
@@ -98,15 +99,21 @@ const esportsAvoidTerms = new Set([
   'smartphone',
   'vr'
 ]);
-const esportsBriefTokens = [
-  'counter strike',
-  'counter-strike',
+const gamingProductAvoidTerms = new Set([
+  'arena',
+  'counter',
   'cs2',
-  'esports',
-  'e sports',
-  'gaming tournament',
-  'major finals'
-];
+  'crowd',
+  'finals',
+  'friends',
+  'major',
+  'match',
+  'stage',
+  'strike',
+  'team',
+  'tournament',
+  'trophy'
+]);
 const queryFocusNoiseTokens = new Set([
   'action',
   'ad',
@@ -126,11 +133,6 @@ const queryFocusNoiseTokens = new Set([
   'shot',
   'vertical'
 ]);
-
-const isEsportsBrief = (description: string, productCategory: string) => {
-  const normalized = `${productCategory} ${description}`.toLowerCase();
-  return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
-};
 
 const normalizeQuery = (value: string) =>
   (() => {
@@ -526,6 +528,40 @@ const buildEsportsSignals = (description: string) => {
   };
 };
 
+const buildGamingProductSignals = (description: string, scene: ScriptScene) => {
+  const normalized = `${description} ${scene.headline} ${scene.visualBrief} ${scene.pexelsKeywords.join(' ')}`.toLowerCase();
+  const keyboardBrief = ['keyboard', 'keyboards', 'keycap', 'keycaps', 'switch', 'switches'].some((token) =>
+    normalized.includes(token)
+  );
+  const mouseBrief = ['mouse', 'mice'].some((token) => normalized.includes(token));
+  const headsetBrief = ['headset', 'headsets'].some((token) => normalized.includes(token));
+  const monitorBrief = ['monitor', 'monitors'].some((token) => normalized.includes(token));
+  const controllerBrief = ['controller', 'controllers'].some((token) => normalized.includes(token));
+  const setupBrief = ['desk', 'pc', 'rgb', 'setup'].some((token) => normalized.includes(token));
+
+  const anchors = unique([
+    keyboardBrief ? 'mechanical gaming keyboard close up' : '',
+    keyboardBrief ? 'rgb keyboard hands gaming' : '',
+    keyboardBrief ? 'gaming keyboard keycaps macro' : '',
+    mouseBrief ? 'gaming mouse close up' : '',
+    mouseBrief ? 'hand using gaming mouse' : '',
+    headsetBrief ? 'gaming headset desk close up' : '',
+    headsetBrief ? 'gamer wearing headset' : '',
+    monitorBrief ? 'gaming monitor setup' : '',
+    controllerBrief ? 'gaming controller close up' : '',
+    setupBrief ? 'pc gaming setup desk' : '',
+    setupBrief ? 'rgb gaming desk setup' : '',
+    'gaming hardware close up',
+    'hands using gaming gear',
+    'clean gaming desk setup'
+  ]);
+
+  return {
+    anchors,
+    avoidTerms: Array.from(gamingProductAvoidTerms)
+  };
+};
+
 const buildSearchQueries = ({
   scene,
   productCategory,
@@ -537,11 +573,16 @@ const buildSearchQueries = ({
   description: string;
   searchMode?: 'default' | 'perfume-support';
 }) => {
+  const esportsBrief = isEsportsBrief(description, productCategory);
   const categoryText =
     searchMode === 'perfume-support'
       ? 'luxury lifestyle'
       : productCategory === 'home-lifestyle'
         ? 'luxury home real estate'
+        : productCategory === 'gaming-esports'
+          ? esportsBrief
+            ? 'gaming esports'
+            : 'gaming hardware'
         : productCategory.replace(/-/g, ' ');
   const foodSignals = productCategory === 'food-dessert' ? buildFoodSignals(description) : null;
   const beverageSignals =
@@ -558,9 +599,13 @@ const buildSearchQueries = ({
     productCategory === 'home-lifestyle' ? buildHomeLifestyleSignals(description, scene) : null;
   const footballSignals =
     productCategory === 'sports-football' ? buildFootballSignals(description) : null;
-  const esportsSignals = isEsportsBrief(description, productCategory)
+  const esportsSignals = esportsBrief
     ? buildEsportsSignals(description)
     : null;
+  const gamingProductSignals =
+    productCategory === 'gaming-esports' && !esportsBrief
+      ? buildGamingProductSignals(description, scene)
+      : null;
   const productTokens = tokenize(description).slice(0, 10);
   const productPhrase = productTokens.slice(0, 4).join(' ');
   const leadKeyword = scene.pexelsKeywords[0] || '';
@@ -589,6 +634,8 @@ const buildSearchQueries = ({
           ? 'soccer match stadium crowd goal celebration'
           : esportsSignals
             ? 'esports arena crowd player pc headset keyboard mouse trophy'
+            : gamingProductSignals
+              ? 'gaming keyboard mouse rgb desk setup hands product close up'
         : '';
   const anchorQueries = [
     ...expandAnchors({
@@ -628,6 +675,11 @@ const buildSearchQueries = ({
     }),
     ...expandAnchors({
       anchors: esportsSignals?.anchors || [],
+      focusPhrase,
+      leadKeyword
+    }),
+    ...expandAnchors({
+      anchors: gamingProductSignals?.anchors || [],
       focusPhrase,
       leadKeyword
     })
@@ -671,7 +723,8 @@ const buildSearchQueries = ({
           ...(fashionSignals?.avoidTerms || []),
           ...(homeLifestyleSignals?.avoidTerms || []),
           ...(footballSignals?.avoidTerms || []),
-          ...(esportsSignals?.avoidTerms || [])
+          ...(esportsSignals?.avoidTerms || []),
+          ...(gamingProductSignals?.avoidTerms || [])
         ];
 
         return avoidTerms.length ? !queryTokens.some((token) => avoidTerms.includes(token)) : true;
