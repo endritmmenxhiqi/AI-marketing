@@ -27,10 +27,8 @@ export interface VideoJob {
   description: string;
   productCategory?: string;
   style: string;
-  enableStyleTransfer?: boolean;
   imageUrl?: string;
   imageUrls?: string[];
-  secondaryImageUrl?: string;
   audience?: string;
   offer?: string;
   proof?: string;
@@ -56,22 +54,6 @@ export interface VideoJob {
   };
   metadata?: {
     durationSeconds?: number;
-    performance?: {
-      totalElapsedMs?: number;
-      targetElapsedMs?: number;
-      phaseDurations?: {
-        scriptMs?: number;
-        voiceMs?: number;
-        mediaMs?: number;
-        renderMs?: number;
-        uploadMs?: number;
-      };
-      concurrency?: {
-        voiceGeneration?: number;
-        mediaSelection?: number;
-        sceneRendering?: number;
-      };
-    };
   };
 }
 
@@ -86,7 +68,7 @@ export interface PhotoJob {
   description: string;
   productCategory?: string;
   style: string;
-  source?: 'upload' | 'prompt';
+  source: 'upload' | 'prompt';
   imagePath?: string;
   imageUrl?: string;
   imageUrls?: string[];
@@ -101,24 +83,6 @@ export interface PhotoJob {
   };
 }
 
-export interface PhotoAdAsset {
-  provider?: string;
-  key?: string;
-  url?: string;
-}
-
-export interface PhotoAd {
-  _id: string;
-  title: string;
-  prompt: string;
-  aspectRatio: string;
-  productCategory?: string;
-  style: string;
-  source?: string;
-  createdAt: string;
-  images: PhotoAdAsset[];
-}
-
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export interface AuthUser {
@@ -126,53 +90,11 @@ export interface AuthUser {
   email: string;
   role: string;
   credits: number;
-  creditsUsed: number;
 }
-
-export interface CreditPackage {
-  id: string;
-  name: string;
-  credits: number;
-  priceCents: number;
-  priceLabel: string;
-  description: string;
-  badge?: string;
-}
-
-export interface CreditTransaction {
-  id: string;
-  type: 'purchase' | 'spend' | 'refund' | 'adjustment';
-  amount: number;
-  balanceAfter: number;
-  source: string;
-  packageId?: string;
-  referenceId?: string;
-  description: string;
-  createdAt: string;
-}
-
-export interface PasswordResetResponse {
-  message: string;
-  user?: AuthUser;
-  token?: string;
-}
-
-type ApiError = Error & {
-  status?: number;
-};
-
-const getAccessToken = () => localStorage.getItem('token') || '';
 
 const authHeaders = (): Record<string, string> => {
-  const token = getAccessToken();
+  const token = localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-const createApiError = async (response: Response, fallbackMessage: string): Promise<ApiError> => {
-  const payload = await response.json().catch(() => ({ message: fallbackMessage }));
-  const error = new Error(payload.message || fallbackMessage) as ApiError;
-  error.status = response.status;
-  return error;
 };
 
 export const loginUser = async (email: string, password: string) => {
@@ -184,11 +106,11 @@ export const loginUser = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
 
+  const payload = await response.json().catch(() => ({ message: 'Login failed.' }));
   if (!response.ok) {
-    throw await createApiError(response, 'Login failed.');
+    throw new Error(payload.message || 'Login failed.');
   }
 
-  const payload = await response.json();
   return payload as { token: string; user: AuthUser };
 };
 
@@ -201,11 +123,11 @@ export const registerUser = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
 
+  const payload = await response.json().catch(() => ({ message: 'Registration failed.' }));
   if (!response.ok) {
-    throw await createApiError(response, 'Registration failed.');
+    throw new Error(payload.message || 'Registration failed.');
   }
 
-  const payload = await response.json();
   return payload as { token: string; user: AuthUser };
 };
 
@@ -218,11 +140,11 @@ export const forgotPassword = async (email: string) => {
     body: JSON.stringify({ email }),
   });
 
+  const payload = await response.json().catch(() => ({ message: 'Failed to send reset email.' }));
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to send reset email.');
+    throw new Error(payload.message || 'Failed to send reset email.');
   }
 
-  const payload = await response.json();
   return payload as { message: string };
 };
 
@@ -235,12 +157,12 @@ export const resetPassword = async (token: string, password: string) => {
     body: JSON.stringify({ password }),
   });
 
+  const payload = await response.json().catch(() => ({ message: 'Failed to reset password.' }));
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to reset password.');
+    throw new Error(payload.message || 'Failed to reset password.');
   }
 
-  const payload = await response.json();
-  return payload as PasswordResetResponse;
+  return payload as { message: string; user?: any; token?: string };
 };
 
 export const fetchMe = async () => {
@@ -249,90 +171,30 @@ export const fetchMe = async () => {
   });
 
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to load account details.');
+    throw new Error('Failed to fetch profile.');
   }
 
   const payload = await response.json();
   return payload.user as AuthUser;
 };
 
-export const fetchCreditPackages = async () => {
-  const response = await fetch(`${API_BASE}/credits/packages`, {
-    headers: authHeaders(),
-  });
-
-  if (!response.ok) {
-    throw await createApiError(response, 'Failed to load credit packages.');
-  }
-
-  const payload = await response.json();
-  return payload.data as CreditPackage[];
-};
-
-export const fetchCreditTransactions = async () => {
-  const response = await fetch(`${API_BASE}/credits/transactions`, {
-    headers: authHeaders(),
-  });
-
-  if (!response.ok) {
-    throw await createApiError(response, 'Failed to load credit history.');
-  }
-
-  const payload = await response.json();
-  return payload.data as CreditTransaction[];
-};
-
-export const createDemoCreditPurchase = async (packageId: string) => {
-  const response = await fetch(`${API_BASE}/credits/demo-purchase`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-    },
-    body: JSON.stringify({ packageId }),
-  });
-
-  if (!response.ok) {
-    throw await createApiError(response, 'Demo credit purchase failed.');
-  }
-
-  const payload = await response.json();
-  return payload as {
-    package: CreditPackage;
-    credits: number;
-    creditsUsed: number;
-    transaction: CreditTransaction;
-  };
-};
-
 export const createJob = async (payload: {
-  image?: File | null;
-  secondaryImage?: File | null;
   images?: File[] | null;
-  title?: string;
+  title: string;
   description: string;
   productCategory: string;
   style: string;
-  enableStyleTransfer?: boolean;
 }) => {
   const formData = new FormData();
-  const images = payload.images || [];
-  const primaryImage = payload.image || images[0] || null;
-  const secondaryImage = payload.secondaryImage || images[1] || null;
-
-  if (primaryImage) {
-    formData.append('image', primaryImage);
+  if (payload.images && payload.images.length > 0) {
+    payload.images.forEach((file) => {
+      formData.append('images', file);
+    });
   }
-  if (secondaryImage) {
-    formData.append('secondaryImage', secondaryImage);
-  }
-  if (payload.title) {
-    formData.append('title', payload.title);
-  }
+  formData.append('title', payload.title);
   formData.append('description', payload.description);
   formData.append('productCategory', payload.productCategory);
   formData.append('style', payload.style);
-  formData.append('enableStyleTransfer', String(payload.enableStyleTransfer || false));
 
   const response = await fetch(`${API_BASE}/jobs`, {
     method: 'POST',
@@ -341,7 +203,8 @@ export const createJob = async (payload: {
   });
 
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to create job.');
+    const error = await response.json().catch(() => ({ message: 'Failed to create job.' }));
+    throw new Error(error.message || 'Failed to create job.');
   }
 
   const payloadJson = await response.json();
@@ -355,25 +218,30 @@ export const createPhotoJob = async (payload: {
   productCategory: string;
   style: string;
 }) => {
-  const created = await createJob({
-    images: payload.images,
-    title: payload.title,
-    description: payload.description,
-    productCategory: payload.productCategory,
-    style: payload.style,
+  const formData = new FormData();
+  if (payload.images && payload.images.length > 0) {
+    payload.images.forEach((file) => {
+      formData.append('images', file);
+    });
+  }
+  formData.append('title', payload.title);
+  formData.append('description', payload.description);
+  formData.append('productCategory', payload.productCategory);
+  formData.append('style', payload.style);
+
+  const response = await fetch(`${API_BASE}/photo-jobs`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
   });
 
-  return {
-    ...created,
-    title: payload.title,
-    source: payload.images?.length ? 'upload' : 'prompt',
-    output: created.output?.preview?.url
-      ? {
-          final: { url: created.output.preview.url },
-          variants: [{ url: created.output.preview.url }]
-        }
-      : undefined
-  } as PhotoJob;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create photo job.' }));
+    throw new Error(error.message || 'Failed to create photo job.');
+  }
+
+  const payloadJson = await response.json();
+  return payloadJson.data as PhotoJob;
 };
 
 export const fetchJobs = async () => {
@@ -384,26 +252,21 @@ export const fetchJobs = async () => {
     if (response.status === 401) {
       throw new Error('UNAUTHORIZED');
     }
-    throw await createApiError(response, 'Failed to fetch jobs.');
+    throw new Error('Failed to fetch jobs.');
   }
   const payload = await response.json();
-  const videoJobs = Array.isArray(payload.data) ? payload.data : payload.data?.videoJobs || [];
-  const photoJobs = Array.isArray(payload.data?.photoJobs) ? payload.data.photoJobs : [];
-  return {
-    videoJobs: videoJobs as VideoJob[],
-    photoJobs: photoJobs as PhotoJob[]
-  };
+  return payload.data as { videoJobs: VideoJob[]; photoJobs: PhotoJob[] };
 };
 
-export const fetchJob = async (jobId: string) => {
-  const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
+export const fetchPhotoAds = async () => {
+  const response = await fetch(`${API_BASE}/photo-ads`, {
     headers: authHeaders(),
   });
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to fetch job.');
+    throw new Error('Failed to fetch photo ads.');
   }
   const payload = await response.json();
-  return payload.data as VideoJob;
+  return payload.data as any[];
 };
 
 export const createPhotoAd = async (payload: {
@@ -412,7 +275,7 @@ export const createPhotoAd = async (payload: {
   aspectRatio: string;
   productCategory: string;
   style: string;
-  source?: string;
+  source: string;
   imageDataUrls: string[];
 }) => {
   const response = await fetch(`${API_BASE}/photo-ads`, {
@@ -425,37 +288,22 @@ export const createPhotoAd = async (payload: {
   });
 
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to save photo ads.');
+    const error = await response.json().catch(() => ({ message: 'Failed to create photo ad.' }));
+    throw error;
   }
 
-  const payloadJson = await response.json();
-  return payloadJson as { data: PhotoAd; credits?: number };
+  return await response.json();
 };
 
-export const fetchPhotoAds = async () => {
-  const response = await fetch(`${API_BASE}/photo-ads`, {
+export const fetchJob = async (jobId: string) => {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
     headers: authHeaders(),
   });
-
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to fetch photo ads.');
+    throw new Error('Failed to fetch job.');
   }
-
   const payload = await response.json();
-  return payload.data as PhotoAd[];
-};
-
-export const fetchPhotoAd = async (photoAdId: string) => {
-  const response = await fetch(`${API_BASE}/photo-ads/${photoAdId}`, {
-    headers: authHeaders(),
-  });
-
-  if (!response.ok) {
-    throw await createApiError(response, 'Failed to fetch photo ad set.');
-  }
-
-  const payload = await response.json();
-  return payload.data as PhotoAd;
+  return payload.data as VideoJob;
 };
 
 export const trimJob = async (jobId: string, startSeconds: number, endSeconds: number) => {
@@ -469,7 +317,8 @@ export const trimJob = async (jobId: string, startSeconds: number, endSeconds: n
   });
 
   if (!response.ok) {
-    throw await createApiError(response, 'Failed to trim video.');
+    const error = await response.json().catch(() => ({ message: 'Failed to trim video.' }));
+    throw new Error(error.message || 'Failed to trim video.');
   }
 
   const payload = await response.json();
@@ -477,30 +326,61 @@ export const trimJob = async (jobId: string, startSeconds: number, endSeconds: n
 };
 
 export const completePhotoJob = async (jobId: string, imageBlob: Blob) => {
-  const imageDataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error || new Error('Unable to read generated image.'));
-    reader.readAsDataURL(imageBlob);
+  const formData = new FormData();
+  formData.append('image', imageBlob, 'puter-generated.png');
+
+  const response = await fetch(`${API_BASE}/photo-jobs/${jobId}/complete`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
   });
 
-  return createPhotoAd({
-    title: 'Puter Generated Photo',
-    prompt: 'Browser-generated Puter photo campaign.',
-    aspectRatio: '1:1',
-    productCategory: 'general-product',
-    style: 'minimal',
-    source: 'puter',
-    imageDataUrls: [imageDataUrl],
-  });
-};
-
-export const getJobEventsUrl = (jobId: string) => {
-  const url = new URL(`${API_BASE}/jobs/${jobId}/events`);
-  const token = getAccessToken();
-  if (token) {
-    url.searchParams.set('access_token', token);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to complete photo job.' }));
+    throw new Error(error.message || 'Failed to complete photo job.');
   }
 
-  return url.toString();
+  const payload = await response.json();
+  return payload.data as PhotoJob;
+};
+
+export const getJobEventsUrl = (jobId: string) => `${API_BASE}/jobs/${jobId}/events`;
+
+export const createCheckoutSession = async (packageId: string) => {
+  const response = await fetch(`${API_BASE}/billing/create-checkout-session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ packageId }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create payment session.' }));
+    throw new Error(error.message || 'Failed to create payment session.');
+  }
+  return await response.json() as { url: string };
+};
+
+export const verifyBillingSession = async (sessionId: string) => {
+  const response = await fetch(`${API_BASE}/billing/verify-session?session_id=${sessionId}`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Session verification failed.' }));
+    throw new Error(error.message || 'Session verification failed.');
+  }
+  return await response.json() as { success: boolean; wasCredited: boolean; credits: number; message: string };
+};
+
+export const deleteJob = async (jobId: string) => {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to delete job.' }));
+    throw new Error(error.message || 'Failed to delete job.');
+  }
+  return await response.json() as { success: boolean; message: string };
 };

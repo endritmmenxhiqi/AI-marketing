@@ -2,16 +2,13 @@
   "name": "backend",
   "version": "2.0.0",
   "description": "AI Marketing Studio MVP backend",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "src/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "worker:dev": "tsx watch src/worker.ts",
-    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "npm run clean && tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "worker": "node dist/worker.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "dev": "node --watch src/index.js",
+    "worker:dev": "node --watch src/worker.js",
+    "build": "node -e \"console.log('Backend is plain JavaScript; no build step required.')\"",
+    "start": "node src/index.js",
+    "worker": "node src/worker.js"
   },
   "keywords": [
     "ai",
@@ -36,17 +33,7 @@
     "mime-types": "^2.1.35",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
-    "nodemailer": "^8.0.5",
-    "openai": "^6.4.0"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/fluent-ffmpeg": "^2.1.27",
-    "@types/mime-types": "^2.1.4",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^24.5.2",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "openai": "^6.4.0",
+    "stripe": "^22.1.1"
   }
 }

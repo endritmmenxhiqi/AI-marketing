@@ -98,7 +98,18 @@ export const useJobs = (activeJobId: string | null) => {
           }
         });
     }
+
+    if (payload.status === 'completed') {
+      void loadJobs();
+    }
   });
+
+  const removeJob = useCallback((jobId: string) => {
+    setJobs((current) => ({
+      videoJobs: current.videoJobs.filter(job => job._id !== jobId),
+      photoJobs: current.photoJobs.filter(job => job._id !== jobId),
+    }));
+  }, []);
 
   return {
     jobs,
@@ -107,5 +118,6 @@ export const useJobs = (activeJobId: string | null) => {
     isLoading,
     error,
     loadJobs,
+    removeJob,
   };
 };
