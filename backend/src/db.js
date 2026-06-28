@@ -1,25 +1,43 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.connectDatabase = void 0;
-const mongoose_1 = __importDefault(require("mongoose"));
-const config_1 = require("./config");
+
+// Importojmë librarinë Mongoose për komunikimin me MongoDB
+const mongoose = require("mongoose");
+
+// Marrim objektin e konfigurimit qendror për të gjetur adresën e databazës
+const { config } = require("./config");
+
+/**
+ * FUNKSIONI KRYESOR: connectDatabase
+ * Përpiqet të lidhë serverin me databazën MongoDB.
+ * Pranon një parametër 'retryCount' që nis nga 0 dhe numëron sa herë ka dështuar lidhja.
+ */
 const connectDatabase = async (retryCount = 0) => {
     try {
-        await mongoose_1.default.connect(config_1.config.mongodbUri);
+        // Përdor adresën nga config për ta hapur lidhjen
+        await mongoose.connect(config.mongodbUri);
+        // Nëse lidhja ka sukses shfaq këtë mesazh
         console.log('MongoDB Connected successfully.');
-    }
-    catch (error) {
+    } catch (error) {
+        // Numri maksimal i tentimeve për t'u rilidhur përpara se të dorëzohemi
         const maxRetries = 5;
+        
+        // Nëse kemi tentuar më pak se 5 herë, provohet rilidhja pas 5 sekondave
         if (retryCount < maxRetries) {
             console.warn(`Database connection failed (${error.message}). Retrying in 5s... (${retryCount + 1}/${maxRetries})`);
+            
+            // Pret 5 sekonda përpara tentimit të radhës
             await new Promise(resolve => setTimeout(resolve, 5000));
-            return (0, exports.connectDatabase)(retryCount + 1);
+            
+            // Thirrje rekursive për të tentuar përsëri rilidhjen
+            return connectDatabase(retryCount + 1);
         }
+        
         console.error('Max database connection retries reached. Exiting...');
         process.exit(1);
     }
 };
-exports.connectDatabase = connectDatabase;
+
+// Eksportojmë funksionin në stilin standard CommonJS
+module.exports = {
+    connectDatabase
+};

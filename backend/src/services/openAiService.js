@@ -1,102 +1,90 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateMarketingBrief = exports.generateScriptPackage = void 0;
-const config_1 = require("../config");
-const cacheService_1 = require("./cacheService");
-const files_1 = require("../utils/files");
+
+// Importojmë konfigurimet, shërbimet e cache-it dhe funksionet ndihmëse për skedarët
+const { config } = require("../config");
+const { getCache, setCache } = require("./cacheService");
+const { sha256 } = require("../utils/files");
+
+// Një listë me fjalë kyçe të ndaluara sepse janë shumë të përgjithshme
 const blockedKeywordTokens = new Set([
-    'abstract',
-    'background',
-    'branding',
-    'business',
-    'campaign',
-    'corporate',
-    'digital',
-    'generic',
-    'innovation',
-    'marketing',
-    'media',
-    'office',
-    'social',
-    'strategy',
-    'success',
-    'template',
-    'technology',
-    'viral'
+    'abstract', 'background', 'branding', 'business', 'campaign',
+    'corporate', 'digital', 'generic', 'innovation', 'marketing',
+    'media', 'office', 'social', 'strategy', 'success', 'template',
+    'technology', 'viral'
 ]);
-const SCRIPT_PROMPT_VERSION = 'v5';
+
+const SCRIPT_PROMPT_VERSION = 'v5'; // Versioni i prompt-it që i dërgohet AI
+
+// Fjalët që tregojnë se reklama ka lidhje me lojërat elektronike (eSports)
 const esportsBriefTokens = [
-    'counter strike',
-    'counter-strike',
-    'cs2',
-    'esports',
-    'e sports',
-    'gaming tournament',
-    'major finals'
+    'counter strike', 'counter-strike', 'cs2', 'esports',
+    'e sports', 'gaming tournament', 'major finals'
 ];
+
+/**
+ * Kontrollon nëse reklama ka lidhje me industrinë e lojërave elektronike
+ */
 const isEsportsBrief = (description, productCategory) => {
     const normalized = `${productCategory} ${description}`.toLowerCase();
     return productCategory === 'gaming-esports' || esportsBriefTokens.some((token) => normalized.includes(token));
 };
+
+// JSON Schema që detyron OpenAI të kthejë strukturën ekzakte të skenarit
 const scriptSchema = {
     name: 'marketing_video_script',
     schema: {
         required: ['title', 'hook', 'cta', 'caption', 'hashtags', 'musicMood', 'audience', 'offer', 'proof', 'scenes'],
         properties: {
-            title: { type: 'string' },
-            hook: { type: 'string' },
-            cta: { type: 'string' },
-            caption: { type: 'string' },
+            title: { type: 'string' },       // Titulli i fushatës
+            hook: { type: 'string' },        // Fraza e parë që tërheq vëmendjen
+            cta: { type: 'string' },         // Thirrja për veprim (Call To Action)
+            caption: { type: 'string' },     // Teksti që do të shkruhet në postim
             hashtags: {
                 type: 'array',
                 items: { type: 'string' },
                 minItems: 4,
                 maxItems: 8,
             },
-            musicMood: { type: 'string' },
-            audience: { type: 'string' },
-            offer: { type: 'string' },
-            proof: { type: 'string' },
-            scenes: {
+            musicMood: { type: 'string' },   // Atmosfera e muzikës
+            audience: { type: 'string' },    // Kush është blerësi ideal
+            offer: { type: 'string' },       // Çfarë ofrohet
+            proof: { type: 'string' },       // Pse duhet besuar produkti
+            scenes: {                        // Lista e skenave të videos
                 type: 'array',
                 minItems: 4,
                 maxItems: 6,
                 items: {
                     type: 'object',
                     additionalProperties: false,
-                    required: [
-                        'sceneNumber',
-                        'headline',
-                        'voiceover',
-                        'onScreenText',
-                        'pexelsKeywords',
-                        'visualBrief',
-                        'imagePrompt'
-                    ],
+                    required: ['sceneNumber', 'headline', 'voiceover', 'onScreenText', 'pexelsKeywords', 'visualBrief', 'imagePrompt'],
                     properties: {
-                        sceneNumber: { type: 'integer' },
-                        headline: { type: 'string' },
-                        voiceover: { type: 'string' },
-                        onScreenText: {
+                        sceneNumber: { type: 'integer' },  // Numri i skenës
+                        headline: { type: 'string' },      // Kryetitulli i skenës
+                        voiceover: { type: 'string' },     // Teksti që do të lexohet (Voiceover)
+                        onScreenText: {                    // Teksti mbi video
                             type: 'array',
                             items: { type: 'string' },
                             minItems: 1,
                             maxItems: 3
                         },
-                        pexelsKeywords: {
+                        pexelsKeywords: {                  // Fjalët kyçe për kërkimin e videove stock në Pexels
                             type: 'array',
                             items: { type: 'string' },
                             minItems: 2,
                             maxItems: 4
                         },
                         visualBrief: { type: 'string' },
-                        imagePrompt: { type: 'string' }
+                        imagePrompt: { type: 'string' }    // Prompt-i për gjenerimin e fotos së skenës
                     }
                 }
             }
         }
     }
 };
+
+/**
+ * Ndihmës për të pastruar tekstin dhe për të marrë vetëm pjesën e pastër JSON nga përgjigja e AI
+ */
 const parseJson = (content) => {
     const firstBrace = content.indexOf('{');
     const lastBrace = content.lastIndexOf('}');
@@ -105,26 +93,29 @@ const parseJson = (content) => {
     }
     return JSON.parse(content.slice(firstBrace, lastBrace + 1));
 };
-const normalizeLine = (value) => String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim();
+
+/**
+ * Normalizon hapësirat e tepërta në një rresht teksti
+ */
+const normalizeLine = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+/**
+ * Pastron fjalët kyçe nga simbolet e ndaluara dhe fjalët e përgjithshme
+ */
 const normalizeKeyword = (value) => normalizeLine(value)
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
     .split(/\s+/)
     .filter((token) => token.length > 2 && !blockedKeywordTokens.has(token))
     .join(' ');
+
+// Hashtags shumë të përgjithshëm që duhet të shmangen
 const genericHashtagTokens = new Set([
-    'marketing',
-    'innovation',
-    'ai',
-    'business',
-    'campaign',
-    'success',
-    'viral',
-    'branding',
-    'technology'
+    'marketing', 'innovation', 'ai', 'business', 'campaign',
+    'success', 'viral', 'branding', 'technology'
 ]);
+
+// Hashtags rezervë (Fallback) sipas kategorive nëse OpenAI dështon
 const fallbackCategoryHashtags = {
     'beauty-skincare': ['#skincare', '#glowingskin', '#beautyroutine', '#selfcare'],
     'beverages-energy-drinks': ['#energydrink', '#drinkrefresh', '#activeenergy', '#beveragelife'],
@@ -139,6 +130,7 @@ const fallbackCategoryHashtags = {
     'jewelry-luxury': ['#jewelry', '#luxurystyle', '#finishingtouch', '#elegantdetails'],
     'pet-products': ['#petcare', '#petproducts', '#happypets', '#petlife']
 };
+
 const makeHashtag = (value) => {
     const cleaned = normalizeKeyword(value).replace(/-/g, '').replace(/\s+/g, '');
     if (!cleaned || cleaned.length < 3 || genericHashtagTokens.has(cleaned)) {
@@ -146,6 +138,10 @@ const makeHashtag = (value) => {
     }
     return `#${cleaned.slice(0, 32)}`;
 };
+
+/**
+ * Ndërton automatikisht hashtags që kanë lidhje direkte me përshkrimin e produktit
+ */
 const buildRelevantHashtags = (description, productCategory) => {
     const categoryTags = fallbackCategoryHashtags[productCategory] || [
         makeHashtag(productCategory),
@@ -160,45 +156,62 @@ const buildRelevantHashtags = (description, productCategory) => {
         .filter((tag) => !genericHashtagTokens.has(tag.replace(/^#/, '').toLowerCase()))
         .slice(0, 6);
 };
+
+/**
+ * Pastron listën e hashtags nga dublikimet dhe simbolet e gabuara
+ */
 const cleanHashtags = (hashtags) => Array.from(new Set((hashtags || [])
     .map((tag) => normalizeLine(tag).replace(/\s+/g, ''))
     .map((tag) => (tag.startsWith('#') ? tag : `#${tag}`))
     .filter((tag) => {
-    const token = tag.replace(/^#/, '').toLowerCase();
-    return token.length > 2 && !genericHashtagTokens.has(token);
-}))).slice(0, 8);
-const removeGenericHashtagsFromCaption = (caption) => normalizeLine(caption).replace(/#([a-z0-9_]+)/gi, (match, token) => genericHashtagTokens.has(String(token).toLowerCase()) ? '' : match).replace(/\s+/g, ' ').trim();
+        const token = tag.replace(/^#/, '').toLowerCase();
+        return token.length > 2 && !genericHashtagTokens.has(token);
+    }))).slice(0, 8);
+
+/**
+ * Heq hashtags e përgjithshëm nga përshkrimi (caption) kryesor
+ */
+const removeGenericHashtagsFromCaption = (caption) => normalizeLine(caption)
+    .replace(/#([a-z0-9_]+)/gi, (match, token) => genericHashtagTokens.has(String(token).toLowerCase()) ? '' : match)
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Merr objektin e kthyer nga OpenAI dhe e kalon nëpër filtra normalizimi për siguri
+ */
 const normalizeScriptPackage = (payload) => {
     const scenes = (payload.scenes || [])
         .slice(0, 6)
         .map((scene, index) => ({
-        sceneNumber: Number(scene.sceneNumber || index + 1),
-        headline: normalizeLine(scene.headline),
-        voiceover: normalizeLine(scene.voiceover),
-        onScreenText: (scene.onScreenText || [])
-            .map(normalizeLine)
-            .filter(Boolean)
-            .slice(0, 3),
-        pexelsKeywords: Array.from(new Set((scene.pexelsKeywords || [])
-            .map(normalizeKeyword)
-            .filter(Boolean))).slice(0, 4),
-        visualBrief: normalizeLine(scene.visualBrief),
-        imagePrompt: normalizeLine(scene.imagePrompt)
-    }))
+            sceneNumber: Number(scene.sceneNumber || index + 1),
+            headline: normalizeLine(scene.headline),
+            voiceover: normalizeLine(scene.voiceover),
+            onScreenText: (scene.onScreenText || [])
+                .map(normalizeLine)
+                .filter(Boolean)
+                .slice(0, 3),
+            pexelsKeywords: Array.from(new Set((scene.pexelsKeywords || [])
+                .map(normalizeKeyword)
+                .filter(Boolean))).slice(0, 4),
+            visualBrief: normalizeLine(scene.visualBrief),
+            imagePrompt: normalizeLine(scene.imagePrompt)
+        }))
         .filter((scene) => scene.headline && scene.voiceover)
         .sort((left, right) => left.sceneNumber - right.sceneNumber)
         .map((scene, index) => ({
-        ...scene,
-        sceneNumber: index + 1,
-        pexelsKeywords: scene.pexelsKeywords.length >= 2
-            ? scene.pexelsKeywords
-            : Array.from(new Set([scene.headline, scene.visualBrief]
-                .map(normalizeKeyword)
-                .filter(Boolean))).slice(0, 3)
-    }));
+            ...scene,
+            sceneNumber: index + 1,
+            pexelsKeywords: scene.pexelsKeywords.length >= 2
+                ? scene.pexelsKeywords
+                : Array.from(new Set([scene.headline, scene.visualBrief]
+                    .map(normalizeKeyword)
+                    .filter(Boolean))).slice(0, 3)
+        }));
+
     if (scenes.length < 4) {
         throw new Error('OpenAI script response did not contain enough usable scenes (minimum 4 required).');
     }
+
     return {
         title: normalizeLine(payload.title),
         hook: normalizeLine(payload.hook),
@@ -212,57 +225,67 @@ const normalizeScriptPackage = (payload) => {
         scenes
     };
 };
+
+/**
+ * Krijon skenarin e plotë të videos duke komunikuar me Inteligjencën Artificiale të OpenAI
+ */
 const generateScriptPackage = async (description, style, productCategory, options = {}) => {
-    const cacheKey = `script:${SCRIPT_PROMPT_VERSION}:${(0, files_1.sha256)(`${style}:${productCategory}:${description}`)}`;
-    const cached = options.bypassCache ? null : await (0, cacheService_1.getCache)(cacheKey);
-    if (cached)
-        return cached;
-    if (!config_1.config.openAiApiKey) {
+    const cacheKey = `script:${SCRIPT_PROMPT_VERSION}:${sha256(`${style}:${productCategory}:${description}`)}`;
+    const cached = options.bypassCache ? null : await getCache(cacheKey);
+    
+    if (cached) return cached;
+    if (!config.openAiApiKey) {
         throw new Error('OPENAI_API_KEY is missing.');
     }
+
     const esportsBrief = isEsportsBrief(description, productCategory);
-    const categoryGuidance = productCategory === 'food-dessert'
-        ? [
+
+    // Udhëzime specifike sipas industrisë për t'u siguruar që AI nuk del jashtë teme
+    let categoryGuidance = '';
+    if (productCategory === 'food-dessert') {
+        categoryGuidance = [
             'For food and dessert ads, prioritize appetite appeal, texture, ingredients, authenticity, and craving.',
             'If the product is a specific named dessert, keep every scene visually and verbally loyal to that exact dessert.',
             'Do not drift into generic cakes, cupcakes, frosting, whipped cream, or unrelated bakery prep unless the brief explicitly describes those.',
             'Usage occasions like gifting, guests, or after-dinner can support the message, but the product itself must stay the visual star.'
-        ].join(' ')
-        : productCategory === 'fitness-wellness'
-            ? [
-                'For fitness and wellness ads, prioritize visible movement, training, progress, energy, confidence, and action.',
-                'Prefer scenes of people actively working out, training at home, tracking progress, or feeling stronger.',
-                'Avoid passive talking-head scenes, generic socializing, meetings, interviews, or equipment-only footage unless the brief explicitly asks for it.',
-                'If the offer is a program or membership, the visuals should still show the transformation journey, not abstract community filler.'
-            ].join(' ')
-            : productCategory === 'sports-football'
-                ? [
-                    'For football/soccer hype videos, prioritize match energy: stadium lights, crowd chants, kickoff, dribbling, tackles, saves, goal celebrations, and fast momentum shifts.',
-                    'Use Pexels keywords that clearly indicate soccer (e.g., "soccer match", "football stadium", "soccer fans", "goal celebration") to avoid American football footage.',
-                    'Avoid logos, identifiable players, or team-specific trademarks in visuals; keep it generic match atmosphere and action.'
-                ].join(' ')
-                : esportsBrief
-                    ? [
-                        'For esports and Counter-Strike style promos, prioritize arena-tournament energy: player walkouts, focused gamers at PCs, headset comms, keyboard and mouse closeups, crowd eruptions, stage lights, trophy moments, and big-screen match atmosphere.',
-                        'Use Pexels keywords that clearly describe visible esports footage such as "esports tournament", "gaming tournament stage", "pro gamer pc", "gaming arena crowd", "keyboard mouse close up", and "trophy celebration".',
-                        'Avoid drifting into generic tech product shots, coding desks, office work, server rooms, mobile gaming, console controllers, or abstract RGB gadget footage unless the brief explicitly asks for them.',
-                        'Do not promise official Counter-Strike majors footage, team logos, or branded tournament assets. Keep the visuals generic, premium, and clearly esports-driven.'
-                    ].join(' ')
-                    : '';
+        ].join(' ');
+    } else if (productCategory === 'fitness-wellness') {
+        categoryGuidance = [
+            'For fitness and wellness ads, prioritize visible movement, training, progress, energy, confidence, and action.',
+            'Prefer scenes of people actively working out, training at home, tracking progress, or feeling stronger.',
+            'Avoid passive talking-head scenes, generic socializing, meetings, interviews, or equipment-only footage unless the brief explicitly asks for it.',
+            'If the offer is a program or membership, the visuals should still show the transformation journey, not abstract community filler.'
+        ].join(' ');
+    } else if (productCategory === 'sports-football') {
+        categoryGuidance = [
+            'For football/soccer hype videos, prioritize match energy: stadium lights, crowd chants, kickoff, dribbling, tackles, saves, goal celebrations, and fast momentum shifts.',
+            'Use Pexels keywords that clearly indicate soccer (e.g., "soccer match", "football stadium", "soccer fans", "goal celebration") to avoid American football footage.',
+            'Avoid logos, identifiable players, or team-specific trademarks in visuals; keep it generic match atmosphere and action.'
+        ].join(' ');
+    } else if (esportsBrief) {
+        categoryGuidance = [
+            'For esports and Counter-Strike style promos, prioritize arena-tournament energy: player walkouts, focused gamers at PCs, headset comms, keyboard and mouse closeups, crowd eruptions, stage lights, trophy moments, and big-screen match atmosphere.',
+            'Use Pexels keywords that clearly describe visible esports footage such as "esports tournament", "gaming tournament stage", "pro gamer pc", "gaming arena crowd", "keyboard mouse close up", and "trophy celebration".',
+            'Avoid drifting into generic tech product shots, coding desks, office work, server rooms, mobile gaming, console controllers, or abstract RGB gadget footage unless the brief explicitly asks for them.',
+            'Do not promise official Counter-Strike majors footage, team logos, or branded tournament assets. Keep the visuals generic, premium, and clearly esports-driven.'
+        ].join(' ');
+    }
+
+    // Thirrja e API të OpenAI
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${config_1.config.openAiApiKey}`
+            Authorization: `Bearer ${config.openAiApiKey}`
         },
         body: JSON.stringify({
-            model: config_1.config.openAiModel,
+            model: config.openAiModel,
             max_tokens: 800,
             temperature: 0.75,
             response_format: {
                 type: 'json_schema',
                 json_schema: scriptSchema
-            },
+            },//prompti per ai
             messages: [
                 {
                     role: 'system',
@@ -321,13 +344,16 @@ const generateScriptPackage = async (description, style, productCategory, option
             ]
         })
     });
+
+    // FALLBACK: Nëse API dështon ose mbarojnë kreditet, sistemi krijon një skenar standard automatik
     if (!response.ok) {
         const errorText = await response.text();
         console.error('[OpenAI] Request failed:', errorText);
-        // Fallback to a generic script if API fails (e.g. out of credits)
         console.warn('[OpenAI] Falling back to generic script due to API error.');
+
         const fallbackHashtags = buildRelevantHashtags(description, productCategory);
         const fallbackCaption = `${description.slice(0, 120)}. Ready to make it part of your routine? ${fallbackHashtags.join(' ')}`;
+        
         return normalizeScriptPackage({
             title: `Campaign for ${description.slice(0, 30)}`,
             hook: `See why ${description.slice(0, 48)} deserves a closer look.`,
@@ -378,50 +404,67 @@ const generateScriptPackage = async (description, style, productCategory, option
             ]
         });
     }
+
+    // Përpunimi i përgjigjes së suksesshme nga OpenAI
     const payload = await response.json();
     const content = payload.choices?.[0]?.message?.content;
+    
     if (!content) {
         throw new Error('OpenAI response did not include any content.');
     }
+
     const parsed = normalizeScriptPackage(parseJson(content));
     const relevantHashtags = buildRelevantHashtags(description, productCategory);
+    
     parsed.hashtags = parsed.hashtags.length >= 4
         ? parsed.hashtags
         : Array.from(new Set([...parsed.hashtags, ...relevantHashtags])).slice(0, 6);
+        
     parsed.caption = `${removeGenericHashtagsFromCaption(parsed.caption)} ${parsed.hashtags.join(' ')}`.trim();
+
     if (!options.bypassCache) {
-        await (0, cacheService_1.setCache)(cacheKey, parsed);
+        await setCache(cacheKey, parsed);
     }
+
     return parsed;
 };
-exports.generateScriptPackage = generateScriptPackage;
+
+/**
+ * Nxjerr vetëm strategjinë kryesore (Audience, Offer, Proof) në formë të shkurtër
+ */
 const generateMarketingBrief = async (description, style, productCategory) => {
-    const cacheKey = `brief:${(0, files_1.sha256)(`${style}:${productCategory}:${description}`)}`;
-    const cached = await (0, cacheService_1.getCache)(cacheKey);
-    if (cached)
-        return cached;
-    if (!config_1.config.openAiApiKey) {
+    const cacheKey = `brief:${sha256(`${style}:${productCategory}:${description}`)}`;
+    const cached = await getCache(cacheKey);
+    
+    if (cached) return cached;
+
+    const fallbackHashtags = buildRelevantHashtags(description, productCategory);
+    const fallbackCaption = `${description.slice(0, 120)}. Ready to upgrade? ${fallbackHashtags.join(' ')}`;
+
+    if (!config.openAiApiKey) {
         return {
+            caption: fallbackCaption,
             audience: `High-intent consumers interested in ${productCategory}`,
             offer: `Premium ${description.slice(0, 20)}... with ${style} aesthetics`,
             proof: `AI-optimized marketing asset for high conversion`
         };
     }
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${config_1.config.openAiApiKey}`
+            Authorization: `Bearer ${config.openAiApiKey}`
         },
         body: JSON.stringify({
-            model: config_1.config.openAiModel,
+            model: config.openAiModel,
             max_tokens: 400,
             temperature: 0.7,
             response_format: { type: 'json_object' },
             messages: [
                 {
                     role: 'system',
-                    content: 'You are a senior marketing strategist. Extract the core marketing strategy from the provided brief.'
+                    content: 'You are a senior marketing strategist and social media copywriter. Create a marketing strategy and a catchy social media caption for the provided product brief.'
                 },
                 {
                     role: 'user',
@@ -429,29 +472,41 @@ const generateMarketingBrief = async (description, style, productCategory) => {
                         `Description: ${description}`,
                         `Style: ${style}`,
                         `Category: ${productCategory}`,
-                        'Return a JSON object with exactly these keys: "audience", "offer", "proof".',
-                        'Keep each description concise and punchy (10-15 words max).'
+                        'Return a JSON object with exactly these keys: "caption", "audience", "offer", "proof".',
+                        '"caption": A persuasive social media post (hook + CTA) with 4-6 relevant hashtags specific to the product. Do NOT use generic hashtags like #marketing, #ai, #business, #innovation.',
+                        '"audience", "offer", "proof": Keep each concise and punchy (10-15 words max).'
                     ].join('\n')
                 }
             ]
         })
     });
+
     if (!response.ok) {
         return {
+            caption: fallbackCaption,
             audience: `Consumers interested in ${productCategory}`,
             offer: `Exclusive ${style} campaign for this product`,
             proof: `Professional quality visual storytelling`
         };
     }
+
     const payload = await response.json();
     const content = payload.choices?.[0]?.message?.content;
     const parsed = parseJson(content);
+    
     const result = {
+        caption: normalizeLine(parsed.caption || fallbackCaption),
         audience: normalizeLine(parsed.audience || ''),
         offer: normalizeLine(parsed.offer || ''),
         proof: normalizeLine(parsed.proof || '')
     };
-    await (0, cacheService_1.setCache)(cacheKey, result);
+
+    await setCache(cacheKey, result);
     return result;
 };
-exports.generateMarketingBrief = generateMarketingBrief;
+
+// Eksportojmë funksionet kryesore për përdorim në pjesët e tjera të aplikacionit
+module.exports = {
+    generateScriptPackage,
+    generateMarketingBrief
+};

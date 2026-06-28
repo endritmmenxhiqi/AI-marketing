@@ -344,7 +344,10 @@ export const completePhotoJob = async (jobId: string, imageBlob: Blob) => {
   return payload.data as PhotoJob;
 };
 
-export const getJobEventsUrl = (jobId: string) => `${API_BASE}/jobs/${jobId}/events`;
+export const getJobEventsUrl = (jobId: string) => {
+  const token = localStorage.getItem('token');
+  return `${API_BASE}/jobs/${jobId}/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+};
 
 export const createCheckoutSession = async (packageId: string) => {
   const response = await fetch(`${API_BASE}/billing/create-checkout-session`, {

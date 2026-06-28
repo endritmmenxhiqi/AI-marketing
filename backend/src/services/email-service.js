@@ -1,77 +1,91 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendWelcomeEmail = exports.sendResetEmail = void 0;
-const nodemailer_1 = __importDefault(require("nodemailer"));
-const config_1 = require("../config");
-/**
- * Get the email transporter.
- * If credentials are found in config, it uses them.
- * Otherwise, it creates a test account (Ethereal).
- */
-let transporterPromise = (async () => {
-    const isProduction = !!(config_1.config.email.host && config_1.config.email.user);
+
+// Importojmë paketën nodemailer për dërgimin e email-eve
+const nodemailer = require("nodemailer");
+const { config } = require("../config");
+
+// Krijon lidhjen me serverin SMTP që dërgon email-et
+const transporterPromise = (async () => {
+    // Kontrollojmë nëse kemi vendosur të dhëna reale për serverin e email-it
+    const isProduction = !!(config.email.host && config.email.user);
+    
     if (isProduction) {
-        return nodemailer_1.default.createTransport({
-            host: config_1.config.email.host,
-            port: config_1.config.email.port,
-            secure: config_1.config.email.port == 465,
+        // Konfigurimi për serverin SMTP me të dhëna reale
+        return nodemailer.createTransport({
+            host: config.email.host,
+            port: config.email.port,
+            secure: config.email.port == 465,
             auth: {
-                user: config_1.config.email.user,
-                pass: config_1.config.email.pass,
+                user: config.email.user,
+                pass: config.email.pass,
             },
         });
-    }
-    else {
-        // Local/Test environment: Generate Ethereal test account with retry logic
-        let testAccount;
-        for (let i = 0; i < 3; i++) {
-            try {
-                testAccount = await nodemailer_1.default.createTestAccount();
-                break;
+    } else {
+        // Ambient lokal/testimi: Gjenerojmë një llogari testimi Ethereal me logjikë riprovimi
+        try {
+            let testAccount;
+            for (let i = 0; i < 3; i++) {
+                try {
+                    testAccount = await nodemailer.createTestAccount();
+                    break; // Nëse krijohet me sukses, ndalon ciklin
+                }
+                catch (err) {
+                    if (i === 2) throw err; // Nëse dështon edhe herën e tretë, nxjerr gabimin
+                    console.log(`Retrying Ethereal account creation (${i + 1}/3)...`);
+                    await new Promise(r => setTimeout(r, 2000)); // Presim 2 sekonda para riprovimit
+                }
             }
-            catch (err) {
-                if (i === 2)
-                    throw err;
-                console.log(`Retrying Ethereal account creation (${i + 1}/3)...`);
-                await new Promise(r => setTimeout(r, 2000));
-            }
+            
+            // Afishojmë kredencialet e testit në terminal që të mund të klikojmë linkun e kontrollit
+            console.log('\n--- [EMAIL SERVICE: ETHEREAL TEST ACCOUNT] ---');
+            console.log(`User: ${testAccount.user}`);
+            console.log(`Pass: ${testAccount.pass}`);
+            console.log('-----------------------------------------------\n');
+            
+            // Kthejmë transportuesin e email-it të testimit
+            return nodemailer.createTransport({
+                host: 'smtp.ethereal.email',
+                port: 587,
+                secure: false,
+                auth: {
+                    user: testAccount.user,
+                    pass: testAccount.pass,
+                },
+            });
         }
-        console.log('\n--- [EMAIL SERVICE: ETHEREAL TEST ACCOUNT] ---');
-        console.log(`User: ${testAccount.user}`);
-        console.log(`Pass: ${testAccount.pass}`);
-        console.log('-----------------------------------------------\n');
-        return nodemailer_1.default.createTransport({
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false,
-            auth: {
-                user: testAccount.user,
-                pass: testAccount.pass,
-            },
-        });
+        catch (error) {
+            console.warn('⚠️ Warning: Failed to create Ethereal test email account. Email sending will be disabled.');
+            console.error(error);
+            return null;
+        }
     }
 })();
+
 /**
- * Send an email.
+ * Funksion i brendshëm për dërgimin e një email-i.
  * @param {Object} options - { to, subject, text, html }
  */
 const sendEmail = async (options) => {
     const transporter = await transporterPromise;
+    if (!transporter) {
+        throw new Error("Email service is not initialized. Please verify your SMTP settings or network connection.");
+    }
+    
+    // Përgatitja e strukturës së email-it
     const mailOptions = {
         from: process.env.SMTP_FROM || 'AI Marketing Tool <noreply@ai-marketing.com>',
-        to: options.to,
-        subject: options.subject,
-        text: options.text,
-        html: options.html,
+        to: options.to,       // Kujt i shkon
+        subject: options.subject, // Subjekti
+        text: options.text,   // Versioni vetëm tekst
+        html: options.html,   // Dizajni HTML
     };
+    
     try {
         const info = await transporter.sendMail(mailOptions);
-        // If using Ethereal, log the preview URL
+        
+        // Nëse jemi në ambient testimi, gjenerojmë një link ku mund të shohim se si duket emaili i dërguar
         if (info.messageId && !process.env.SMTP_HOST) {
-            const previewUrl = nodemailer_1.default.getTestMessageUrl(info);
+            const previewUrl = nodemailer.getTestMessageUrl(info);
             console.log('\n--- [EMAIL SENT (ETHEREAL PREVIEW)] ---');
             console.log(`Preview URL: ${previewUrl}`);
             console.log('----------------------------------------\n');
@@ -86,9 +100,8 @@ const sendEmail = async (options) => {
         throw error;
     }
 };
-/**
- * Send a reset password email.
- */
+
+// Dërgimi i email-it për rivendosjen e fjalëkalimit
 const sendResetEmail = async (toEmail, resetUrl) => {
     const subject = 'Reset Your Password - AI Marketing Studio';
     const text = `You requested a password reset. Please use the following link to reset your password: ${resetUrl}\n\nThis link is valid for 1 hour.`;
@@ -107,14 +120,8 @@ const sendResetEmail = async (toEmail, resetUrl) => {
   `;
     return await sendEmail({ to: toEmail, subject, text, html });
 };
-exports.sendResetEmail = sendResetEmail;
-/**
- * Send a welcome email.
- */
-const sendWelcomeEmail = async (toEmail) => {
-    const subject = 'Welcome to AI Marketing Tool';
-    const text = `Welcome! Your account has been successfully created.`;
-    const html = `<h1>Welcome!</h1><p>Your account is ready.</p>`;
-    return await sendEmail({ to: toEmail, subject, text, html });
+
+// Eksportojmë funksionet në mënyrë standarde të Node.js
+module.exports = {
+    sendResetEmail
 };
-exports.sendWelcomeEmail = sendWelcomeEmail;

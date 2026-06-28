@@ -1,65 +1,53 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.PhotoAd = void 0;
-const mongoose_1 = __importStar(require("mongoose"));
-const storageAssetSchema = new mongoose_1.Schema({
+"use strict"; // Kontrollon strikt sintaksën se a është plotësuar mirë
+
+// Importojmë mongoose për komunikim dhe manipulim me MongoDB
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+// Kjo tregon se ku ruhet fotoja e reklamës
+const storageAssetSchema = new Schema({
     provider: String,
-    key: String,
-    url: String,
-    localPath: String,
+    key: String,       // ID unike e skedarit në serverin e fotove
+    url: String,       // Linku i plotë ku mund të shihet fotoja
+    localPath: String, // Vendndodhja brenda kompjuterit/serverit
 }, { _id: false });
-const photoAdSchema = new mongoose_1.Schema({
+
+// Këtu përcaktohen të gjitha fushat që do të ketë një reklamë në DB
+const photoAdSchema = new Schema({
+    // Useri që e ka krijuar
     owner: {
-        type: mongoose_1.Schema.Types.ObjectId,
+        type: Schema.Types.ObjectId,
         ref: 'User',
         index: true
     },
+    // Titulli i reklamës
     title: { type: String, required: true, trim: true },
+    // Teksti i dhënë në AI për të gjeneruar foton
     prompt: { type: String, required: true, trim: true },
+    // Formati i fotos
     aspectRatio: { type: String, default: '1:1' },
+    // Kategoria e produktit
     productCategory: { type: String, default: 'general-product' },
+    // Stili i fotos (minimal, energjik, etj.)
     style: { type: String, default: 'minimal' },
+    // Kërkesa ka ardhur nga puter
     source: { type: String, default: 'puter' },
+    // Fotot e gjeneruara (secili gjenerim i ka 3 foto)
     images: {
         type: [storageAssetSchema],
         default: []
     },
+    // Fushat për marketing si audienca, oferta dhe dëshmia
+    caption: { type: String, default: '' },
     audience: { type: String, default: '' },
     offer: { type: String, default: '' },
     proof: { type: String, default: '' }
 }, { timestamps: true });
+
+// MongoDB t'i gjejë ato në kohë rekord pa pasur nevojë t'i skanojë të gjithë DB-në
 photoAdSchema.index({ owner: 1, createdAt: -1 });
-exports.PhotoAd = mongoose_1.default.models.PhotoAd || mongoose_1.default.model('PhotoAd', photoAdSchema);
+
+// Krijojmë dhe eksportojmë modelin në mënyrë standarde të Node.js
+const PhotoAd = mongoose.models.PhotoAd || mongoose.model('PhotoAd', photoAdSchema);
+
+module.exports = { PhotoAd };

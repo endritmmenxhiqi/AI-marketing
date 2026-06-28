@@ -1,104 +1,88 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.VideoJob = void 0;
-const mongoose_1 = __importStar(require("mongoose"));
-const mediaCandidateSchema = new mongoose_1.Schema({
-    kind: String,
-    source: String,
-    externalId: String,
-    url: String,
+
+// Importojmë mongoose për të bërë manipulime në DB
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+// Ruajmë videot që gjenden nga pexels
+const mediaCandidateSchema = new Schema({
+    kind: String,         // Lloji i videos
+    source: String,       // Burimi që është pexels
+    externalId: String,   // ID e videove që merren nga pexels
+    url: String,          // Linku i videos origjinale
     thumbnailUrl: String,
-    width: Number,
+    width: Number,        // Përmasat e videos
     height: Number,
-    duration: Number,
+    duration: Number,     // Kohëzgjatja e videos
     attribution: String,
-    query: String,
-    localPath: String,
+    query: String,        // Fjala që përdoret nga AI për të kërkuar videon
+    localPath: String,    // Ku u shkarkua videoja përkohësisht në serverin tonë
     selectionScore: Number,
     selectionReason: String,
 }, { _id: false });
-const wordAlignmentSchema = new mongoose_1.Schema({
+
+const wordAlignmentSchema = new Schema({
     text: String,
     start: Number,
     end: Number,
 }, { _id: false });
-const captionCueSchema = new mongoose_1.Schema({
+
+const captionCueSchema = new Schema({
     text: String,
     start: Number,
     end: Number,
 }, { _id: false });
-const sceneSchema = new mongoose_1.Schema({
-    sceneNumber: Number,
-    headline: String,
-    voiceover: String,
-    onScreenText: [String],
-    pexelsKeywords: [String],
-    visualBrief: String,
-    imagePrompt: String,
-    media: mediaCandidateSchema,
-    voicePath: String,
-    voiceDuration: Number,
+
+const sceneSchema = new Schema({
+    sceneNumber: Number,     // Numri i skenës
+    headline: String,        // Titulli kryesor i skenës
+    voiceover: String,       // Teksti që zeri i AI do ta lexojë me audio
+    onScreenText: [String],  // Tekstet që shkruhen si caption
+    pexelsKeywords: [String], // Fjalët kyçe për të gjetur videon
+    visualBrief: String,     // Udhëzuesi vizual
+    imagePrompt: String,     // Prompti për foto
+    media: mediaCandidateSchema, // Videoja përfundimtare e zgjedhur nga pexels për këtë skenë
+    voicePath: String,       // Ruajtja e audios
+    voiceDuration: Number,   // Sa sekonda zgjat zëri në skenë
     alignment: [wordAlignmentSchema],
     captions: [captionCueSchema],
 }, { _id: false });
-const storageAssetSchema = new mongoose_1.Schema({
+
+const storageAssetSchema = new Schema({
     provider: String,
     key: String,
     url: String,
     localPath: String,
 }, { _id: false });
-const trimSchema = new mongoose_1.Schema({
+
+const trimSchema = new Schema({
     startSeconds: { type: Number, default: 0 },
     endSeconds: { type: Number, default: 0 },
     asset: storageAssetSchema,
 }, { _id: false });
-const videoJobSchema = new mongoose_1.Schema({
+
+const videoJobSchema = new Schema({
+    owner: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        index: true
+    },
     status: { type: String, default: 'queued', index: true },
-    stage: { type: String, default: 'queued' },
-    progress: { type: Number, default: 0 },
+    stage: { type: String, default: 'queued' }, // Faza: "writing_script", "generate_voice", "rendering_video"
+    progress: { type: Number, default: 0 },     // Përqindja e progresit 0-100
     message: { type: String, default: 'Queued for generation.' },
     error: { type: String, default: '' },
+    // Inputet nga përdoruesi
     title: { type: String, default: '' },
     description: { type: String, required: true },
     productCategory: { type: String, default: 'general-product' },
     style: { type: String, required: true },
+    // Foto të produktit nëse përdoruesi ka vendosur t'i vendosë në video
     imagePath: { type: String, default: '' },
     imageUrl: { type: String, default: '' },
     imagePaths: { type: [String], default: [] },
     imageUrls: { type: [String], default: [] },
+    // Të dhënat e marketingut
     audience: { type: String, default: '' },
     offer: { type: String, default: '' },
     proof: { type: String, default: '' },
@@ -111,6 +95,7 @@ const videoJobSchema = new mongoose_1.Schema({
         musicMood: String,
         scenes: [sceneSchema],
     },
+    // Outputi përfundimtar
     output: {
         video: storageAssetSchema,
         preview: storageAssetSchema,
@@ -118,6 +103,7 @@ const videoJobSchema = new mongoose_1.Schema({
         trim: trimSchema,
         sceneFiles: [storageAssetSchema],
     },
+    // Metadata teknike për sistemin e rradhës
     metadata: {
         jobFolder: String,
         durationSeconds: Number,
@@ -129,4 +115,8 @@ const videoJobSchema = new mongoose_1.Schema({
         failedAt: Date,
     },
 }, { timestamps: true });
-exports.VideoJob = mongoose_1.default.models.VideoJob || mongoose_1.default.model('VideoJob', videoJobSchema);
+
+// Krijojmë dhe eksportojmë modelin në mënyrë standarde të Node.js
+const VideoJob = mongoose.models.VideoJob || mongoose.model('VideoJob', videoJobSchema);
+
+module.exports = { VideoJob };

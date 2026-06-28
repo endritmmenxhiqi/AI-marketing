@@ -1,54 +1,83 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.closeRedisConnections = exports.ensureRedisConnection = exports.videoQueue = exports.VIDEO_QUEUE_NAME = exports.progressPublisher = exports.redisConnection = void 0;
-const ioredis_1 = __importDefault(require("ioredis"));
-const bullmq_1 = require("bullmq");
-const config_1 = require("./config");
+
+// Importojmë librarinë ioredis dhe elementet e nevojshme nga bullmq
+const Redis = require("ioredis");
+const { Queue } = require("bullmq");
+
+const { config } = require("./config");
+
+/**
+ * FUNKSIONI NDIHMËS: createRedisClient
+ * Krijon një lidhje të re të personalizuar me serverin Redis.
+ * Përdor një 'label' (etiketë) për të dalluar kush po lidhet.
+ */
 const createRedisClient = (label) => {
     let hasReportedFailure = false;
-    const client = new ioredis_1.default(config_1.config.redisUrl, {
+    
+    // Krijojmë klientin e ri Redis duke marrë URL-në nga skedari config (.env)
+    const client = new Redis(config.redisUrl, {
         maxRetriesPerRequest: null,
         lazyConnect: true,
         enableOfflineQueue: false,
     });
+
+    // Nëse ndodh një gabim gjatë lidhjes me Redis
     client.on('error', (error) => {
         if (!hasReportedFailure) {
             console.error(`Redis ${label} connection failed: ${error.message}`);
             hasReportedFailure = true;
         }
     });
+
     client.on('ready', () => {
         hasReportedFailure = false;
     });
+
     return client;
 };
-exports.redisConnection = config_1.config.queueMode === 'bullmq' ? createRedisClient('queue') : null;
-exports.progressPublisher = config_1.config.queueMode === 'bullmq' ? createRedisClient('publisher') : null;
-exports.VIDEO_QUEUE_NAME = 'video-generation';
-exports.videoQueue = config_1.config.queueMode === 'bullmq' && exports.redisConnection
-    ? new bullmq_1.Queue(exports.VIDEO_QUEUE_NAME, {
-        connection: exports.redisConnection,
-    })
+
+// Inicializojmë klientët Redis vetëm nëse radha është caktuar në 'bullmq'
+const redisConnection = config.queueMode === 'bullmq' ? createRedisClient('queue') : null;
+const progressPublisher = config.queueMode === 'bullmq' ? createRedisClient('publisher') : null;
+
+const VIDEO_QUEUE_NAME = 'video-generation';
+
+// Krijojmë radhën e BullMQ për përpunimin e videove
+const videoQueue = config.queueMode === 'bullmq' && redisConnection
+    ? new Queue(VIDEO_QUEUE_NAME, { connection: redisConnection })
     : null;
+
+/**
+ * Sigurohet që lidhjet me Redis janë aktive përpara se të nisë puna.
+ */
 const ensureRedisConnection = async () => {
-    if (!exports.redisConnection || !exports.progressPublisher) {
+    if (!redisConnection || !progressPublisher) {
         return;
     }
-    await Promise.all([exports.redisConnection.connect(), exports.progressPublisher.connect()]);
-    await Promise.all([exports.redisConnection.ping(), exports.progressPublisher.ping()]);
+    await Promise.all([redisConnection.connect(), progressPublisher.connect()]);
+    await Promise.all([redisConnection.ping(), progressPublisher.ping()]);
 };
-exports.ensureRedisConnection = ensureRedisConnection;
+
+/**
+ * Mbyll në mënyrë të sigurt të gjitha lidhjet aktive me Redis.
+ */
 const closeRedisConnections = async () => {
     const closers = [];
-    if (exports.redisConnection) {
-        closers.push(exports.redisConnection.quit());
+    if (redisConnection) {
+        closers.push(redisConnection.quit());
     }
-    if (exports.progressPublisher) {
-        closers.push(exports.progressPublisher.quit());
+    if (progressPublisher) {
+        closers.push(progressPublisher.quit());
     }
     await Promise.allSettled(closers);
 };
-exports.closeRedisConnections = closeRedisConnections;
+
+// Eksportojmë variablat dhe funksionet në stilin standard CommonJS
+module.exports = {
+    redisConnection,
+    progressPublisher,
+    VIDEO_QUEUE_NAME,
+    videoQueue,
+    ensureRedisConnection,
+    closeRedisConnections
+};

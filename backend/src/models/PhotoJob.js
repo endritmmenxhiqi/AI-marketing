@@ -1,52 +1,35 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.PhotoJob = void 0;
-const mongoose_1 = __importStar(require("mongoose"));
-const storageAssetSchema = new mongoose_1.Schema({
+
+// Importojmë mongoose për manipulim me DB
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+// Ruajtja e të dhënave për foto sikurse tek photo ad
+const storageAssetSchema = new Schema({
     provider: String,
     key: String,
     url: String,
     localPath: String,
 }, { _id: false });
-const photoJobSchema = new mongoose_1.Schema({
+
+// Ndjekja e ecurisë së procesit të gjenerimit të fotos
+const photoJobSchema = new Schema({
+    owner: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        index: true
+    },
+    // Statusi i punës që default është në queued, po ajo mund të jetë processing, failed, completed
     status: { type: String, default: 'queued', index: true },
+    // Faza specifike se ku gjendet
     stage: { type: String, default: 'queued' },
+    // Progresi nga 0 deri në 100
     progress: { type: Number, default: 0 },
+    // Mesazhi informues se çfarë po bëhet aktualisht
     message: { type: String, default: 'Queued for design.' },
+    // Errorri i dështimit
     error: { type: String, default: '' },
+    // Të dhënat e inputit se çfarë kërkon useri
     title: { type: String, default: '' },
     description: { type: String, required: true },
     productCategory: { type: String, default: 'general-product' },
@@ -56,15 +39,18 @@ const photoJobSchema = new mongoose_1.Schema({
     imageUrl: { type: String, default: '' },
     imagePaths: { type: [String], default: [] },
     imageUrls: { type: [String], default: [] },
+    // Të dhënat për marketing: caption, audienca, proof, offer
     prompt: { type: String, default: '' },
     caption: { type: String, default: '' },
     audience: { type: String, default: '' },
     offer: { type: String, default: '' },
     proof: { type: String, default: '' },
+    // Outputi se çfarë është krijuar
     output: {
-        variants: [storageAssetSchema],
+        variants: [storageAssetSchema], // Foto që ka kthyer AI
         final: storageAssetSchema,
     },
+    // Të dhënat e sistemit kur filloi, përfundoi, errori
     metadata: {
         jobFolder: String,
         startedAt: Date,
@@ -73,4 +59,8 @@ const photoJobSchema = new mongoose_1.Schema({
         replicatePredictionId: String,
     },
 }, { timestamps: true });
-exports.PhotoJob = mongoose_1.default.models.PhotoJob || mongoose_1.default.model('PhotoJob', photoJobSchema);
+
+// Krijojmë si dhe eksportojmë modelin në mënyrë standarde të Node.js
+const PhotoJob = mongoose.models.PhotoJob || mongoose.model('PhotoJob', photoJobSchema);
+
+module.exports = { PhotoJob };

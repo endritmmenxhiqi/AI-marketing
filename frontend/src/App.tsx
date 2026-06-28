@@ -250,7 +250,7 @@ function DashboardPage() {
   const handleCopyCaption = () => {
     let textToCopy = '';
     if (creatorMode === 'photo' && selectedPhotoAd) {
-      textToCopy = selectedPhotoAd.prompt;
+      textToCopy = selectedPhotoAd.caption || selectedPhotoAd.prompt;
     } else if (activeJob && activeJob.kind === 'video') {
       const vJob = activeJob as VideoJob;
       textToCopy = vJob.caption || '';
@@ -265,26 +265,20 @@ function DashboardPage() {
     }
   };
 
-  const handleDownloadAsset = async () => {
+  const handleDownloadAsset = () => {
     if (!activeOutputUrl) return;
-    try {
-      const res = await fetch(activeOutputUrl);
-      if (!res.ok) throw new Error('Response not OK');
-      const blob = await res.blob();
-      if (blob.type.includes('html') || blob.type.includes('json')) {
-        throw new Error('Invalid file type');
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `campaign-asset-${Date.now()}.${creatorMode === 'video' ? 'mp4' : 'jpg'}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      window.open(activeOutputUrl, '_blank');
+    const token = localStorage.getItem('token');
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const filename = `campaign-asset-${Date.now()}.${creatorMode === 'video' ? 'mp4' : 'jpg'}`;
+    let downloadUrl = `${baseUrl}/jobs/download?url=${encodeURIComponent(activeOutputUrl)}&filename=${encodeURIComponent(filename)}`;
+    if (token) {
+      downloadUrl += `&token=${encodeURIComponent(token)}`;
     }
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const {
@@ -1194,14 +1188,7 @@ function DashboardPage() {
                               if (!selectedPhotoAd) return 'Select a photo set from history';
                               return (
                                 <>
-                                  <p>{selectedPhotoAd.prompt}</p>
-                                  <div className="photo-caption-tags">
-                                    {(selectedPhotoAd.title || '').split(' ').filter(Boolean).slice(0, 4).map((w: string, i: number) => (
-                                      <span key={i} className="photo-caption-tag">#{w.toLowerCase().replace(/[^a-z0-9]/g, '')}</span>
-                                    ))}
-                                    {selectedPhotoAd.style && <span className="photo-caption-tag">#{selectedPhotoAd.style}</span>}
-                                    <span className="photo-caption-tag">#aimarketing</span>
-                                  </div>
+                                  <p>{selectedPhotoAd.caption || selectedPhotoAd.prompt}</p>
                                 </>
                               );
                             }
@@ -1296,20 +1283,20 @@ function DashboardPage() {
                                         href={image.url}
                                         download={`${(selectedPhotoAd.title || 'photo').replace(/\s+/g, '-')}-concept-${index + 1}.jpg`}
                                         className="photo-concept-save"
-                                        onClick={async (e) => {
+                                        onClick={(e) => {
                                           e.preventDefault();
-                                          try {
-                                            const res = await fetch(image.url);
-                                            const blob = await res.blob();
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href = url;
-                                            a.download = `${(selectedPhotoAd.title || 'photo').replace(/\s+/g, '-')}-concept-${index + 1}.jpg`;
-                                            a.click();
-                                            URL.revokeObjectURL(url);
-                                          } catch {
-                                            window.open(image.url, '_blank');
+                                          const token = localStorage.getItem('token');
+                                          const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+                                          const filename = `${(selectedPhotoAd.title || 'photo').replace(/\s+/g, '-')}-concept-${index + 1}.jpg`;
+                                          let downloadUrl = `${baseUrl}/jobs/download?url=${encodeURIComponent(image.url)}&filename=${encodeURIComponent(filename)}`;
+                                          if (token) {
+                                            downloadUrl += `&token=${encodeURIComponent(token)}`;
                                           }
+                                          const a = document.createElement('a');
+                                          a.href = downloadUrl;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
                                         }}
                                       >
                                         ⬇ SAVE PHOTO
@@ -1341,7 +1328,6 @@ function DashboardPage() {
                                 loop
                                 autoPlay
                                 preload="auto"
-                                crossOrigin="anonymous"
                                 onLoadedData={(e) => {
                                   e.currentTarget.play().catch(() => {});
                                 }}
@@ -1507,11 +1493,17 @@ function DashboardPage() {
                       <div className="history-grid">
                         {selectedHistory.map((job) => (
                           <div key={job._id} style={{ position: 'relative' }}>
-                            <button
-                              type="button"
+                            <div
+                              role="button"
+                              tabIndex={0}
                               className={`history-card${selectedJobId === job._id ? ' is-active' : ''}`}
                               onClick={() => handleHistoryCardClick(job)}
-                              style={{ width: '100%' }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  handleHistoryCardClick(job);
+                                }
+                              }}
+                              style={{ width: '100%', cursor: 'pointer', textAlign: 'left', display: 'block' }}
                             >
                               <div className="history-card__top">
                                 <span className="history-card__title">{job.title || job.description || 'Untitled job'}</span>
@@ -1523,7 +1515,7 @@ function DashboardPage() {
                                 </span>
                                 <span className="history-card__note">{job.message || 'Backend job item.'}</span>
                               </div>
-                            </button>
+                            </div>
                             <button
                               className="history-delete-btn"
                               onClick={(e) => handleDeleteJob(job._id, 'job', e)}
@@ -1582,11 +1574,17 @@ function DashboardPage() {
                       <div className="history-grid">
                         {selectedPhotoAds.map((ad) => (
                           <div key={ad._id} style={{ position: 'relative' }}>
-                            <button
-                              type="button"
+                            <div
+                              role="button"
+                              tabIndex={0}
                               className={`history-card${selectedPhotoAdId === ad._id ? ' is-active' : ''}`}
                               onClick={() => handlePhotoCardClick(ad)}
-                              style={{ width: '100%' }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  handlePhotoCardClick(ad);
+                                }
+                              }}
+                              style={{ width: '100%', cursor: 'pointer', textAlign: 'left', display: 'block' }}
                             >
                               <div className="history-card__top">
                                 <span className="history-card__title">{ad.title || 'Untitled photo set'}</span>
@@ -1596,7 +1594,7 @@ function DashboardPage() {
                                 <span className="history-pill history-pill--ready">READY</span>
                                 <span className="history-card__note">{ad.images.length} concepts · {ad.aspectRatio}</span>
                               </div>
-                            </button>
+                            </div>
                             <button
                               className="history-delete-btn"
                               onClick={(e) => handleDeleteJob(ad._id, 'ad', e)}
@@ -1687,7 +1685,7 @@ function DashboardPage() {
 
                   <div className="fb-post-modal__text-area" contentEditable suppressContentEditableWarning>
                     {(() => {
-                      if (creatorMode === 'photo' && selectedPhotoAd) return selectedPhotoAd.prompt;
+                      if (creatorMode === 'photo' && selectedPhotoAd) return selectedPhotoAd.caption || selectedPhotoAd.prompt;
                       if (activeJob?.kind === 'video') {
                         const vJob = activeJob as VideoJob;
                         return vJob.caption || (vJob.script ? `${vJob.script.hook || vJob.script.title || vJob.description} ${vJob.script.cta}` : activeJob.description);
@@ -1765,7 +1763,7 @@ function DashboardPage() {
                       className="ig-post-modal__caption-input"
                       placeholder="Write a caption..."
                       defaultValue={(() => {
-                        if (creatorMode === 'photo' && selectedPhotoAd) return selectedPhotoAd.prompt;
+                        if (creatorMode === 'photo' && selectedPhotoAd) return selectedPhotoAd.caption || selectedPhotoAd.prompt;
                         if (activeJob?.kind === 'video') {
                           const vJob = activeJob as VideoJob;
                           return vJob.caption || (vJob.script ? `${vJob.script.hook || vJob.script.title || vJob.description} ${vJob.script.cta}` : activeJob.description);
@@ -1807,7 +1805,7 @@ function DashboardPage() {
                       <label>Caption</label>
                       <textarea
                         defaultValue={(() => {
-                          if (creatorMode === 'photo' && selectedPhotoAd) return selectedPhotoAd.prompt;
+                          if (creatorMode === 'photo' && selectedPhotoAd) return selectedPhotoAd.caption || selectedPhotoAd.prompt;
                           if (activeJob?.kind === 'video') {
                             const vJob = activeJob as VideoJob;
                             return vJob.caption || (vJob.script ? `${vJob.script.hook || vJob.script.title || vJob.description} ${vJob.script.cta}` : activeJob.description);
@@ -1890,7 +1888,6 @@ function DashboardPage() {
                 autoPlay
                 loop
                 preload="auto"
-                crossOrigin="anonymous"
               >
                 <source src={activeOutputUrl.replace('localhost', '127.0.0.1')} type="video/mp4" />
                 <source src={activeOutputUrl} type="video/mp4" />

@@ -1,54 +1,92 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const node_http_1 = require("node:http");
-const db_1 = require("./db");
-const config_1 = require("./config");
-const files_1 = require("./utils/files");
-const app_1 = require("./app");
-const queue_1 = require("./queue");
+
+// Importojmë modulin nativ HTTP të Node.js
+const http = require("node:http");
+
+// Importojmë modulet dhe konfigurimet lokale të projektit
+const { connectDatabase } = require("./db"); // Ura e MongoDB
+const { config, requiredAtBoot } = require("./config"); // Truri i kujtesës (.env)
+const { ensureDir } = require("./utils/files"); // Mjetet e folderave
+const { createApp } = require("./app"); // Portieri Express
+const { ensureRedisConnection, closeRedisConnections } = require("./queue"); // Menaxhimi i radhëve
+
+/**
+ * FUNKSIONI ASINKRON: boot
+ * Ky është sekuenca kryesore e ndezjes së të gjithë projektit tënd.
+ */
 const boot = async () => {
-    config_1.requiredAtBoot.forEach((key) => {
+    // 1. KONTROLLI I PARË: Verifikon nëse variablat e detyrueshëm ekzistojnë në .env
+    requiredAtBoot.forEach((key) => {
         if (!process.env[key]) {
             console.warn(`Missing required environment variable: ${key}`);
         }
     });
-    if (config_1.config.queueMode === 'bullmq' && !process.env.REDIS_URL) {
+
+    // Nëse sistemi i videove është caktuar si 'bullmq' (profesional), por mungon Redis, jep paralajmërim
+    if (config.queueMode === 'bullmq' && !process.env.REDIS_URL) {
         console.warn('Missing recommended environment variable: REDIS_URL');
     }
+
+    // 2. KONTROLLI I DYTË: Krijon 4 folderat kryesorë të punës në të njëjtën kohë (Paralel)
+    // Kjo parandalon që programi të bllokohet kur FFmpeg apo përdoruesi kërkon të ruajë një skedar.
     await Promise.all([
-        (0, files_1.ensureDir)(config_1.config.uploadsDir),
-        (0, files_1.ensureDir)(config_1.config.workingDir),
-        (0, files_1.ensureDir)(config_1.config.cacheDir),
-        (0, files_1.ensureDir)(config_1.config.outputDir)
+        ensureDir(config.uploadsDir),
+        ensureDir(config.workingDir),
+        ensureDir(config.cacheDir),
+        ensureDir(config.outputDir)
     ]);
-    if (config_1.config.queueMode === 'bullmq') {
-        await (0, queue_1.ensureRedisConnection)();
+
+    // 3. KONTROLLI I TRETË: Lidhja me sistemin e radhës së videove (Redis)
+    if (config.queueMode === 'bullmq') {
+        await ensureRedisConnection();
     }
-    await (0, db_1.connectDatabase)();
-    const app = (0, app_1.createApp)();
-    const server = (0, node_http_1.createServer)(app);
+
+    // 4. KONTROLLI I KATËRT: Lidhja me databazën MongoDB
+    await connectDatabase();
+
+    // 5. NDEZJA E EXPRESS-IT: Merr konfigurimin e rrugëve, CORS-it dhe Webhook-eve nga app.js
+    const app = createApp();
+
+    // Krijon serverin fizik HTTP të bazuar mbi Express
+    const server = http.createServer(app);
+
+    // MENAXHUESI I GABIMEVE TË SERVERIT:
+    // Nëse serveri dështon të ndizet, ky bllok kontrollon arsyen.
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            console.error(`Port ${config_1.config.port} is already in use. Please clear it and try again.`);
-        }
-        else {
+            console.error(`Port ${config.port} is already in use. Please clear it and try again.`);
+        } else {
             console.error('Server error:', err);
         }
-        process.exit(1);
+        process.exit(1); // Fik gjithçka me status gabimi
     });
-    server.listen(config_1.config.port, () => {
-        console.log(`AI Marketing Studio backend listening on ${config_1.config.appUrl}`);
+
+    // 6. NISJA E TRANSMETIMIT (Listening): 
+    // Serveri hap portat dhe bëhet gati të presë kërkesat e përdoruesve!
+    server.listen(config.port, () => {
+        console.log(`AI Marketing Studio backend listening on ${config.appUrl}`);
     });
 };
+
+// SIGURIA KONTRA RREZIKUT (Anti-Crash):
+// Nëse dikur në kod ndodh një dështim i fshehtë asinkron (Promise Rejection) që nuk është kapur me try/catch,
+// ose një gabim i pakapur në proces (Uncaught Exception) si p.sh. shkëputjet e lidhjeve të jashtme të rrjetit,
+// këto blloqe i kapin ato në mënyrë që serveri të mos fiket papritur.
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception caught:', error);
+});
+
+// THIRRJA ZYRTARE E NDIZJES
 boot().catch(async (error) => {
     console.error('Fatal boot error:', error);
-    if (config_1.config.queueMode === 'bullmq') {
-        await (0, queue_1.closeRedisConnections)();
+    if (config.queueMode === 'bullmq') {
+        await closeRedisConnections();
     }
-    // Only exit if the error happened during the actual boot sequence
+    // Fikim procesin vetëm nëse gabimi ndodh gjatë sekuencës fillestare të ndezjes
     if (error.code === 'EADDRINUSE') {
         process.exit(1);
     }
