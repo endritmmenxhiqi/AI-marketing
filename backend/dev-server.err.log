@@ -1,0 +1,17 @@
+C:\Users\Bluechip\.gemini\antigravity\scratch\AI-marketing\backend\node_modules\stripe\cjs\stripe.core.js:301
+            throw new Error('Neither apiKey nor config.authenticator provided');
+            ^
+
+Error: Neither apiKey nor config.authenticator provided
+    at Stripe._setAuthenticator (C:\Users\Bluechip\.gemini\antigravity\scratch\AI-marketing\backend\node_modules\stripe\cjs\stripe.core.js:301:19)
+    at new Stripe (C:\Users\Bluechip\.gemini\antigravity\scratch\AI-marketing\backend\node_modules\stripe\cjs\stripe.core.js:191:14)
+    at new StripeConstructor (C:\Users\Bluechip\.gemini\antigravity\scratch\AI-marketing\backend\node_modules\stripe\cjs\stripe.cjs.node.js:16:12)
+    at Object.<anonymous> (C:\Users\Bluechip\.gemini\antigravity\scratch\AI-marketing\backend\src\routes\billingRoutes.js:12:16)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
+
+Node.js v20.20.0

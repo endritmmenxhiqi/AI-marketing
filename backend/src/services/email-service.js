@@ -73,7 +73,7 @@ const sendEmail = async (options) => {
     
     // Përgatitja e strukturës së email-it
     const mailOptions = {
-        from: process.env.SMTP_FROM || 'AI Marketing Tool <noreply@ai-marketing.com>',
+        from: process.env.SMTP_FROM || process.env.EMAIL_FROM || 'AI Marketing Tool <noreply@ai-marketing.com>',
         to: options.to,       // Kujt i shkon
         subject: options.subject, // Subjekti
         text: options.text,   // Versioni vetëm tekst
